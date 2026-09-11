@@ -1,0 +1,126 @@
+import * as THREE from '../vendor/three.module.js';
+
+function makeCanvas(size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  return canvas;
+}
+
+export function createGrassTexture() {
+  const size = 256;
+  const canvas = makeCanvas(size);
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#3c5c2e';
+  ctx.fillRect(0, 0, size, size);
+
+  const blades = ['#4a7038', '#345226', '#557a3f', '#2e4a22'];
+  for (let i = 0; i < 3500; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const len = 2 + Math.random() * 4;
+    ctx.strokeStyle = blades[i % blades.length];
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (Math.random() - 0.5) * 2, y - len);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(10, 10);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+export function createWoodTexture() {
+  const width = 256;
+  const height = 256;
+  const canvas = makeCanvas(width);
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#6b4a2c';
+  ctx.fillRect(0, 0, width, height);
+
+  const plankHeight = height / 5;
+  for (let p = 0; p < 5; p++) {
+    const y0 = p * plankHeight;
+    ctx.fillStyle = p % 2 === 0 ? '#6f4d2e' : '#664628';
+    ctx.fillRect(0, y0, width, plankHeight);
+
+    for (let g = 0; g < 6; g++) {
+      const gy = y0 + Math.random() * plankHeight;
+      ctx.strokeStyle = 'rgba(40, 24, 10, 0.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      for (let x = 0; x <= width; x += 16) {
+        ctx.lineTo(x, gy + (Math.random() - 0.5) * 3);
+      }
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(20, 12, 5, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, y0);
+    ctx.lineTo(width, y0);
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1, 2);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+export function createSkyDome(scene) {
+  const skyGeo = new THREE.SphereGeometry(200, 24, 16);
+  const skyUniforms = {
+    topColor: { value: new THREE.Color(0x4a90d9) },
+    bottomColor: { value: new THREE.Color(0xcfeeff) },
+  };
+  const skyMat = new THREE.ShaderMaterial({
+    uniforms: skyUniforms,
+    side: THREE.BackSide,
+    fog: false,
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 topColor;
+      uniform vec3 bottomColor;
+      varying vec3 vWorldPosition;
+      void main() {
+        float h = normalize(vWorldPosition).y;
+        float t = clamp(h * 0.6 + 0.4, 0.0, 1.0);
+        gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
+      }
+    `,
+  });
+  const sky = new THREE.Mesh(skyGeo, skyMat);
+  scene.add(sky);
+  return { sky, skyUniforms };
+}
+
+export function setSkyColors(skyUniforms, season) {
+  const palette = {
+    summer: { top: 0x3f8fdc, bottom: 0xdcf3ff },
+    autumn: { top: 0x6f88ad, bottom: 0xf0dcbb },
+    winter: { top: 0x8ea6c2, bottom: 0xe8eef5 },
+    spring: { top: 0x53a0dc, bottom: 0xe6f6ec },
+  }[season];
+  skyUniforms.topColor.value.set(palette.top);
+  skyUniforms.bottomColor.value.set(palette.bottom);
+}

@@ -10,17 +10,24 @@ import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
 import { createHUD, renderCatchLog } from './ui.js';
 import { createShop } from './shop.js';
+import { createFishSwarm, updateFishSwarm, createCatchReveal } from './fish3d.js';
 
 const appEl = document.getElementById('app');
 
-const { scene, camera, sunLight, ambientLight, swayGroup } = createScene();
+const { scene, camera, sunLight, ambientLight, hemiLight, swayGroup, skyUniforms } = createScene();
 const { waterMesh, setWaterTemperature } = createWater(scene);
 const environment = createEnvironment();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 appEl.appendChild(renderer.domElement);
 setupCameraControls(camera, renderer.domElement);
+
+const fishSwarm = createFishSwarm(scene, FISH_SPECIES.map((s) => s.id), 12);
+const catchReveal = createCatchReveal(scene);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -86,6 +93,7 @@ casting.onBite(() => {
       save.catchLog[species.id] = entry;
       saveSave(save);
       hud.showToast(`Caught a ${species.name} (${weightKg.toFixed(2)}kg) — +${payout} credits`);
+      catchReveal.spawn(species.id, casting.bobberPosition);
       casting.resetToIdle();
       bitingSpecies = null;
     },
@@ -122,10 +130,12 @@ function animate() {
   environment.tick(delta);
   const envState = environment.getState();
   setWaterTemperature(envState.waterTempC);
-  updateWater(waterMesh, now / 1000);
+  updateWater(waterMesh, now / 1000, camera);
   updateSway(swayGroup, now / 1000, envState.windSpeed);
+  updateFishSwarm(fishSwarm, now / 1000);
+  catchReveal.update(delta);
   if (envState.season !== lastSeason) {
-    updateSun(sunLight, ambientLight, envState.season);
+    updateSun(sunLight, ambientLight, hemiLight, skyUniforms, envState.season);
     lastSeason = envState.season;
   }
 
@@ -150,4 +160,4 @@ function animate() {
 }
 animate();
 
-window.__game = { environment, casting, minigame, save };
+window.__game = { environment, casting, minigame, save, scene, camera, catchReveal, fishSwarm };
