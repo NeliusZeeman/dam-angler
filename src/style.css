@@ -1,0 +1,18 @@
+html, body { margin: 0; height: 100%; background: #06131c; overflow: hidden; font-family: system-ui, sans-serif; }
+#app { position: relative; width: 100vw; height: 100vh; }
+canvas { display: block; }
+
+.hud-bar { position: absolute; top: 0; left: 0; right: 0; display: flex; gap: 16px; align-items: center; padding: 8px 16px; background: rgba(0,0,0,0.45); color: #fff; z-index: 2; font-size: 14px; }
+.hud-hint { margin-left: auto; opacity: 0.7; font-size: 12px; }
+.hud-tension-wrap { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); width: 260px; height: 16px; background: rgba(0,0,0,0.45); border-radius: 8px; overflow: hidden; z-index: 2; display: none; border: 1px solid rgba(255,255,255,0.3); }
+.hud-tension-bar { height: 100%; width: 50%; background: linear-gradient(90deg, #4caf50, #e0523c); transition: width 0.1s linear; }
+.hud-toast { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #ffe08a; padding: 8px 16px; border-radius: 6px; z-index: 4; font-size: 14px; }
+.hud-toast.hidden { display: none; }
+
+.shop-panel { position: absolute; top: 48px; right: 0; width: 280px; max-height: 80vh; overflow-y: auto; background: rgba(10,20,15,0.92); color: #fff; padding: 12px; z-index: 3; border-radius: 0 0 0 8px; }
+.shop-panel.hidden { display: none; }
+.shop-panel h3 { margin: 10px 0 4px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px; }
+.shop-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; gap: 8px; }
+.shop-row button { background: #2f6b3a; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+.shop-row button:disabled { background: #555; cursor: not-allowed; opacity: 0.6; }
+.panel-close { background: #6b2f2f; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; float: right; }
