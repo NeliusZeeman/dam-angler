@@ -10,6 +10,7 @@ export function createScene() {
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
   camera.position.set(0, 1.6, 6);
   camera.lookAt(0, -0.3, -12);
+  scene.add(camera);
 
   const hemiLight = new THREE.HemisphereLight(0xbfe0ff, 0x3d5c2f, 0.55);
   scene.add(hemiLight);
@@ -37,11 +38,12 @@ export function createScene() {
   }
 
   const grassTexture = createGrassTexture();
-  const groundGeo = new THREE.CircleGeometry(13, 48);
+  const groundGeo = new THREE.CircleGeometry(1, 48);
   const groundMat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1.0 });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = 0.15;
+  ground.scale.set(2.6, 4.5, 1);
+  ground.position.set(0, 0.15, 4.8);
   scene.add(ground);
 
   const swayGroup = new THREE.Group();
@@ -108,6 +110,54 @@ export function createScene() {
   }
 
   return { scene, camera, sunLight, ambientLight, hemiLight, swayGroup, skyUniforms };
+}
+
+const ROD_TIER_APPEARANCE = {
+  1: { color: 0x6b4a2c, reelColor: 0x2a2a2a },
+  2: { color: 0x8f97a3, reelColor: 0x1c1c1c },
+  3: { color: 0x1c1c22, reelColor: 0xb08a3e },
+};
+
+export function createPlayerRod(camera) {
+  const rodGroup = new THREE.Group();
+
+  const shaftMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.4, metalness: 0.3 });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.03, 1.7, 8), shaftMat);
+  shaft.position.set(0, 0, -0.7);
+  shaft.rotation.x = Math.PI / 2 + 0.35;
+  rodGroup.add(shaft);
+
+  const gripMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.32, 8), gripMat);
+  grip.position.set(0, -0.05, 0.15);
+  grip.rotation.x = Math.PI / 2 + 0.35;
+  rodGroup.add(grip);
+
+  const reelMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.35, metalness: 0.6 });
+  const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 12), reelMat);
+  reel.position.set(0, -0.13, 0.12);
+  reel.rotation.z = Math.PI / 2;
+  rodGroup.add(reel);
+
+  for (let i = 0; i < 3; i++) {
+    const guideMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.3, metalness: 0.7 });
+    const guide = new THREE.Mesh(new THREE.TorusGeometry(0.02 - i * 0.004, 0.003, 6, 8), guideMat);
+    guide.position.set(0, 0.25 * i + 0.05, -0.4 - i * 0.4);
+    guide.rotation.x = Math.PI / 2;
+    rodGroup.add(guide);
+  }
+
+  rodGroup.position.set(0.32, -0.32, -0.55);
+  rodGroup.rotation.set(0, 0, -0.25);
+  camera.add(rodGroup);
+
+  function setTier(tier) {
+    const appearance = ROD_TIER_APPEARANCE[tier] || ROD_TIER_APPEARANCE[1];
+    shaftMat.color.set(appearance.color);
+    reelMat.color.set(appearance.reelColor);
+  }
+
+  return { rodGroup, setTier };
 }
 
 export function setupCameraControls(camera, domElement) {

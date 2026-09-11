@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { createScene, setupCameraControls, updateSway, updateSun } from './scene.js';
+import { createScene, setupCameraControls, updateSway, updateSun, createPlayerRod } from './scene.js';
 import { createWater, updateWater } from './water.js';
 import { createEnvironment } from './environment.js';
 import { FISH_SPECIES, rollForBite, randomWeightFor } from './fish.js';
@@ -28,6 +28,7 @@ setupCameraControls(camera, renderer.domElement);
 
 const fishSwarm = createFishSwarm(scene, FISH_SPECIES.map((s) => s.id), 12);
 const catchReveal = createCatchReveal(scene);
+const playerRod = createPlayerRod(camera);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -52,7 +53,9 @@ function onSaveChanged() {
   activeRod = getGearById(RODS, save.equippedRodId) || RODS[0];
   activeLine = getGearById(LINES, save.equippedLineId) || LINES[0];
   activeLureId = save.equippedLureId || LURES[0].id;
+  playerRod.setTier(activeRod.tier);
 }
+playerRod.setTier(activeRod.tier);
 
 const shop = createShop({ container: appEl, save, onSaveChanged });
 
