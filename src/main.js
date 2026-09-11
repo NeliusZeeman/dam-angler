@@ -23,6 +23,8 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 appEl.appendChild(renderer.domElement);
 setupCameraControls(camera, renderer.domElement);
 
@@ -44,6 +46,7 @@ let activeLureId = save.equippedLureId || LURES[0].id;
 const casting = createCasting({
   scene, camera, domElement: renderer.domElement,
   getRod: () => activeRod,
+  rodTip: playerRod.tip,
 });
 const minigame = createMinigame();
 const hud = createHUD(appEl);

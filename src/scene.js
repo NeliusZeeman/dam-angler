@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { createGrassTexture, createWoodTexture, createSkyDome, setSkyColors } from './textures.js';
+import { createGrassTexture, createWoodTexture, createSkyDome, setSkyColors, createSunGlow } from './textures.js';
 
 export function createScene() {
   const scene = new THREE.Scene();
@@ -20,13 +20,29 @@ export function createScene() {
 
   const sunLight = new THREE.DirectionalLight(0xfff2d0, 1.2);
   sunLight.position.set(10, 20, 10);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(1024, 1024);
+  sunLight.shadow.camera.left = -12;
+  sunLight.shadow.camera.right = 12;
+  sunLight.shadow.camera.top = 12;
+  sunLight.shadow.camera.bottom = -12;
+  sunLight.shadow.camera.near = 1;
+  sunLight.shadow.camera.far = 45;
+  sunLight.shadow.bias = -0.0015;
   scene.add(sunLight);
+  scene.add(sunLight.target);
+
+  const sunGlow = createSunGlow();
+  sunGlow.position.copy(sunLight.position).normalize().multiplyScalar(180);
+  scene.add(sunGlow);
 
   const woodTexture = createWoodTexture();
   const dockGeo = new THREE.BoxGeometry(3, 0.2, 4);
   const dockMat = new THREE.MeshStandardMaterial({ map: woodTexture, roughness: 0.85 });
   const dock = new THREE.Mesh(dockGeo, dockMat);
   dock.position.set(0, 0.4, 4);
+  dock.castShadow = true;
+  dock.receiveShadow = true;
   scene.add(dock);
 
   const postGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.55, 8);
@@ -34,6 +50,7 @@ export function createScene() {
   for (const [px, pz] of [[-1.4, 2.2], [1.4, 2.2], [-1.4, 5.8], [1.4, 5.8]]) {
     const post = new THREE.Mesh(postGeo, postMat);
     post.position.set(px, 0.12, pz);
+    post.castShadow = true;
     scene.add(post);
   }
 
@@ -44,6 +61,7 @@ export function createScene() {
   ground.rotation.x = -Math.PI / 2;
   ground.scale.set(2.6, 4.5, 1);
   ground.position.set(0, 0.15, 4.8);
+  ground.receiveShadow = true;
   scene.add(ground);
 
   const swayGroup = new THREE.Group();
@@ -89,6 +107,7 @@ export function createScene() {
     const trunkHeight = 2.4 + Math.random() * 1.2;
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, trunkHeight, 6), treeTrunkMat);
     trunk.position.y = trunkHeight / 2;
+    trunk.castShadow = true;
     tree.add(trunk);
 
     const canopyCount = 3 + Math.floor(Math.random() * 2);
@@ -102,6 +121,7 @@ export function createScene() {
         trunkHeight + 0.6 + Math.random() * 0.8,
         (Math.random() - 0.5) * 1.2,
       );
+      blob.castShadow = true;
       tree.add(blob);
     }
 
@@ -147,6 +167,10 @@ export function createPlayerRod(camera) {
     rodGroup.add(guide);
   }
 
+  const tip = new THREE.Object3D();
+  tip.position.set(0, 0.8, -1.6);
+  rodGroup.add(tip);
+
   rodGroup.position.set(0.32, -0.32, -0.55);
   rodGroup.rotation.set(0, 0, -0.25);
   camera.add(rodGroup);
@@ -157,7 +181,7 @@ export function createPlayerRod(camera) {
     reelMat.color.set(appearance.reelColor);
   }
 
-  return { rodGroup, setTier };
+  return { rodGroup, setTier, tip };
 }
 
 export function setupCameraControls(camera, domElement) {

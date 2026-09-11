@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 
-export function createCasting({ scene, camera, domElement, getRod }) {
+export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
   const bobberGeo = new THREE.SphereGeometry(0.08, 12, 12);
   const bobberMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
   const bobber = new THREE.Mesh(bobberGeo, bobberMat);
@@ -13,7 +13,7 @@ export function createCasting({ scene, camera, domElement, getRod }) {
   line.visible = false;
   scene.add(line);
 
-  const rodTipWorld = new THREE.Vector3(0, 1.2, 4.5);
+  const rodTipWorld = new THREE.Vector3();
   const target = new THREE.Vector3();
 
   let phase = 'idle';
@@ -69,6 +69,8 @@ export function createCasting({ scene, camera, domElement, getRod }) {
   }
 
   function update(deltaSeconds, windState) {
+    rodTip.getWorldPosition(rodTipWorld);
+
     if (phase === 'aiming' && holding) {
       power = Math.min(1, power + deltaSeconds * 0.6);
     }

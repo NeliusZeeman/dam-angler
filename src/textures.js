@@ -114,6 +114,30 @@ export function createSkyDome(scene) {
   return { sky, skyUniforms };
 }
 
+export function createSunGlow() {
+  const size = 256;
+  const canvas = makeCanvas(size);
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, 'rgba(255,250,230,1)');
+  gradient.addColorStop(0.25, 'rgba(255,244,200,0.6)');
+  gradient.addColorStop(1, 'rgba(255,244,200,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: false,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(40, 40, 1);
+  return sprite;
+}
+
 export function setSkyColors(skyUniforms, season) {
   const palette = {
     summer: { top: 0x3f8fdc, bottom: 0xdcf3ff },
