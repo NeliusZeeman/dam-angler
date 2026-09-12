@@ -10,7 +10,7 @@ export function createHUD(container) {
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
-    <span class="hud-hint">A/D walk · hold click & flick up: cast · spinner: sweep the mouse to work it in · click: twitch · hold click: reel in / fight (ease off when red) · B tackle box · C log · L change spot</span>
+    <span class="hud-hint">A/D walk · point the mouse to aim (ring on the water) · hold click to charge, release to cast · spinner: sweep the mouse to work it in · click: twitch · hold click: reel in / fight (ease off when red) · B tackle box · C log · L change spot</span>
   `;
   container.appendChild(bar);
 

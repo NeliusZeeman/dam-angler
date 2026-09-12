@@ -101,14 +101,18 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     return Math.sqrt(dx * dx + dz * dz) < WATER_RADIUS;
   }
 
-  function releaseCastAt(aim) {
-    if (phase !== 'aiming') return;
+  const landingScratch = new THREE.Vector3();
+
+  // Where a cast released right now would land: toward the cursor's point
+  // on the water, as far as the current power allows, never short of the
+  // water's edge. Shared by the actual cast and the on-water aim ring.
+  function computeLanding(aim, castPower, out) {
     const rod = getRod();
-    const maxReach = BASE_CAST_REACH + power * rod.castDistance;
-    const toAim = new THREE.Vector3().subVectors(aim, camera.position);
+    const maxReach = BASE_CAST_REACH + castPower * rod.castDistance;
+    const toAim = landingScratch.subVectors(aim, camera.position);
     toAim.y = 0;
     const aimDistance = toAim.length();
-    toAim.normalize();
+    if (aimDistance < 1e-4) toAim.set(0, 0, -1); else toAim.normalize();
 
     // Even a feather-light tap has to reach the water -- the player stands
     // on the bank, so a short lob that landed on the grass could never be
@@ -117,8 +121,36 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     const minReach = toWater !== null ? toWater : maxReach;
     const clampedDistance = Math.max(minReach, Math.min(aimDistance, maxReach));
 
-    launchTarget.copy(camera.position).addScaledVector(toAim, clampedDistance);
-    launchTarget.y = 0;
+    out.copy(camera.position).addScaledVector(toAim, clampedDistance);
+    out.y = 0;
+    return out;
+  }
+
+  // Aim ring on the water: shows exactly where the cast will land.
+  // Drawn on top of everything (no depth test, late render order) so the
+  // dock lip or reeds can never hide where you're aiming.
+  const reticle = new THREE.Group();
+  const reticleRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.32, 0.42, 40),
+    new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.85, depthWrite: false, depthTest: false, side: THREE.DoubleSide }),
+  );
+  reticleRing.rotation.x = -Math.PI / 2;
+  reticleRing.renderOrder = 999;
+  reticle.add(reticleRing);
+  const reticleDot = new THREE.Mesh(
+    new THREE.CircleGeometry(0.07, 16),
+    new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9, depthWrite: false, depthTest: false, side: THREE.DoubleSide }),
+  );
+  reticleDot.rotation.x = -Math.PI / 2;
+  reticleDot.renderOrder = 999;
+  reticle.add(reticleDot);
+  reticle.position.y = 0.06;
+  reticle.visible = false;
+  scene.add(reticle);
+
+  function releaseCastAt(aim) {
+    if (phase !== 'aiming') return;
+    computeLanding(aim, power, launchTarget);
     phase = 'inAir';
     airTime = 0;
     power = 0;
@@ -209,6 +241,21 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
     if (phase === 'aiming' && pressing) {
       power = Math.min(1, power + deltaSeconds / POWER_CHARGE_SECONDS);
+    }
+
+    // Aim ring: visible whenever a cast is possible, sitting where it would
+    // land. While charging it pulses and creeps out toward the cursor.
+    const canCast = phase === 'idle' || phase === 'hanging' || phase === 'aiming';
+    reticle.visible = canCast;
+    if (canCast) {
+      computeLanding(aimPoint, phase === 'aiming' ? power : 0, reticle.position);
+      reticle.position.y = 0.06;
+      // Grow with distance so the ring reads the same size near or far.
+      const distFromCamera = reticle.position.distanceTo(camera.position);
+      const sizeForDistance = 0.9 + distFromCamera * 0.06;
+      const pulse = phase === 'aiming' ? 1 + Math.sin(performance.now() * 0.012) * 0.12 + power * 0.4 : 1;
+      reticle.scale.setScalar(sizeForDistance * pulse);
+      reticleRing.material.opacity = phase === 'aiming' ? 0.95 : 0.75;
     }
 
     if (phase === 'inAir') {
@@ -372,7 +419,9 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       moveDxAcc += e.movementX / rect.width;
       moveDyAcc += e.movementY / rect.width;
     }
-    if (phase === 'aiming') updateAimFromPointer(e.clientX, e.clientY);
+    // The cursor is the aim: keep the landing point tracking it whenever a
+    // cast is possible, not only once the button is down.
+    if (phase === 'aiming' || phase === 'idle' || phase === 'hanging') updateAimFromPointer(e.clientX, e.clientY);
   });
   window.addEventListener('mouseup', () => {
     if (phase === 'aiming' && castArmed) {
@@ -411,5 +460,6 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     update, getState, onBite, triggerBite,
     resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position,
     updateAimFromPointer, aimPoint, onFightHold, isBobberInWater, getMouseOffset,
+    getPredictedLanding: (out) => computeLanding(aimPoint, phase === 'aiming' ? power : 0, out || new THREE.Vector3()),
   };
 }
