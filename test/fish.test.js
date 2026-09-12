@@ -44,4 +44,17 @@ import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
   console.log('PASS: no bites when water temp is far outside species range');
 }
 
+{
+  const bass = FISH_SPECIES.find(f => f.id === 'bass');
+  const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
+  let normalBites = 0, boostedBites = 0;
+  const trials = 3000;
+  for (let i = 0; i < trials; i++) {
+    if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1 })) normalBites++;
+    if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, biteChanceMultiplier: 2 })) boostedBites++;
+  }
+  assert.ok(boostedBites > normalBites, `expected boosted bites (${boostedBites}) to exceed normal bites (${normalBites})`);
+  console.log(`PASS: biteChanceMultiplier increases bite rate (normal=${normalBites}, boosted=${boostedBites})`);
+}
+
 console.log('All fish tests passed.');

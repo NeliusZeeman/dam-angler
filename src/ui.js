@@ -9,7 +9,7 @@ export function createHUD(container) {
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
-    <span class="hud-hint">Hold click on water to cast · Space to reel · B shop · C log</span>
+    <span class="hud-hint">Hold click to cast · click again to twitch the lure · Space to reel · B shop · C log</span>
   `;
   container.appendChild(bar);
 

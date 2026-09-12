@@ -83,6 +83,13 @@ window.addEventListener('keyup', (e) => {
 });
 
 let bitingSpecies = null;
+let twitchBoostTimer = 0;
+let rodRecoil = 0;
+
+casting.onTwitch(() => {
+  twitchBoostTimer = 2.0;
+  rodRecoil = 0.35;
+});
 
 casting.onBite(() => {
   const species = bitingSpecies;
@@ -115,8 +122,9 @@ casting.onBite(() => {
 function rollBitesIfWaiting(delta) {
   if (casting.getState().phase !== 'waiting') return;
   const state = environment.getState();
+  const biteChanceMultiplier = twitchBoostTimer > 0 ? 1.8 : 1;
   for (const species of FISH_SPECIES) {
-    if (rollForBite({ species, waterTempC: state.waterTempC, equippedLureId: activeLureId, deltaSeconds: delta })) {
+    if (rollForBite({ species, waterTempC: state.waterTempC, equippedLureId: activeLureId, deltaSeconds: delta, biteChanceMultiplier })) {
       bitingSpecies = species;
       casting.triggerBite();
       break;
@@ -148,6 +156,10 @@ function animate() {
   casting.update(delta, envState);
   rollBitesIfWaiting(delta);
   minigame.update(delta);
+
+  twitchBoostTimer = Math.max(0, twitchBoostTimer - delta);
+  rodRecoil *= Math.max(0, 1 - delta * 10);
+  playerRod.rodGroup.rotation.x = -rodRecoil;
 
   const mgState = minigame.getState();
   hud.update({

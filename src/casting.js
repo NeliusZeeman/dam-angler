@@ -1,5 +1,10 @@
 import * as THREE from '../vendor/three.module.js';
 
+const TWITCH_COOLDOWN = 0.35;
+const TWITCH_KICK_UP = 0.14;
+const TWITCH_KICK_SIDE = 0.08;
+const TWITCH_DECAY_PER_SEC = 7;
+
 export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
   const bobberGeo = new THREE.SphereGeometry(0.08, 12, 12);
   const bobberMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
@@ -15,6 +20,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
 
   const rodTipWorld = new THREE.Vector3();
   const target = new THREE.Vector3();
+  const restPosition = new THREE.Vector3();
+  const twitchOffset = new THREE.Vector3();
 
   let phase = 'idle';
   let power = 0;
@@ -23,6 +30,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
   const AIR_DURATION = 1.2;
   const launchTarget = new THREE.Vector3();
   let biteCallback = null;
+  let twitchCallback = null;
+  let twitchCooldown = 0;
 
   function startAimHold() {
     if (phase !== 'idle') return;
@@ -54,11 +63,24 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
     biteCallback = callback;
   }
 
+  function onTwitch(callback) {
+    twitchCallback = callback;
+  }
+
+  function tapRod() {
+    if (phase !== 'waiting' || twitchCooldown > 0) return false;
+    twitchCooldown = TWITCH_COOLDOWN;
+    twitchOffset.set((Math.random() - 0.5) * TWITCH_KICK_SIDE, TWITCH_KICK_UP, (Math.random() - 0.5) * TWITCH_KICK_SIDE);
+    if (twitchCallback) twitchCallback();
+    return true;
+  }
+
   function resetToIdle() {
     phase = 'idle';
     power = 0;
     bobber.visible = false;
     line.visible = false;
+    twitchOffset.set(0, 0, 0);
   }
 
   function updateLine() {
@@ -75,6 +97,10 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
       power = Math.min(1, power + deltaSeconds * 0.6);
     }
 
+    if (twitchCooldown > 0) {
+      twitchCooldown = Math.max(0, twitchCooldown - deltaSeconds);
+    }
+
     if (phase === 'inAir') {
       airTime += deltaSeconds;
       const t = Math.min(1, airTime / AIR_DURATION);
@@ -87,16 +113,22 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
       if (t >= 1) {
         phase = 'waiting';
         bobber.position.y = 0;
+        restPosition.copy(bobber.position);
+        twitchOffset.set(0, 0, 0);
       }
     }
 
     if (phase === 'waiting' || phase === 'biting') {
+      const decay = Math.max(0, 1 - TWITCH_DECAY_PER_SEC * deltaSeconds);
+      twitchOffset.multiplyScalar(decay);
+      bobber.position.copy(restPosition).add(twitchOffset);
       updateLine();
     }
   }
 
   domElement.addEventListener('mousedown', () => {
     if (phase === 'idle') { startAimHold(); holding = true; }
+    else if (phase === 'waiting') { tapRod(); }
   });
   window.addEventListener('mouseup', () => {
     if (phase === 'aiming') { releaseCast(); }
@@ -107,5 +139,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
     return { phase, power };
   }
 
-  return { update, getState, startAimHold, releaseCast, onBite, triggerBite, resetToIdle, bobberPosition: bobber.position };
+  return {
+    update, getState, startAimHold, releaseCast, onBite, triggerBite,
+    resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position,
+  };
 }

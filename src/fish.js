@@ -35,14 +35,14 @@ export function randomWeightFor(species) {
   return species.minWeightKg + Math.random() * (species.maxWeightKg - species.minWeightKg);
 }
 
-export function rollForBite({ species, waterTempC, equippedLureId, deltaSeconds }) {
+export function rollForBite({ species, waterTempC, equippedLureId, deltaSeconds, biteChanceMultiplier = 1 }) {
   const [minT, maxT] = species.tempRangeC;
   if (waterTempC < minT || waterTempC > maxT) return false;
 
   const lureMatch = species.preferredLureIds.includes(equippedLureId);
   const lureMultiplier = lureMatch ? 1.0 : 0.15;
 
-  const perSecondChance = 0.02 * species.aggressiveness * lureMultiplier;
+  const perSecondChance = 0.02 * species.aggressiveness * lureMultiplier * biteChanceMultiplier;
   const chance = 1 - Math.pow(1 - perSecondChance, deltaSeconds);
   return Math.random() < chance;
 }
