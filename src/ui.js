@@ -47,20 +47,22 @@ export function createHUD(container) {
     inAir: 'Casting',
     waiting: 'Line in the water',
     working: 'Working the lure',
+    onBank: 'Lure on the sand — hold click to reel it in',
     reeling: 'Reeling in',
     hanging: 'Line hanging — click to cast',
     biting: 'FISH ON! Hold click to reel',
   };
 
-  function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, hookName, lureName, castingPhase, tension, power, working = false }) {
+  function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, reelName, hookName, lureName, castingPhase, tension, power, working = false, lureInWater = true }) {
     if (working && castingPhase === 'waiting') castingPhase = 'working';
+    else if (castingPhase === 'waiting' && !lureInWater) castingPhase = 'onBank';
     document.getElementById('hud-credits').textContent = `Credits: ${credits}`;
     document.getElementById('hud-season').textContent = `${season} — ${waterTempC.toFixed(1)}°C`;
     const timeEl = document.getElementById('hud-time');
     timeEl.textContent = TIME_LABELS[timeOfDay] || timeOfDay;
     timeEl.dataset.time = timeOfDay;
     document.getElementById('hud-wind').textContent = `Wind: ${windSpeed.toFixed(1)}`;
-    document.getElementById('hud-gear').textContent = `${rodName} | ${lineName} | ${hookName} | ${lureName}`;
+    document.getElementById('hud-gear').textContent = `${rodName} | ${reelName || ''} | ${lineName} | ${hookName} | ${lureName}`;
     const statusEl = document.getElementById('hud-status');
     statusEl.textContent = STATUS_LABELS[castingPhase] || castingPhase;
     statusEl.dataset.phase = castingPhase;

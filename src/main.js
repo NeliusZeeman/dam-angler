@@ -3,7 +3,7 @@ import { createScene, updateSway, updateSun, updateSeasonFoliage, createPlayerRo
 import { createWater, updateWater, setWaterSunDirection, createSplashEffect } from './water.js';
 import { createEnvironment } from './environment.js';
 import { FISH_SPECIES, rollForBite, randomWeightFor } from './fish.js';
-import { RODS, LINES, HOOKS, LURES, getGearById } from './gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, getGearById } from './gear.js';
 import { calculatePayout } from './economy.js';
 import { loadSave, saveSave } from './save.js';
 import { createCasting } from './casting.js';
@@ -64,6 +64,7 @@ function startGame(locationId, startTimeOfDay) {
 
   let activeRod = getGearById(RODS, save.equippedRodId) || RODS[0];
   let activeLine = getGearById(LINES, save.equippedLineId) || LINES[0];
+  let activeReel = getGearById(REELS, save.equippedReelId) || REELS[0];
   let activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
   let activeLureId = save.equippedLureId || LURES[0].id;
 
@@ -75,6 +76,8 @@ function startGame(locationId, startTimeOfDay) {
     onSplash: (point) => splashEffect.spawn(point),
     onWake: (point) => splashEffect.spawn(point),
     getLureKind: () => (getGearById(LURES, activeLureId) || LURES[0]).kind,
+    // Reel and line both add reach on top of the rod's base cast distance.
+    getCastMultiplier: () => (activeReel.castMultiplier || 1) * (activeLine.castMultiplier || 1),
   });
   const minigame = createMinigame();
   const hud = createHUD(appEl);
@@ -83,6 +86,7 @@ function startGame(locationId, startTimeOfDay) {
     saveSave(save);
     activeRod = getGearById(RODS, save.equippedRodId) || RODS[0];
     activeLine = getGearById(LINES, save.equippedLineId) || LINES[0];
+    activeReel = getGearById(REELS, save.equippedReelId) || REELS[0];
     activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
     activeLureId = save.equippedLureId || LURES[0].id;
     playerRod.setTier(activeRod.tier);
@@ -146,7 +150,7 @@ function startGame(locationId, startTimeOfDay) {
 
     const weightKg = randomWeightFor(species);
     minigame.start({
-      species, weightKg, rod: activeRod, line: activeLine, hook: activeHook,
+      species, weightKg, rod: activeRod, line: activeLine, hook: activeHook, reel: activeReel,
       onSuccess: () => {
         const payout = calculatePayout({ species, weightKg, rod: activeRod, line: activeLine, hook: activeHook });
         save.credits += payout;
@@ -247,7 +251,9 @@ function startGame(locationId, startTimeOfDay) {
       windSpeed: envState.windSpeed,
       rodName: activeRod.name,
       lineName: activeLine.name,
+      reelName: activeReel.name,
       hookName: activeHook.name,
+      lureInWater: casting.isBobberInWater(),
       lureName: getGearById(LURES, activeLureId)?.name || 'None',
       castingPhase: castState.phase,
       tension: mgState.active ? mgState.tension : null,

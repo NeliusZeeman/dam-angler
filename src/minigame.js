@@ -25,14 +25,14 @@ export function createMinigame() {
     nibble: { load: 0.6, runEvery: 2.0, runSize: 0.06, progressMul: 1.25 },
   };
 
-  function start({ species, weightKg, rod, line, hook = null, onSuccess, onFailure }) {
+  function start({ species, weightKg, rod, line, hook = null, reel = null, onSuccess, onFailure }) {
     active = true;
     tension = 0.35;
     progress = 0;
     slackTimer = 0;
     runTimer = 0;
     holding = false;
-    context = { species, weightKg, rod, line, hook, onSuccess, onFailure };
+    context = { species, weightKg, rod, line, hook, reel, onSuccess, onFailure };
   }
 
   function setHolding(value) {
@@ -41,12 +41,14 @@ export function createMinigame() {
 
   function update(deltaSeconds) {
     if (!active) return;
-    const { rod, line, hook, species, weightKg, onSuccess, onFailure } = context;
+    const { rod, line, hook, reel, species, weightKg, onSuccess, onFailure } = context;
     const style = STYLE[(species.bite && species.bite.style) || 'steady'] || STYLE.steady;
     const hookTensionBonus = (hook && hook.tensionBonus) || 0;
+    const reelDragBonus = (reel && reel.dragBonus) || 0;
 
-    // Better rod/hook soak up strain; heavier fish load the line more.
-    const gearRelief = 1 / (0.75 + (rod.tensionTolerance + hookTensionBonus) * 0.25);
+    // Better rod, rig and reel drag soak up strain; heavier fish load the
+    // line more.
+    const gearRelief = 1 / (0.75 + (rod.tensionTolerance + hookTensionBonus + reelDragBonus) * 0.25);
     const weightLoad = 0.8 + Math.min(1.2, weightKg / 8) * 0.5;
     const load = style.load * weightLoad * gearRelief;
     const snapMax = 0.86 + (line.breakStrength - 1) * 0.06;

@@ -3,6 +3,7 @@ import { createGrassTexture, createWoodTexture, createSkyDome, setSkyColors, cre
 import {
   POND_CENTER, SHORE_INNER_RADIUS, SHORE_OUTER_RADIUS, WALK_RADIUS,
   REED_RADIUS, TREE_INNER_RADIUS, TREE_OUTER_RADIUS, DOCK_ANGLE,
+  WATER_EDGE_RADIUS, BANK_OUTER_RADIUS, BANK_SURFACE_Y,
 } from './pond.js';
 
 export function createScene({ grassTint = 0xffffff } = {}) {
@@ -72,25 +73,26 @@ export function createScene({ grassTint = 0xffffff } = {}) {
 
   // Bank: a sandy/muddy strip between the grass and the water, plus a thin
   // pale waterline where the two meet, so the edge is unmistakable.
-  const bankGeo = new THREE.RingGeometry(SHORE_INNER_RADIUS - 1.6, SHORE_INNER_RADIUS + 1.1, 96, 1);
+  const bankGeo = new THREE.RingGeometry(WATER_EDGE_RADIUS, BANK_OUTER_RADIUS, 96, 1);
   const bankMat = new THREE.MeshStandardMaterial({ color: 0x9b8560, roughness: 1.0 });
   const bank = new THREE.Mesh(bankGeo, bankMat);
   bank.rotation.x = -Math.PI / 2;
   bank.position.copy(POND_CENTER);
-  bank.position.y = 0.13;
+  bank.position.y = BANK_SURFACE_Y;
   bank.receiveShadow = true;
   scene.add(bank);
 
-  const waterlineGeo = new THREE.RingGeometry(SHORE_INNER_RADIUS - 0.35, SHORE_INNER_RADIUS - 0.05, 128, 1);
+  // Waterline sits exactly where the sand meets open water.
+  const waterlineGeo = new THREE.RingGeometry(WATER_EDGE_RADIUS - 0.3, WATER_EDGE_RADIUS + 0.05, 128, 1);
   const waterlineMat = new THREE.MeshBasicMaterial({ color: 0xe8efe3, transparent: true, opacity: 0.55 });
   const waterline = new THREE.Mesh(waterlineGeo, waterlineMat);
   waterline.rotation.x = -Math.PI / 2;
   waterline.position.copy(POND_CENTER);
-  waterline.position.y = 0.145;
+  waterline.position.y = BANK_SURFACE_Y + 0.015;
   scene.add(waterline);
 
   // Shore: a walkable ring around the whole dam, textured with grass.
-  const shoreGeo = new THREE.RingGeometry(SHORE_INNER_RADIUS + 1.0, SHORE_OUTER_RADIUS, 96, 1);
+  const shoreGeo = new THREE.RingGeometry(BANK_OUTER_RADIUS - 0.1, SHORE_OUTER_RADIUS, 96, 1);
   const shoreMat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1.0, color: grassTint });
   const shore = new THREE.Mesh(shoreGeo, shoreMat);
   shore.rotation.x = -Math.PI / 2;

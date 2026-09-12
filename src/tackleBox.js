@@ -1,4 +1,4 @@
-import { RODS, LINES, HOOKS, LURES } from './gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES } from './gear.js';
 
 export function createTackleBox({ container, save, onSaveChanged }) {
   const panel = document.createElement('div');
@@ -24,6 +24,7 @@ export function createTackleBox({ container, save, onSaveChanged }) {
       <button class="panel-close" id="shop-close">Close</button>
       <div class="tackle-credits">Credits: ${save.credits}</div>
       ${renderSection('Rods', RODS, save.ownedRodIds, save.equippedRodId, 'rod')}
+      ${renderSection('Reels', REELS, save.ownedReelIds, save.equippedReelId, 'reel')}
       ${renderSection('Lines', LINES, save.ownedLineIds, save.equippedLineId, 'line')}
       ${renderSection('Hooks & Rigs', HOOKS, save.ownedHookIds, save.equippedHookId, 'hook')}
       ${renderSection('Bait & Lures', LURES, save.ownedLureIds, save.equippedLureId, 'lure')}
@@ -37,6 +38,7 @@ export function createTackleBox({ container, save, onSaveChanged }) {
   function ownedListFor(kind) {
     if (kind === 'rod') return save.ownedRodIds;
     if (kind === 'line') return save.ownedLineIds;
+    if (kind === 'reel') return save.ownedReelIds;
     if (kind === 'hook') return save.ownedHookIds;
     return save.ownedLureIds;
   }
@@ -44,6 +46,7 @@ export function createTackleBox({ container, save, onSaveChanged }) {
   function itemsFor(kind) {
     if (kind === 'rod') return RODS;
     if (kind === 'line') return LINES;
+    if (kind === 'reel') return REELS;
     if (kind === 'hook') return HOOKS;
     return LURES;
   }
@@ -58,6 +61,7 @@ export function createTackleBox({ container, save, onSaveChanged }) {
     } else {
       if (kind === 'rod') save.equippedRodId = id;
       if (kind === 'line') save.equippedLineId = id;
+      if (kind === 'reel') save.equippedReelId = id;
       if (kind === 'hook') save.equippedHookId = id;
       if (kind === 'lure') save.equippedLureId = id;
     }

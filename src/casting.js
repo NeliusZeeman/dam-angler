@@ -1,7 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
-import { POND_CENTER, WATER_RADIUS } from './pond.js';
+import { POND_CENTER, WATER_EDGE_RADIUS, BANK_SURFACE_Y } from './pond.js';
 
-const WATER_LANDING_MARGIN = 1.2; // a cast always lands at least this far into the water
+const WATER_LANDING_MARGIN = 1.0; // a cast always lands at least this far past the sand into open water
 const TWITCH_COOLDOWN = 0.35;
 const TWITCH_KICK_UP = 0.14;
 const TWITCH_KICK_SIDE = 0.08;
@@ -24,7 +24,7 @@ const BAIT_WIGGLE_GAIN = 0.35; // bait only wiggles under mouse motion
 const FLICK_POWER_GAIN = 0.28; // upward flick on release adds cast power
 const FLICK_POWER_MAX = 0.35;
 
-export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, onSplash, onWake, getLureKind = () => 'bait' }) {
+export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, onSplash, onWake, getLureKind = () => 'bait', getCastMultiplier = () => 1 }) {
   const bobberGeo = new THREE.SphereGeometry(0.08, 12, 12);
   const bobberMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
   const bobber = new THREE.Mesh(bobberGeo, bobberMat);
@@ -81,45 +81,71 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   const swayPerp = new THREE.Vector3();
   const motionToTip = new THREE.Vector3();
 
-  // Distance along a flat ray from `origin` in direction `dir` to the point
-  // `margin` inside the water's edge. Null if the ray never enters the water.
-  function distanceToWaterEntry(origin, dir, margin) {
-    const r = WATER_RADIUS - margin;
+  // Distances along a flat ray from `origin` in direction `dir` at which it
+  // enters and leaves the open water (a circle `margin` inside the sand
+  // edge). Null if the ray never crosses the water.
+  function waterCrossing(origin, dir, margin) {
+    const r = WATER_EDGE_RADIUS - margin;
     const ox = origin.x - POND_CENTER.x;
     const oz = origin.z - POND_CENTER.z;
     const b = 2 * (ox * dir.x + oz * dir.z);
     const c = ox * ox + oz * oz - r * r;
     const disc = b * b - 4 * c;
     if (disc < 0) return null;
-    const t = (-b - Math.sqrt(disc)) / 2;
-    return t > 0 ? t : null;
+    const root = Math.sqrt(disc);
+    const enter = (-b - root) / 2;
+    const exit = (-b + root) / 2;
+    if (exit <= 0) return null;
+    return { enter: Math.max(0, enter), exit };
   }
 
-  function isPointInWater(point) {
+  function distanceFromCenter(point) {
     const dx = point.x - POND_CENTER.x;
     const dz = point.z - POND_CENTER.z;
-    return Math.sqrt(dx * dx + dz * dz) < WATER_RADIUS;
+    return Math.sqrt(dx * dx + dz * dz);
+  }
+
+  // Open water only -- the sand bank is dry land, whatever the water mesh
+  // underneath it says.
+  function isPointInWater(point) {
+    return distanceFromCenter(point) < WATER_EDGE_RADIUS;
+  }
+
+  // Height a lure sits/travels at for a given xz: on the water surface in
+  // the open, and once it's been dragged up onto the sand, lifting through
+  // the air toward the rod tip as the line shortens.
+  function lureHeightAt(point) {
+    const dist = distanceFromCenter(point);
+    if (dist < WATER_EDGE_RADIUS) return 0.02;
+    const tipDist = distanceFromCenter(rodTipWorld);
+    const span = Math.max(0.5, tipDist - WATER_EDGE_RADIUS);
+    const f = Math.min(1, (dist - WATER_EDGE_RADIUS) / span);
+    const restY = BANK_SURFACE_Y + 0.06;
+    return restY + f * f * Math.max(0, rodTipWorld.y - restY);
   }
 
   const landingScratch = new THREE.Vector3();
 
   // Where a cast released right now would land: toward the cursor's point
-  // on the water, as far as the current power allows, never short of the
-  // water's edge. Shared by the actual cast and the on-water aim ring.
+  // on the water, as far as the current power and gear allow, never short
+  // of open water and never past the far bank. Shared by the actual cast
+  // and the on-water aim ring.
   function computeLanding(aim, castPower, out) {
     const rod = getRod();
-    const maxReach = BASE_CAST_REACH + castPower * rod.castDistance;
+    const maxReach = BASE_CAST_REACH + castPower * rod.castDistance * getCastMultiplier();
     const toAim = landingScratch.subVectors(aim, camera.position);
     toAim.y = 0;
     const aimDistance = toAim.length();
     if (aimDistance < 1e-4) toAim.set(0, 0, -1); else toAim.normalize();
 
-    // Even a feather-light tap has to reach the water -- the player stands
-    // on the bank, so a short lob that landed on the grass could never be
-    // fished (and no fish should ever bite a lure lying on the shore).
-    const toWater = distanceToWaterEntry(camera.position, toAim, WATER_LANDING_MARGIN);
-    const minReach = toWater !== null ? toWater : maxReach;
-    const clampedDistance = Math.max(minReach, Math.min(aimDistance, maxReach));
+    // Even a feather-light tap has to clear the sand -- the player stands
+    // on the bank, so a short lob that landed on it could never be fished
+    // (and no fish should ever bite a lure lying on dry sand).
+    const crossing = waterCrossing(camera.position, toAim, WATER_LANDING_MARGIN);
+    let clampedDistance = Math.min(aimDistance, maxReach);
+    if (crossing) {
+      clampedDistance = Math.max(crossing.enter, Math.min(clampedDistance, crossing.exit));
+    }
 
     out.copy(camera.position).addScaledVector(toAim, clampedDistance);
     out.y = 0;
@@ -301,7 +327,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
         wakeTimer += deltaSeconds;
         if (wakeTimer >= WAKE_INTERVAL) {
           wakeTimer = 0;
-          if (onWake) onWake(restPosition);
+          if (onWake && isPointInWater(restPosition)) onWake(restPosition);
         }
       } else if (lureKind === 'bait' && motionSpeed > MOTION_REEL_THRESHOLD) {
         // Bait just wiggles a little when you move the rod -- it's meant to sit.
@@ -318,7 +344,10 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       const decay = Math.max(0, 1 - TWITCH_DECAY_PER_SEC * deltaSeconds);
       twitchOffset.multiplyScalar(decay);
       bobber.position.copy(restPosition).add(twitchOffset).addScaledVector(swayPerp, lureSway);
-      updateLineCurve(working ? 0.08 : 0.22);
+      // On the sand (after a reel-in was stopped short) the lure lies on top
+      // of the bank, not under it.
+      bobber.position.y = lureHeightAt(bobber.position);
+      updateLineCurve(working ? 0.08 : (isPointInWater(bobber.position) ? 0.22 : 0.05));
     }
 
     if (phase === 'reeling' && !pressing) {
@@ -342,12 +371,14 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       }
       toTip.normalize();
       bobber.position.addScaledVector(toTip, REEL_SPEED * deltaSeconds);
-      bobber.position.y = 0.02 + Math.sin(performance.now() * 0.02) * 0.01;
+      // Skims the surface in the water; once it's dragged onto the sand it
+      // lifts through the air to the rod tip instead of tunnelling under it.
+      bobber.position.y = lureHeightAt(bobber.position) + Math.sin(performance.now() * 0.02) * 0.01;
 
       wakeTimer += deltaSeconds;
       if (wakeTimer >= WAKE_INTERVAL) {
         wakeTimer = 0;
-        if (onWake) onWake(bobber.position);
+        if (onWake && isPointInWater(bobber.position)) onWake(bobber.position);
       }
 
       restPosition.copy(bobber.position);
@@ -381,7 +412,23 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointerNDC, camera);
     const hit = raycaster.intersectObject(waterMesh)[0];
-    if (hit) aimPoint.copy(hit.point);
+    if (hit) {
+      aimPoint.copy(hit.point);
+      return;
+    }
+    // Cursor is off the water. Pointing down at the bank aims at that spot
+    // on the ground (the cast then clamps to the water's edge); pointing at
+    // the far bank or the horizon means "as far as I can in that direction".
+    const dir = raycaster.ray.direction;
+    if (dir.y < -1e-4) {
+      const t = -camera.position.y / dir.y;
+      aimPoint.copy(camera.position).addScaledVector(dir, t);
+      aimPoint.y = 0;
+      return;
+    }
+    const flatLen = Math.hypot(dir.x, dir.z);
+    if (flatLen < 1e-6) return;
+    aimPoint.set(camera.position.x + (dir.x / flatLen) * 200, 0, camera.position.z + (dir.z / flatLen) * 200);
   }
 
   let fightHoldCallback = null;

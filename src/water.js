@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { POND_CENTER, WATER_RADIUS } from './pond.js';
+import { POND_CENTER, WATER_RADIUS, WATER_EDGE_RADIUS } from './pond.js';
 
 const vertexShader = `
   varying vec2 vUv;
@@ -64,7 +64,7 @@ export function createWater(scene, { coldColor: coldHex = 0x1c4d73, warmColor: w
     uColor: { value: new THREE.Color(warmHex) },
     uSunDir: { value: new THREE.Vector3(0.4, 0.8, 0.4).normalize() },
     uCameraPos: { value: new THREE.Vector3() },
-    uRadius: { value: WATER_RADIUS },
+    uRadius: { value: WATER_EDGE_RADIUS }, // shallows fade toward the real (sand) edge
     uCenter: { value: POND_CENTER.clone() },
   };
   const material = new THREE.ShaderMaterial({

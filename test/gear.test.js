@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { RODS, LINES, HOOKS, LURES, getGearById } from '../src/gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, getGearById } from '../src/gear.js';
 import { FISH_SPECIES } from '../src/fish.js';
 
 {
@@ -76,6 +76,23 @@ import { FISH_SPECIES } from '../src/fish.js';
   const spinner = LURES.find((l) => l.id === 'spinner');
   assert.strictEqual(spinner.kind, 'lure', 'spinner is a worked lure');
   console.log('PASS: every bait/lure declares a kind; spinner is a worked lure');
+}
+
+{
+  // Better reels cast further and fight better; braid casts further than
+  // the starter line. This is what makes upgrades feel like upgrades.
+  assert.strictEqual(REELS.length, 3);
+  const sortedReels = [...REELS].sort((a, b) => a.tier - b.tier);
+  for (let i = 1; i < sortedReels.length; i++) {
+    assert.ok(sortedReels[i].cost > sortedReels[i - 1].cost, 'reel cost should increase with tier');
+    assert.ok(sortedReels[i].castMultiplier > sortedReels[i - 1].castMultiplier, 'better reels should cast further');
+    assert.ok(sortedReels[i].dragBonus >= sortedReels[i - 1].dragBonus, 'drag should not get worse with tier');
+  }
+  assert.ok(REELS.find((r) => r.cost === 0), 'expected a free starter reel');
+  const braid = LINES.find((l) => l.id === 'line-braid');
+  const starterLine = LINES.find((l) => l.id === 'line-starter');
+  assert.ok(braid.castMultiplier > starterLine.castMultiplier, 'braid should cast further than starter line');
+  console.log('PASS: reels and braid extend cast distance by tier');
 }
 
 console.log('All gear tests passed.');

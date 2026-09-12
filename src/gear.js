@@ -6,10 +6,22 @@ export const RODS = [
   { id: 'rod-heavy', name: 'Heavy-Duty Rod', tier: 3, cost: 900, castDistance: 24, tensionTolerance: 2.2 },
 ];
 
+// castMultiplier: thinner, slicker line flies off the spool further --
+// braid is the long-cast choice, thick fluoro a touch less so.
 export const LINES = [
-  { id: 'line-starter', name: 'Starter Line (10lb)', tier: 1, cost: 0, breakStrength: 1.0 },
-  { id: 'line-braid', name: 'Braided Line (20lb)', tier: 2, cost: 150, breakStrength: 1.6 },
-  { id: 'line-fluoro', name: 'Fluorocarbon Leader (30lb)', tier: 3, cost: 500, breakStrength: 2.4 },
+  { id: 'line-starter', name: 'Starter Line (10lb)', tier: 1, cost: 0, breakStrength: 1.0, castMultiplier: 1.0 },
+  { id: 'line-braid', name: 'Braided Line (20lb)', tier: 2, cost: 150, breakStrength: 1.6, castMultiplier: 1.15 },
+  { id: 'line-fluoro', name: 'Fluorocarbon Leader (30lb)', tier: 3, cost: 500, breakStrength: 2.4, castMultiplier: 1.08 },
+];
+
+// Reels: a bigger, smoother spool casts further, and a better drag system
+// absorbs a fish's runs during the fight (dragBonus adds to rod tolerance).
+export const REELS = [
+  { id: 'reel-starter', name: 'Starter Reel', tier: 1, cost: 0, castMultiplier: 1.0, dragBonus: 0 },
+  { id: 'reel-spinning', name: 'Spinning Reel (Coffee Grinder)', tier: 2, cost: 200, castMultiplier: 1.18, dragBonus: 0.15 },
+  // The big-pit / baitrunner style reel SA carp and barbel anglers use for
+  // long casts and heavy fish.
+  { id: 'reel-bigpit', name: 'Big Pit Reel', tier: 3, cost: 700, castMultiplier: 1.4, dragBonus: 0.35 },
 ];
 
 // Hooks/rigs: a small tensionBonus widens the reel minigame's safe zone
