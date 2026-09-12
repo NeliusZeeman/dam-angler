@@ -167,8 +167,14 @@ export function createPlayerRod(camera) {
     rodGroup.add(guide);
   }
 
+  // Shaft is a cylinder of height 1.7 centered at local (0,0,-0.7), rotated
+  // Math.PI/2 + 0.35 about X. Its far end (rod tip) sits at
+  // center + (height/2) * rotatedYAxis, where rotatedYAxis = (0, cos(theta), sin(theta)).
+  const shaftTheta = Math.PI / 2 + 0.35;
+  const rotatedAxis = new THREE.Vector3(0, Math.cos(shaftTheta), Math.sin(shaftTheta));
+  const tipLocal = new THREE.Vector3(0, 0, -0.7).addScaledVector(rotatedAxis, -0.87);
   const tip = new THREE.Object3D();
-  tip.position.set(0, 0.8, -1.6);
+  tip.position.copy(tipLocal);
   rodGroup.add(tip);
 
   rodGroup.position.set(0.32, -0.32, -0.55);
