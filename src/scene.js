@@ -70,8 +70,27 @@ export function createScene({ grassTint = 0xffffff } = {}) {
   pondBed.receiveShadow = false;
   scene.add(pondBed);
 
+  // Bank: a sandy/muddy strip between the grass and the water, plus a thin
+  // pale waterline where the two meet, so the edge is unmistakable.
+  const bankGeo = new THREE.RingGeometry(SHORE_INNER_RADIUS - 1.6, SHORE_INNER_RADIUS + 1.1, 96, 1);
+  const bankMat = new THREE.MeshStandardMaterial({ color: 0x9b8560, roughness: 1.0 });
+  const bank = new THREE.Mesh(bankGeo, bankMat);
+  bank.rotation.x = -Math.PI / 2;
+  bank.position.copy(POND_CENTER);
+  bank.position.y = 0.13;
+  bank.receiveShadow = true;
+  scene.add(bank);
+
+  const waterlineGeo = new THREE.RingGeometry(SHORE_INNER_RADIUS - 0.35, SHORE_INNER_RADIUS - 0.05, 128, 1);
+  const waterlineMat = new THREE.MeshBasicMaterial({ color: 0xe8efe3, transparent: true, opacity: 0.55 });
+  const waterline = new THREE.Mesh(waterlineGeo, waterlineMat);
+  waterline.rotation.x = -Math.PI / 2;
+  waterline.position.copy(POND_CENTER);
+  waterline.position.y = 0.145;
+  scene.add(waterline);
+
   // Shore: a walkable ring around the whole dam, textured with grass.
-  const shoreGeo = new THREE.RingGeometry(SHORE_INNER_RADIUS, SHORE_OUTER_RADIUS, 96, 1);
+  const shoreGeo = new THREE.RingGeometry(SHORE_INNER_RADIUS + 1.0, SHORE_OUTER_RADIUS, 96, 1);
   const shoreMat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1.0, color: grassTint });
   const shore = new THREE.Mesh(shoreGeo, shoreMat);
   shore.rotation.x = -Math.PI / 2;

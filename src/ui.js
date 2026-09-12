@@ -10,7 +10,7 @@ export function createHUD(container) {
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
-    <span class="hud-hint">A/D walk · hold click: charge & cast · click: twitch · hold click: reel in · Space: fight a bite · B tackle box · C log · L change spot</span>
+    <span class="hud-hint">A/D walk · hold click: charge & cast · click: twitch · hold click: reel in (and fight a fish — ease off when the bar runs red) · B tackle box · C log · L change spot</span>
   `;
   container.appendChild(bar);
 
@@ -48,7 +48,7 @@ export function createHUD(container) {
     waiting: 'Line in the water',
     reeling: 'Reeling in',
     hanging: 'Line hanging — click to cast',
-    biting: 'FISH ON! Hold Space',
+    biting: 'FISH ON! Hold click to reel',
   };
 
   function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, hookName, lureName, castingPhase, tension, power }) {
@@ -65,6 +65,7 @@ export function createHUD(container) {
     tensionWrap.style.display = (castingPhase === 'biting') ? 'block' : 'none';
     if (tension != null) {
       document.getElementById('hud-tension-bar').style.width = `${Math.min(100, tension * 100)}%`;
+      tensionWrap.dataset.danger = tension > 0.72 ? 'true' : 'false';
     }
     powerWrap.style.display = (castingPhase === 'aiming') ? 'block' : 'none';
     if (power != null) {

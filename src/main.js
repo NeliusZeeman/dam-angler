@@ -128,6 +128,7 @@ function startGame(locationId, startTimeOfDay) {
     twitchBoostTimer = 2.0;
     rodRecoil = 0.35;
   });
+  casting.onFightHold((holding) => minigame.setHolding(holding));
 
   casting.onBite(() => {
     const species = bitingSpecies;
@@ -176,6 +177,7 @@ function startGame(locationId, startTimeOfDay) {
   function rollBitesIfWaiting(delta) {
     const phase = casting.getState().phase;
     if (phase !== 'waiting' && phase !== 'reeling') return;
+    if (!casting.isBobberInWater()) return; // nothing bites a lure on the bank
     const state = environment.getState();
     const biteChanceMultiplier = twitchBoostTimer > 0 ? 1.8 : 1;
     for (const species of localSpecies) {

@@ -29,9 +29,17 @@ const fragmentShader = `
   uniform vec3 uSunDir;
   uniform vec3 uCameraPos;
   uniform float uTime;
+  uniform float uRadius;
+  uniform vec3 uCenter;
   void main() {
     float ripple = sin((vUv.x + vUv.y) * 24.0 + uTime * 2.0) * 0.04;
     vec3 baseColor = uColor + ripple;
+
+    // Shallows: the last few metres before the bank go lighter and sandier,
+    // so the water's edge reads clearly against the grass.
+    float distFromCenter = length(vWorldPos.xz - uCenter.xz);
+    float shallow = smoothstep(uRadius - 4.5, uRadius - 0.3, distFromCenter);
+    baseColor = mix(baseColor, vec3(0.62, 0.72, 0.62), shallow * 0.55);
 
     vec3 worldNormal = normalize(vWorldNormal);
     vec3 viewDir = normalize(uCameraPos - vWorldPos);
@@ -43,8 +51,9 @@ const fragmentShader = `
 
     vec3 skyTint = vec3(0.75, 0.9, 1.0) * fresnel * 0.5;
     vec3 color = baseColor + skyTint + glint;
-    // Translucent enough to see fish moving just under the surface.
-    gl_FragColor = vec4(color, 0.74 + fresnel * 0.2);
+    // Translucent enough to see fish moving just under the surface, and
+    // thinner still in the shallows.
+    gl_FragColor = vec4(color, 0.74 + fresnel * 0.2 - shallow * 0.18);
   }
 `;
 
@@ -55,6 +64,8 @@ export function createWater(scene, { coldColor: coldHex = 0x1c4d73, warmColor: w
     uColor: { value: new THREE.Color(warmHex) },
     uSunDir: { value: new THREE.Vector3(0.4, 0.8, 0.4).normalize() },
     uCameraPos: { value: new THREE.Vector3() },
+    uRadius: { value: WATER_RADIUS },
+    uCenter: { value: POND_CENTER.clone() },
   };
   const material = new THREE.ShaderMaterial({
     vertexShader, fragmentShader, uniforms, transparent: true,

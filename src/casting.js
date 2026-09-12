@@ -1,5 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
+import { POND_CENTER, WATER_RADIUS } from './pond.js';
 
+const WATER_LANDING_MARGIN = 1.2; // a cast always lands at least this far into the water
 const TWITCH_COOLDOWN = 0.35;
 const TWITCH_KICK_UP = 0.14;
 const TWITCH_KICK_SIDE = 0.08;
@@ -59,6 +61,26 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   let power = 0;
   const hangOffset = new THREE.Vector3(0, -0.15, 0.05);
 
+  // Distance along a flat ray from `origin` in direction `dir` to the point
+  // `margin` inside the water's edge. Null if the ray never enters the water.
+  function distanceToWaterEntry(origin, dir, margin) {
+    const r = WATER_RADIUS - margin;
+    const ox = origin.x - POND_CENTER.x;
+    const oz = origin.z - POND_CENTER.z;
+    const b = 2 * (ox * dir.x + oz * dir.z);
+    const c = ox * ox + oz * oz - r * r;
+    const disc = b * b - 4 * c;
+    if (disc < 0) return null;
+    const t = (-b - Math.sqrt(disc)) / 2;
+    return t > 0 ? t : null;
+  }
+
+  function isPointInWater(point) {
+    const dx = point.x - POND_CENTER.x;
+    const dz = point.z - POND_CENTER.z;
+    return Math.sqrt(dx * dx + dz * dz) < WATER_RADIUS;
+  }
+
   function releaseCastAt(aim) {
     if (phase !== 'aiming') return;
     const rod = getRod();
@@ -66,8 +88,14 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     const toAim = new THREE.Vector3().subVectors(aim, camera.position);
     toAim.y = 0;
     const aimDistance = toAim.length();
-    const clampedDistance = Math.min(aimDistance, maxReach);
     toAim.normalize();
+
+    // Even a feather-light tap has to reach the water -- the player stands
+    // on the bank, so a short lob that landed on the grass could never be
+    // fished (and no fish should ever bite a lure lying on the shore).
+    const toWater = distanceToWaterEntry(camera.position, toAim, WATER_LANDING_MARGIN);
+    const minReach = toWater !== null ? toWater : maxReach;
+    const clampedDistance = Math.max(minReach, Math.min(aimDistance, maxReach));
 
     launchTarget.copy(camera.position).addScaledVector(toAim, clampedDistance);
     launchTarget.y = 0;
@@ -241,6 +269,14 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     if (hit) aimPoint.copy(hit.point);
   }
 
+  let fightHoldCallback = null;
+  let fightHolding = false;
+
+  // Hold-click reels a hooked fish too -- same gesture as reeling in the line.
+  function onFightHold(callback) {
+    fightHoldCallback = callback;
+  }
+
   domElement.addEventListener('mousedown', (e) => {
     if (phase === 'idle' || phase === 'hanging') {
       updateAimFromPointer(e.clientX, e.clientY);
@@ -252,6 +288,10 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       pressing = true;
       pressTimer = 0;
       castArmed = false;
+    } else if (phase === 'biting') {
+      fightHolding = true;
+      castArmed = false;
+      if (fightHoldCallback) fightHoldCallback(true);
     } else {
       castArmed = false;
     }
@@ -269,9 +309,17 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     } else if (phase === 'waiting' && pressing && pressTimer <= REEL_HOLD_THRESHOLD) {
       tapRod();
     }
+    if (fightHolding) {
+      fightHolding = false;
+      if (fightHoldCallback) fightHoldCallback(false);
+    }
     castArmed = false;
     pressing = false;
   });
+
+  function isBobberInWater() {
+    return bobber.visible && isPointInWater(bobber.position);
+  }
 
   function getState() {
     return { phase, power };
@@ -280,6 +328,6 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   return {
     update, getState, onBite, triggerBite,
     resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position,
-    updateAimFromPointer, aimPoint,
+    updateAimFromPointer, aimPoint, onFightHold, isBobberInWater,
   };
 }
