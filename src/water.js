@@ -77,3 +77,74 @@ export function updateWater(waterMesh, elapsedSeconds, camera) {
   waterMesh.material.uniforms.uTime.value = elapsedSeconds;
   waterMesh.material.uniforms.uCameraPos.value.copy(camera.position);
 }
+
+// Splash: an expanding, fading ripple ring plus a handful of flung droplets,
+// spawned where the cast lure hits the water.
+export function createSplashEffect(scene) {
+  const active = [];
+
+  function spawn(point) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.05, 0.12, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffe9c2, transparent: true, opacity: 0.6, side: THREE.DoubleSide }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.copy(point);
+    ring.position.y = 0.02;
+    ring.userData.age = 0;
+    ring.userData.kind = 'ring';
+    scene.add(ring);
+    active.push(ring);
+
+    for (let i = 0; i < 8; i++) {
+      const droplet = new THREE.Mesh(
+        new THREE.SphereGeometry(0.02, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }),
+      );
+      const angle = (i / 8) * Math.PI * 2;
+      droplet.position.copy(point);
+      droplet.position.y = 0.04;
+      droplet.userData.age = 0;
+      droplet.userData.kind = 'droplet';
+      droplet.userData.vx = Math.cos(angle) * (0.5 + Math.random() * 0.4);
+      droplet.userData.vz = Math.sin(angle) * (0.5 + Math.random() * 0.4);
+      droplet.userData.vy = 1.0 + Math.random() * 0.5;
+      scene.add(droplet);
+      active.push(droplet);
+    }
+  }
+
+  function update(deltaSeconds) {
+    for (let i = active.length - 1; i >= 0; i--) {
+      const obj = active[i];
+      obj.userData.age += deltaSeconds;
+      if (obj.userData.kind === 'droplet') {
+        obj.userData.vy -= deltaSeconds * 3;
+        obj.position.x += obj.userData.vx * deltaSeconds;
+        obj.position.z += obj.userData.vz * deltaSeconds;
+        obj.position.y += obj.userData.vy * deltaSeconds;
+        obj.material.opacity = Math.max(0, 0.9 - obj.userData.age * 1.8);
+        if (obj.position.y < 0 || obj.userData.age > 0.8) {
+          scene.remove(obj);
+          obj.geometry.dispose();
+          obj.material.dispose();
+          active.splice(i, 1);
+        }
+      } else {
+        const t = obj.userData.age / 1.0;
+        const r = 0.1 + t * 1.2;
+        obj.geometry.dispose();
+        obj.geometry = new THREE.RingGeometry(r, r + 0.04, 32);
+        obj.material.opacity = Math.max(0, 0.6 * (1 - t));
+        if (t >= 1) {
+          scene.remove(obj);
+          obj.geometry.dispose();
+          obj.material.dispose();
+          active.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  return { spawn, update };
+}

@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 import { createScene, setupCameraControls, updateSway, updateSun, createPlayerRod } from './scene.js';
-import { createWater, updateWater } from './water.js';
+import { createWater, updateWater, createSplashEffect } from './water.js';
 import { createEnvironment } from './environment.js';
 import { FISH_SPECIES, rollForBite, randomWeightFor } from './fish.js';
 import { RODS, LINES, LURES, getGearById } from './gear.js';
@@ -30,6 +30,7 @@ setupCameraControls(camera, renderer.domElement);
 
 const fishSwarm = createFishSwarm(scene, FISH_SPECIES.map((s) => s.id), 12);
 const catchReveal = createCatchReveal(scene);
+const splashEffect = createSplashEffect(scene);
 const playerRod = createPlayerRod(camera);
 
 window.addEventListener('resize', () => {
@@ -47,6 +48,8 @@ const casting = createCasting({
   scene, camera, domElement: renderer.domElement,
   getRod: () => activeRod,
   rodTip: playerRod.tip,
+  waterMesh,
+  onSplash: (point) => splashEffect.spawn(point),
 });
 const minigame = createMinigame();
 const hud = createHUD(appEl);
@@ -148,6 +151,7 @@ function animate() {
   updateSway(swayGroup, now / 1000, envState.windSpeed);
   updateFishSwarm(fishSwarm, now / 1000);
   catchReveal.update(delta);
+  splashEffect.update(delta);
   if (envState.timeOfDay !== lastTimeOfDay) {
     updateSun(sunLight, ambientLight, hemiLight, skyUniforms, envState.timeOfDay);
     lastTimeOfDay = envState.timeOfDay;

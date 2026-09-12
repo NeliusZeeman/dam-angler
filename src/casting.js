@@ -5,7 +5,7 @@ const TWITCH_KICK_UP = 0.14;
 const TWITCH_KICK_SIDE = 0.08;
 const TWITCH_DECAY_PER_SEC = 7;
 
-export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
+export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, onSplash }) {
   const bobberGeo = new THREE.SphereGeometry(0.08, 12, 12);
   const bobberMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
   const bobber = new THREE.Mesh(bobberGeo, bobberMat);
@@ -22,6 +22,9 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
   const target = new THREE.Vector3();
   const restPosition = new THREE.Vector3();
   const twitchOffset = new THREE.Vector3();
+  const aimPoint = new THREE.Vector3(0, 0, -10);
+  const raycaster = new THREE.Raycaster();
+  const pointerNDC = new THREE.Vector2();
 
   let phase = 'idle';
   let power = 0;
@@ -41,11 +44,16 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
 
   function releaseCast() {
     if (phase !== 'aiming') return;
-    const forward = new THREE.Vector3();
-    camera.getWorldDirection(forward);
     const rod = getRod();
-    const distance = 4 + power * rod.castDistance;
-    launchTarget.copy(camera.position).addScaledVector(forward, distance);
+    const maxDistance = 4 + power * rod.castDistance;
+
+    const toAim = new THREE.Vector3().subVectors(aimPoint, camera.position);
+    toAim.y = 0;
+    const aimDistance = toAim.length();
+    const clampedDistance = Math.min(aimDistance, maxDistance);
+    toAim.normalize();
+
+    launchTarget.copy(camera.position).addScaledVector(toAim, clampedDistance);
     launchTarget.y = 0;
     phase = 'inAir';
     airTime = 0;
@@ -115,6 +123,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
         bobber.position.y = 0;
         restPosition.copy(bobber.position);
         twitchOffset.set(0, 0, 0);
+        if (onSplash) onSplash(bobber.position);
       }
     }
 
@@ -126,9 +135,27 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
     }
   }
 
-  domElement.addEventListener('mousedown', () => {
-    if (phase === 'idle') { startAimHold(); holding = true; }
-    else if (phase === 'waiting') { tapRod(); }
+  function updateAimFromPointer(clientX, clientY) {
+    if (!waterMesh) return;
+    const rect = domElement.getBoundingClientRect();
+    pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointerNDC, camera);
+    const hit = raycaster.intersectObject(waterMesh)[0];
+    if (hit) aimPoint.copy(hit.point);
+  }
+
+  domElement.addEventListener('mousedown', (e) => {
+    if (phase === 'idle') {
+      updateAimFromPointer(e.clientX, e.clientY);
+      startAimHold();
+      holding = true;
+    } else if (phase === 'waiting') {
+      tapRod();
+    }
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (phase === 'aiming') updateAimFromPointer(e.clientX, e.clientY);
   });
   window.addEventListener('mouseup', () => {
     if (phase === 'aiming') { releaseCast(); }
@@ -142,5 +169,6 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip }) {
   return {
     update, getState, startAimHold, releaseCast, onBite, triggerBite,
     resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position,
+    updateAimFromPointer, aimPoint,
   };
 }
