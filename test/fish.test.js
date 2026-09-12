@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
+import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier } from '../src/fish.js';
 
 {
   assert.strictEqual(FISH_SPECIES.length, 8);
@@ -116,6 +116,34 @@ import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
   const tigerfish = FISH_SPECIES.find(f => f.id === 'tigerfish');
   assert.strictEqual(tigerfish.requiresWireTrace, true);
   console.log('PASS: every species declares a bite profile; tigerfish requires a wire trace');
+}
+
+{
+  // Every species declares a habitat preference; bass/tigerfish/smallmouth
+  // want structure, catfish/mirror carp want deep water, tilapia want shallow.
+  const bass = FISH_SPECIES.find((f) => f.id === 'largemouth-bass');
+  const tilapia = FISH_SPECIES.find((f) => f.id === 'mozambique-tilapia');
+  const catfish = FISH_SPECIES.find((f) => f.id === 'catfish');
+
+  const bassInCoverWithLure = getHabitatMultiplier(bass, { zone: 'structure', depthFactor: 0.5, lureKind: 'lure' });
+  const bassInOpenWater = getHabitatMultiplier(bass, { zone: 'open', depthFactor: 0.5, lureKind: 'lure' });
+  assert.ok(bassInCoverWithLure > bassInOpenWater, 'a bass should favour a spinner worked through cover over open water');
+
+  const bassInCoverWithBait = getHabitatMultiplier(bass, { zone: 'structure', depthFactor: 0.5, lureKind: 'bait' });
+  assert.ok(bassInCoverWithLure > bassInCoverWithBait, 'a worked lure in cover should beat bait in the same cover for a structure fish');
+
+  const tilapiaShallow = getHabitatMultiplier(tilapia, { zone: 'open', depthFactor: 0.1, lureKind: 'bait' });
+  const tilapiaDeep = getHabitatMultiplier(tilapia, { zone: 'open', depthFactor: 0.9, lureKind: 'bait' });
+  assert.ok(tilapiaShallow > tilapiaDeep, 'tilapia should favour the shallows near the bank');
+
+  const catfishDeep = getHabitatMultiplier(catfish, { zone: 'open', depthFactor: 0.9, lureKind: 'bait' });
+  const catfishShallow = getHabitatMultiplier(catfish, { zone: 'open', depthFactor: 0.1, lureKind: 'bait' });
+  assert.ok(catfishDeep > catfishShallow, 'catfish should favour deep water over the shallows');
+
+  const noPreference = getHabitatMultiplier({ habitat: {} }, { zone: 'structure', depthFactor: 0.9, lureKind: 'lure' });
+  assert.strictEqual(noPreference, 1, 'a species with no habitat preference should be unaffected by position');
+
+  console.log('PASS: habitat multiplier rewards spinners-in-cover for bass, shallows for tilapia, depth for catfish');
 }
 
 console.log('All fish tests passed.');

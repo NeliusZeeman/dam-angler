@@ -14,6 +14,9 @@ import { createFishSwarm, updateFishSwarm, createCatchReveal } from './fish3d.js
 import { createPlayerController } from './player.js';
 import { getLocationById } from './locations.js';
 import { showStartMenu } from './startMenu.js';
+import { createPondShape } from './pondShape.js';
+import { createChumSystem, CHUM_COST } from './chum.js';
+import { createPauseMenu } from './pauseMenu.js';
 
 const appEl = document.getElementById('app');
 const save = loadSave();
@@ -32,9 +35,10 @@ if (save.locationId) {
 function startGame(locationId, startTimeOfDay) {
   const location = getLocationById(locationId);
   const localSpecies = FISH_SPECIES.filter((s) => location.speciesIds.includes(s.id));
+  const pondShape = createPondShape({ seedStr: location.id, ...location.shape });
 
-  const { scene, camera, sunLight, ambientLight, hemiLight, swayGroup, skyUniforms, sunGlow, treeLeafMats } = createScene({ grassTint: location.grassTint });
-  const { waterMesh, setWaterTemperature } = createWater(scene, {
+  const { scene, camera, sunLight, ambientLight, hemiLight, swayGroup, skyUniforms, sunGlow, treeLeafMats } = createScene({ grassTint: location.grassTint, pondShape });
+  const { waterMesh, setWaterTemperature } = createWater(scene, pondShape, {
     coldColor: location.waterTint.cold,
     warmColor: location.waterTint.warm,
   });
@@ -49,11 +53,12 @@ function startGame(locationId, startTimeOfDay) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   appEl.appendChild(renderer.domElement);
 
-  const playerController = createPlayerController({ camera, domElement: renderer.domElement });
+  const playerController = createPlayerController({ camera, domElement: renderer.domElement, pondShape });
 
-  const fishSwarm = createFishSwarm(scene, localSpecies.map((s) => s.id), 24);
+  const fishSwarm = createFishSwarm(scene, localSpecies.map((s) => s.id), 24, pondShape);
   const catchReveal = createCatchReveal(scene);
   const splashEffect = createSplashEffect(scene);
+  const chumSystem = createChumSystem(scene);
   const playerRod = createPlayerRod(camera);
 
   window.addEventListener('resize', () => {
@@ -73,6 +78,7 @@ function startGame(locationId, startTimeOfDay) {
     getRod: () => activeRod,
     rodTip: playerRod.tip,
     waterMesh,
+    pondShape,
     onSplash: (point) => splashEffect.spawn(point),
     onWake: (point) => splashEffect.spawn(point),
     getLureKind: () => (getGearById(LURES, activeLureId) || LURES[0]).kind,
@@ -115,10 +121,42 @@ function startGame(locationId, startTimeOfDay) {
     window.location.reload();
   }
 
+  let paused = false;
+  const pauseMenu = createPauseMenu(appEl, {
+    locationName: location.name,
+    onResume: () => { paused = false; pauseMenu.hide(); },
+    onChangeSpot: () => changeFishingSpot(),
+  });
+
+  function throwChum() {
+    const phase = casting.getState().phase;
+    if (phase === 'inAir' || phase === 'biting' || phase === 'reeling') return;
+    if (save.credits < CHUM_COST) {
+      hud.showToast(`Not enough credits for breadcrumbs (${CHUM_COST})`);
+      return;
+    }
+    const target = (phase === 'waiting') ? casting.bobberPosition.clone() : casting.getPredictedLanding();
+    if (!casting.isPointInWater(target)) {
+      hud.showToast("Can't chum dry land — aim at the water first");
+      return;
+    }
+    save.credits -= CHUM_COST;
+    saveSave(save);
+    chumSystem.spawn(target);
+    hud.showToast('Breadcrumbs thrown — fish will gather here');
+  }
+
   window.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape') {
+      paused = !paused;
+      if (paused) pauseMenu.show(); else pauseMenu.hide();
+      return;
+    }
+    if (paused) return;
     if (e.code === 'KeyB') { tackleBox.toggle(); }
     if (e.code === 'KeyC') { toggleCatchLog(); }
     if (e.code === 'KeyL') { changeFishingSpot(); }
+    if (e.code === 'KeyF') { throwChum(); }
     if (e.code === 'Space') { minigame.setHolding(true); e.preventDefault(); }
   });
   window.addEventListener('keyup', (e) => {
@@ -184,9 +222,15 @@ function startGame(locationId, startTimeOfDay) {
     if (phase !== 'waiting' && phase !== 'reeling') return;
     if (!casting.isBobberInWater()) return; // nothing bites a lure on the bank
     const state = environment.getState();
-    const biteChanceMultiplier = twitchBoostTimer > 0 ? 1.8 : 1;
+    const habitat = casting.getBobberHabitat();
+    const lureKind = (getGearById(LURES, activeLureId) || LURES[0]).kind;
+    const chumMultiplier = chumSystem.multiplierAt(casting.bobberPosition);
+    const biteChanceMultiplier = (twitchBoostTimer > 0 ? 1.8 : 1) * chumMultiplier;
     for (const species of localSpecies) {
-      if (rollForBite({ species, waterTempC: state.waterTempC, equippedLureId: activeLureId, deltaSeconds: delta, biteChanceMultiplier, timeOfDay: state.timeOfDay })) {
+      if (rollForBite({
+        species, waterTempC: state.waterTempC, equippedLureId: activeLureId, deltaSeconds: delta,
+        biteChanceMultiplier, timeOfDay: state.timeOfDay, habitat, lureKind,
+      })) {
         startBite(species);
         break;
       }
@@ -205,61 +249,64 @@ function startGame(locationId, startTimeOfDay) {
     const delta = Math.min(0.1, (now - lastTime) / 1000);
     lastTime = now;
 
-    environment.tick(delta);
-    const envState = environment.getState();
-    setWaterTemperature(envState.waterTempC);
-    playerController.update(delta);
-    updateWater(waterMesh, now / 1000, camera);
-    updateSway(swayGroup, now / 1000, envState.windSpeed);
-    updateFishSwarm(fishSwarm, now / 1000);
-    catchReveal.update(delta);
-    splashEffect.update(delta);
-    if (envState.timeOfDay !== lastTimeOfDay) {
-      const sunDir = updateSun({ sunLight, ambientLight, hemiLight, skyUniforms, sunGlow, scene }, envState.timeOfDay);
-      setWaterSunDirection(waterMesh, sunDir);
-      lastTimeOfDay = envState.timeOfDay;
+    if (!paused) {
+      environment.tick(delta);
+      const envState = environment.getState();
+      setWaterTemperature(envState.waterTempC);
+      playerController.update(delta);
+      updateWater(waterMesh, now / 1000, camera);
+      updateSway(swayGroup, now / 1000, envState.windSpeed);
+      updateFishSwarm(fishSwarm, now / 1000);
+      catchReveal.update(delta);
+      splashEffect.update(delta);
+      chumSystem.update(delta, now / 1000);
+      if (envState.timeOfDay !== lastTimeOfDay) {
+        const sunDir = updateSun({ sunLight, ambientLight, hemiLight, skyUniforms, sunGlow, scene }, envState.timeOfDay);
+        setWaterSunDirection(waterMesh, sunDir);
+        lastTimeOfDay = envState.timeOfDay;
+      }
+      if (envState.season !== lastSeason) {
+        updateSeasonFoliage(treeLeafMats, envState.season);
+        lastSeason = envState.season;
+      }
+
+      casting.update(delta, envState);
+      rollBitesIfWaiting(delta);
+      minigame.update(delta);
+
+      const mgState = minigame.getState();
+      const castState = casting.getState();
+
+      // Rod feel: tips back while winding up (scaled by the power meter),
+      // snaps forward the instant the cast releases, flicks up on a twitch.
+      if (lastCastPhase === 'aiming' && castState.phase === 'inAir') castSnap = 0.55;
+      lastCastPhase = castState.phase;
+      castSnap *= Math.max(0, 1 - delta * 9);
+      twitchBoostTimer = Math.max(0, twitchBoostTimer - delta);
+      rodRecoil *= Math.max(0, 1 - delta * 10);
+      const windup = castState.phase === 'aiming' ? castState.power * 0.6 : 0;
+      // The rod in hand follows the mouse, so sweeping the cursor works the rod.
+      const mouse = casting.getMouseOffset();
+      playerRod.rodGroup.rotation.x = -(rodRecoil + windup) + castSnap - mouse.y * 0.22;
+      playerRod.rodGroup.rotation.y = -mouse.x * 0.3;
+      hud.update({
+        credits: save.credits,
+        season: envState.season,
+        timeOfDay: envState.timeOfDay,
+        waterTempC: envState.waterTempC,
+        windSpeed: envState.windSpeed,
+        rodName: activeRod.name,
+        lineName: activeLine.name,
+        reelName: activeReel.name,
+        hookName: activeHook.name,
+        lureInWater: casting.isBobberInWater(),
+        lureName: getGearById(LURES, activeLureId)?.name || 'None',
+        castingPhase: castState.phase,
+        tension: mgState.active ? mgState.tension : null,
+        power: castState.power,
+        working: castState.working,
+      });
     }
-    if (envState.season !== lastSeason) {
-      updateSeasonFoliage(treeLeafMats, envState.season);
-      lastSeason = envState.season;
-    }
-
-    casting.update(delta, envState);
-    rollBitesIfWaiting(delta);
-    minigame.update(delta);
-
-    const mgState = minigame.getState();
-    const castState = casting.getState();
-
-    // Rod feel: tips back while winding up (scaled by the power meter),
-    // snaps forward the instant the cast releases, flicks up on a twitch.
-    if (lastCastPhase === 'aiming' && castState.phase === 'inAir') castSnap = 0.55;
-    lastCastPhase = castState.phase;
-    castSnap *= Math.max(0, 1 - delta * 9);
-    twitchBoostTimer = Math.max(0, twitchBoostTimer - delta);
-    rodRecoil *= Math.max(0, 1 - delta * 10);
-    const windup = castState.phase === 'aiming' ? castState.power * 0.6 : 0;
-    // The rod in hand follows the mouse, so sweeping the cursor works the rod.
-    const mouse = casting.getMouseOffset();
-    playerRod.rodGroup.rotation.x = -(rodRecoil + windup) + castSnap - mouse.y * 0.22;
-    playerRod.rodGroup.rotation.y = -mouse.x * 0.3;
-    hud.update({
-      credits: save.credits,
-      season: envState.season,
-      timeOfDay: envState.timeOfDay,
-      waterTempC: envState.waterTempC,
-      windSpeed: envState.windSpeed,
-      rodName: activeRod.name,
-      lineName: activeLine.name,
-      reelName: activeReel.name,
-      hookName: activeHook.name,
-      lureInWater: casting.isBobberInWater(),
-      lureName: getGearById(LURES, activeLureId)?.name || 'None',
-      castingPhase: castState.phase,
-      tension: mgState.active ? mgState.tension : null,
-      power: castState.power,
-      working: castState.working,
-    });
 
     renderer.render(scene, camera);
   }
@@ -267,7 +314,7 @@ function startGame(locationId, startTimeOfDay) {
 
   window.__game = {
     environment, casting, minigame, save, scene, camera, catchReveal, fishSwarm,
-    playerController, location, localSpecies,
+    playerController, location, localSpecies, pondShape, chumSystem,
     // Dev hook: force a bite from a given local species (line must be out).
     debugForceBite: (speciesId) => {
       const species = localSpecies.find((s) => s.id === speciesId) || localSpecies[0];

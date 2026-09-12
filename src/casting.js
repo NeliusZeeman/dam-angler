@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { POND_CENTER, WATER_EDGE_RADIUS, BANK_SURFACE_Y } from './pond.js';
+import { POND_CENTER, BANK_SURFACE_Y } from './pond.js';
 
 const WATER_LANDING_MARGIN = 1.0; // a cast always lands at least this far past the sand into open water
 const TWITCH_COOLDOWN = 0.35;
@@ -24,7 +24,7 @@ const BAIT_WIGGLE_GAIN = 0.35; // bait only wiggles under mouse motion
 const FLICK_POWER_GAIN = 0.28; // upward flick on release adds cast power
 const FLICK_POWER_MAX = 0.35;
 
-export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, onSplash, onWake, getLureKind = () => 'bait', getCastMultiplier = () => 1 }) {
+export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, pondShape, onSplash, onWake, getLureKind = () => 'bait', getCastMultiplier = () => 1 }) {
   const bobberGeo = new THREE.SphereGeometry(0.08, 12, 12);
   const bobberMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
   const bobber = new THREE.Mesh(bobberGeo, bobberMat);
@@ -81,47 +81,92 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   const swayPerp = new THREE.Vector3();
   const motionToTip = new THREE.Vector3();
 
-  // Distances along a flat ray from `origin` in direction `dir` at which it
-  // enters and leaves the open water (a circle `margin` inside the sand
-  // edge). Null if the ray never crosses the water.
-  function waterCrossing(origin, dir, margin) {
-    const r = WATER_EDGE_RADIUS - margin;
-    const ox = origin.x - POND_CENTER.x;
-    const oz = origin.z - POND_CENTER.z;
-    const b = 2 * (ox * dir.x + oz * dir.z);
-    const c = ox * ox + oz * oz - r * r;
-    const disc = b * b - 4 * c;
-    if (disc < 0) return null;
-    const root = Math.sqrt(disc);
-    const enter = (-b - root) / 2;
-    const exit = (-b + root) / 2;
-    if (exit <= 0) return null;
-    return { enter: Math.max(0, enter), exit };
+  function angleAndDist(point) {
+    const dx = point.x - POND_CENTER.x;
+    const dz = point.z - POND_CENTER.z;
+    return { theta: Math.atan2(dz, dx), dist: Math.hypot(dx, dz) };
   }
 
   function distanceFromCenter(point) {
-    const dx = point.x - POND_CENTER.x;
-    const dz = point.z - POND_CENTER.z;
-    return Math.sqrt(dx * dx + dz * dz);
+    return angleAndDist(point).dist;
   }
 
   // Open water only -- the sand bank is dry land, whatever the water mesh
-  // underneath it says.
+  // underneath it says. The pond's shoreline isn't a circle, so this checks
+  // the actual edge in the point's own direction.
   function isPointInWater(point) {
-    return distanceFromCenter(point) < WATER_EDGE_RADIUS;
+    const { theta, dist } = angleAndDist(point);
+    return dist < pondShape.radiusAt(theta);
+  }
+
+  // Distances along a flat ray from `origin` in direction `dir` at which it
+  // enters and leaves the open water (the shoreline pulled `margin` in).
+  // Null if the ray never crosses the water. The shoreline is an arbitrary
+  // radius-per-angle curve (not a circle), so this walks the ray in small
+  // steps and bisects across each crossing rather than solving in closed
+  // form -- robust for any shape, and this runs on one ray, not per pixel.
+  function waterCrossing(origin, dir, margin) {
+    const maxDist = 48;
+    const coarseStep = 0.35;
+    const insideAt = (t) => {
+      const x = origin.x + dir.x * t;
+      const z = origin.z + dir.z * t;
+      const theta = Math.atan2(z - POND_CENTER.z, x - POND_CENTER.x);
+      const dist = Math.hypot(x - POND_CENTER.x, z - POND_CENTER.z);
+      return dist < pondShape.radiusAt(theta) - margin;
+    };
+    const bisect = (loT, hiT, loInside) => {
+      let lo = loT, hi = hiT;
+      for (let i = 0; i < 14; i++) {
+        const mid = (lo + hi) / 2;
+        if (insideAt(mid) === loInside) lo = mid; else hi = mid;
+      }
+      return (lo + hi) / 2;
+    };
+
+    let prevT = 0;
+    let prevInside = insideAt(0);
+    let enter = prevInside ? 0 : null;
+    let exit = null;
+    for (let t = coarseStep; t <= maxDist; t += coarseStep) {
+      const inside = insideAt(t);
+      if (inside !== prevInside) {
+        const crossT = bisect(prevT, t, prevInside);
+        if (inside && enter === null) enter = crossT;
+        else if (!inside && enter !== null && exit === null) exit = crossT;
+      }
+      prevInside = inside;
+      prevT = t;
+      if (enter !== null && exit !== null) break;
+    }
+    if (enter === null) return null;
+    if (exit === null) exit = maxDist;
+    return { enter, exit };
   }
 
   // Height a lure sits/travels at for a given xz: on the water surface in
   // the open, and once it's been dragged up onto the sand, lifting through
   // the air toward the rod tip as the line shortens.
   function lureHeightAt(point) {
-    const dist = distanceFromCenter(point);
-    if (dist < WATER_EDGE_RADIUS) return 0.02;
+    const { theta, dist } = angleAndDist(point);
+    const edge = pondShape.radiusAt(theta);
+    if (dist < edge) return 0.02;
     const tipDist = distanceFromCenter(rodTipWorld);
-    const span = Math.max(0.5, tipDist - WATER_EDGE_RADIUS);
-    const f = Math.min(1, (dist - WATER_EDGE_RADIUS) / span);
+    const span = Math.max(0.5, tipDist - edge);
+    const f = Math.min(1, (dist - edge) / span);
     const restY = BANK_SURFACE_Y + 0.06;
     return restY + f * f * Math.max(0, rodTipWorld.y - restY);
+  }
+
+  // What habitat a point in the water is: which zone (open water vs a
+  // lily-pad/structure cove) and how deep it is (0 at the edge, 1 at the
+  // deepest reachable point in that direction). Feeds the position-based
+  // bite bonuses in fish.js.
+  function habitatAt(point) {
+    const { theta, dist } = angleAndDist(point);
+    const zone = pondShape.zoneAt(theta);
+    const depthFactor = pondShape.depthFactorAt(theta, dist);
+    return { zone: zone.type, depthFactor };
   }
 
   const landingScratch = new THREE.Vector3();
@@ -508,5 +553,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position,
     updateAimFromPointer, aimPoint, onFightHold, isBobberInWater, getMouseOffset,
     getPredictedLanding: (out) => computeLanding(aimPoint, phase === 'aiming' ? power : 0, out || new THREE.Vector3()),
+    getBobberHabitat: () => habitatAt(bobber.position),
+    isPointInWater,
   };
 }

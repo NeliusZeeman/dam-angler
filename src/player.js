@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { POND_CENTER, WALK_RADIUS, DOCK_ANGLE } from './pond.js';
+import { POND_CENTER, DOCK_ANGLE, WALK_BAND_OFFSET } from './pond.js';
 
 const MOVE_SPEED = 0.5; // radians/sec walked around the ring
 const MAX_LOOK_YAW = Math.PI / 3.4; // how far the view turns toward a cursor at the screen edge
@@ -7,8 +7,11 @@ const LOOK_SMOOTHING = 6; // higher = snappier follow
 
 // The mouse is the aiming mechanism, so it must never need to be dragged:
 // the view turns softly toward wherever the cursor is, and the cast lands
-// where the cursor points on the water. Walking is A/D or arrows.
-export function createPlayerController({ camera, domElement }) {
+// where the cursor points on the water. Walking is A/D or arrows, and
+// follows the actual (irregular) shoreline -- the walk radius is always
+// "the water's edge here, plus a fixed band", so the player never strays
+// onto the sand or off into the trees as the shape pulls in and out.
+export function createPlayerController({ camera, domElement, pondShape }) {
   let theta = DOCK_ANGLE;
   let lookYaw = 0;
   let targetYaw = 0;
@@ -39,8 +42,9 @@ export function createPlayerController({ camera, domElement }) {
     if (pressed.has('ArrowLeft') || pressed.has('KeyA')) theta -= MOVE_SPEED * deltaSeconds;
     if (pressed.has('ArrowRight') || pressed.has('KeyD')) theta += MOVE_SPEED * deltaSeconds;
 
-    const x = POND_CENTER.x + Math.cos(theta) * WALK_RADIUS;
-    const z = POND_CENTER.z + Math.sin(theta) * WALK_RADIUS;
+    const walkRadius = pondShape.radiusAt(theta) + WALK_BAND_OFFSET;
+    const x = POND_CENTER.x + Math.cos(theta) * walkRadius;
+    const z = POND_CENTER.z + Math.sin(theta) * walkRadius;
     camera.position.set(x, 1.6, z);
 
     lookYaw += (targetYaw - lookYaw) * Math.min(1, deltaSeconds * LOOK_SMOOTHING);

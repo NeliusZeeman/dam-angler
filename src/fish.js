@@ -17,6 +17,8 @@ export const FISH_SPECIES = [
     aggressiveness: 0.55,
     activeTimes: ['morning', 'midMorning', 'midday', 'afternoon'],
     bite: { speed: 'fast', style: 'nibble', label: 'Quick nibbles' },
+    // Grazes the warm, sun-lit margins -- a shallow-water fish.
+    habitat: { shallow: true },
   },
   {
     id: 'banded-tilapia',
@@ -32,6 +34,7 @@ export const FISH_SPECIES = [
     aggressiveness: 0.5,
     activeTimes: ['morning', 'midMorning', 'afternoon'],
     bite: { speed: 'fast', style: 'nibble', label: 'Darting little taps' },
+    habitat: { shallow: true },
   },
   {
     id: 'common-carp',
@@ -47,6 +50,8 @@ export const FISH_SPECIES = [
     // sunset as the water cools.
     activeTimes: ['morning', 'afternoon', 'sunset'],
     bite: { speed: 'slow', style: 'steady', label: 'A long, steady pull' },
+    // Opportunistic -- roots around cover as readily as open bottom.
+    habitat: { structure: true },
   },
   {
     id: 'mirror-carp',
@@ -62,6 +67,8 @@ export const FISH_SPECIES = [
     aggressiveness: 0.16,
     activeTimes: ['afternoon', 'sunset'],
     bite: { speed: 'slow', style: 'heavy', label: 'Slow, immovable weight' },
+    // Big, wary, and holds in the deepest water it can find.
+    habitat: { deep: true },
   },
   {
     id: 'largemouth-bass',
@@ -77,6 +84,8 @@ export const FISH_SPECIES = [
     // research finding.
     activeTimes: ['morning', 'sunset', 'lateTwilight'],
     bite: { speed: 'fast', style: 'aggressive', label: 'Aggressive strike!' },
+    // The classic ambush predator -- lives in lily pads, timber and docks.
+    habitat: { structure: true },
   },
   {
     id: 'smallmouth-bass',
@@ -92,6 +101,8 @@ export const FISH_SPECIES = [
     aggressiveness: 0.14,
     activeTimes: ['morning', 'lateTwilight'],
     bite: { speed: 'fast', style: 'aggressive', label: 'Explosive strike!' },
+    // Hides in submerged timber -- the Vaal Dam "unicorn" in the drowned forest.
+    habitat: { structure: true },
   },
   {
     id: 'catfish',
@@ -107,6 +118,8 @@ export const FISH_SPECIES = [
     aggressiveness: 0.1,
     activeTimes: ['lateTwilight', 'night'],
     bite: { speed: 'slow', style: 'heavy', label: 'A heavy, dogged pull' },
+    // Bottom-dwelling barbel -- holds in the deepest water it can find.
+    habitat: { deep: true },
   },
   {
     id: 'tigerfish',
@@ -123,6 +136,8 @@ export const FISH_SPECIES = [
     activeTimes: ['sunset', 'lateTwilight'],
     requiresWireTrace: true,
     bite: { speed: 'fast', style: 'aggressive', label: 'Violent, thrashing strike!' },
+    // Hunts the dropoffs and structure near the bank, per the Jozini research.
+    habitat: { structure: true },
   },
 ];
 
@@ -130,7 +145,30 @@ export function randomWeightFor(species) {
   return species.minWeightKg + Math.random() * (species.maxWeightKg - species.minWeightKg);
 }
 
-export function rollForBite({ species, waterTempC, equippedLureId, deltaSeconds, biteChanceMultiplier = 1, timeOfDay = null }) {
+// Where you actually put the lure matters as much as what's on the end of
+// the line: a spinner worked through a lily-pad cove is a bass/tigerfish
+// magnet, the same spinner sitting in open water is nothing special to
+// them, deep-holding fish (catfish, mirror carp) want the middle of the
+// dam, and shallow grazers (tilapia) want the margins near the bank.
+export function getHabitatMultiplier(species, { zone, depthFactor, lureKind } = {}) {
+  let mult = 1;
+  const habitat = species.habitat || {};
+  if (habitat.structure) {
+    if (zone === 'structure') mult *= lureKind === 'lure' ? 2.2 : 1.6;
+    else mult *= 0.55;
+  }
+  if (habitat.deep) {
+    if (depthFactor >= 0.55) mult *= 1.6;
+    else if (depthFactor <= 0.3) mult *= 0.5;
+  }
+  if (habitat.shallow) {
+    if (depthFactor <= 0.4) mult *= 1.5;
+    else if (depthFactor >= 0.65) mult *= 0.5;
+  }
+  return mult;
+}
+
+export function rollForBite({ species, waterTempC, equippedLureId, deltaSeconds, biteChanceMultiplier = 1, timeOfDay = null, habitat = null, lureKind = null }) {
   const [minT, maxT] = species.tempRangeC;
   if (waterTempC < minT || waterTempC > maxT) return false;
 
@@ -140,7 +178,9 @@ export function rollForBite({ species, waterTempC, equippedLureId, deltaSeconds,
   const timeMatch = timeOfDay === null || !species.activeTimes || species.activeTimes.includes(timeOfDay);
   const timeMultiplier = timeMatch ? 1.0 : 0.25;
 
-  const perSecondChance = 0.02 * species.aggressiveness * lureMultiplier * timeMultiplier * biteChanceMultiplier;
+  const habitatMultiplier = habitat ? getHabitatMultiplier(species, { ...habitat, lureKind }) : 1;
+
+  const perSecondChance = 0.02 * species.aggressiveness * lureMultiplier * timeMultiplier * habitatMultiplier * biteChanceMultiplier;
   const chance = 1 - Math.pow(1 - perSecondChance, deltaSeconds);
   return Math.random() < chance;
 }

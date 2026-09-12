@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { POND_CENTER, WATER_EDGE_RADIUS } from './pond.js';
+import { POND_CENTER } from './pond.js';
 
 const SPECIES_APPEARANCE = {
   'mozambique-tilapia': { color: 0x9fb8c4, belly: 0xd8e6ea, scale: 1.0 },
@@ -65,12 +65,16 @@ export function createFishMesh(speciesId) {
   return group;
 }
 
-export function createFishSwarm(scene, speciesIds, count) {
+export function createFishSwarm(scene, speciesIds, count, pondShape) {
   const fishes = [];
+  // Bound the swarm by the tightest point of the shoreline so a fish never
+  // orbits onto the sand, whichever direction it's heading.
+  let minEdge = Infinity;
+  for (let i = 0; i < 48; i++) minEdge = Math.min(minEdge, pondShape.radiusAt((i / 48) * Math.PI * 2));
   for (let i = 0; i < count; i++) {
     const speciesId = speciesIds[i % speciesIds.length];
     const mesh = createFishMesh(speciesId);
-    const radius = 3 + Math.random() * (WATER_EDGE_RADIUS - 5); // stays in open water, off the sand
+    const radius = 3 + Math.random() * Math.max(2, minEdge - 5); // stays in open water, off the sand
     const angle = Math.random() * Math.PI * 2;
     mesh.userData.orbitRadius = radius;
     mesh.userData.orbitAngle = angle;

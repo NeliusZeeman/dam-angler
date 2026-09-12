@@ -1,20 +1,22 @@
 import * as THREE from '../vendor/three.module.js';
 import { createGrassTexture, createWoodTexture, createSkyDome, setSkyColors, createSunGlow } from './textures.js';
+import { buildShapedDiscGeometry, buildShapedRingGeometry } from './pondGeometry.js';
 import {
-  POND_CENTER, SHORE_INNER_RADIUS, SHORE_OUTER_RADIUS, WALK_RADIUS,
-  REED_RADIUS, TREE_INNER_RADIUS, TREE_OUTER_RADIUS, DOCK_ANGLE,
-  WATER_EDGE_RADIUS, BANK_OUTER_RADIUS, BANK_SURFACE_Y,
+  POND_CENTER, DOCK_ANGLE, BANK_SURFACE_Y,
+  WATER_MESH_OFFSET, BANK_WIDTH, SHORE_WIDTH, WALK_BAND_OFFSET,
+  REED_BAND_OFFSET, TREE_BAND_INNER_OFFSET, TREE_BAND_WIDTH,
 } from './pond.js';
 
-export function createScene({ grassTint = 0xffffff } = {}) {
+export function createScene({ grassTint = 0xffffff, pondShape }) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xcfeeff, 26, 95);
 
   const { sky, skyUniforms } = createSkyDome(scene);
 
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 500);
-  const startX = POND_CENTER.x + Math.cos(DOCK_ANGLE) * WALK_RADIUS;
-  const startZ = POND_CENTER.z + Math.sin(DOCK_ANGLE) * WALK_RADIUS;
+  const startRadius = pondShape.radiusAt(DOCK_ANGLE) + WALK_BAND_OFFSET;
+  const startX = POND_CENTER.x + Math.cos(DOCK_ANGLE) * startRadius;
+  const startZ = POND_CENTER.z + Math.sin(DOCK_ANGLE) * startRadius;
   camera.position.set(startX, 1.6, startZ);
   camera.lookAt(POND_CENTER.x, 0.6, POND_CENTER.z);
   scene.add(camera);
@@ -44,13 +46,22 @@ export function createScene({ grassTint = 0xffffff } = {}) {
   sunGlow.position.copy(sunLight.position).normalize().multiplyScalar(180);
   scene.add(sunGlow);
 
+  // Find the largest radius the shore outline ever reaches, so the flat
+  // outer-land filler ring always overlaps it with no gap at any angle.
+  let maxShoreOuter = 0;
+  const SAMPLES = 64;
+  for (let i = 0; i < SAMPLES; i++) {
+    const theta = (i / SAMPLES) * Math.PI * 2;
+    maxShoreOuter = Math.max(maxShoreOuter, pondShape.radiusAt(theta) + BANK_WIDTH + SHORE_WIDTH);
+  }
+
   // Outer land: a big darker ground disc so the trees beyond the shore ring
   // stand on something instead of floating over the sky dome.
   const grassTexture = createGrassTexture();
   grassTexture.repeat.set(18, 18);
   const outerTexture = createGrassTexture();
   outerTexture.repeat.set(60, 60);
-  const outerGeo = new THREE.RingGeometry(SHORE_OUTER_RADIUS - 0.5, 160, 96, 1);
+  const outerGeo = new THREE.RingGeometry(maxShoreOuter - 1.0, 160, 96, 1);
   const outerMat = new THREE.MeshStandardMaterial({ map: outerTexture, roughness: 1.0, color: 0x9aa88a });
   const outerLand = new THREE.Mesh(outerGeo, outerMat);
   outerLand.rotation.x = -Math.PI / 2;
@@ -62,10 +73,9 @@ export function createScene({ grassTint = 0xffffff } = {}) {
   // Pond bed: a dark, murky floor under the translucent water so it reads as
   // depth. It must not receive shadows -- at sunset the reeds' long shadows
   // would otherwise show through the surface as black streaks.
-  const bedGeo = new THREE.CircleGeometry(SHORE_INNER_RADIUS + 0.5, 96);
+  const bedGeo = buildShapedDiscGeometry((theta) => pondShape.radiusAt(theta) + 0.6);
   const bedMat = new THREE.MeshStandardMaterial({ color: 0x0b2426, roughness: 1.0 });
   const pondBed = new THREE.Mesh(bedGeo, bedMat);
-  pondBed.rotation.x = -Math.PI / 2;
   pondBed.position.copy(POND_CENTER);
   pondBed.position.y = -0.6;
   pondBed.receiveShadow = false;
@@ -73,29 +83,26 @@ export function createScene({ grassTint = 0xffffff } = {}) {
 
   // Bank: a sandy/muddy strip between the grass and the water, plus a thin
   // pale waterline where the two meet, so the edge is unmistakable.
-  const bankGeo = new THREE.RingGeometry(WATER_EDGE_RADIUS, BANK_OUTER_RADIUS, 96, 1);
+  const bankGeo = buildShapedRingGeometry(pondShape.radiusAt, 0, BANK_WIDTH);
   const bankMat = new THREE.MeshStandardMaterial({ color: 0x9b8560, roughness: 1.0 });
   const bank = new THREE.Mesh(bankGeo, bankMat);
-  bank.rotation.x = -Math.PI / 2;
   bank.position.copy(POND_CENTER);
   bank.position.y = BANK_SURFACE_Y;
   bank.receiveShadow = true;
   scene.add(bank);
 
   // Waterline sits exactly where the sand meets open water.
-  const waterlineGeo = new THREE.RingGeometry(WATER_EDGE_RADIUS - 0.3, WATER_EDGE_RADIUS + 0.05, 128, 1);
+  const waterlineGeo = buildShapedRingGeometry(pondShape.radiusAt, -0.3, 0.05);
   const waterlineMat = new THREE.MeshBasicMaterial({ color: 0xe8efe3, transparent: true, opacity: 0.55 });
   const waterline = new THREE.Mesh(waterlineGeo, waterlineMat);
-  waterline.rotation.x = -Math.PI / 2;
   waterline.position.copy(POND_CENTER);
   waterline.position.y = BANK_SURFACE_Y + 0.015;
   scene.add(waterline);
 
   // Shore: a walkable ring around the whole dam, textured with grass.
-  const shoreGeo = new THREE.RingGeometry(BANK_OUTER_RADIUS - 0.1, SHORE_OUTER_RADIUS, 96, 1);
+  const shoreGeo = buildShapedRingGeometry(pondShape.radiusAt, BANK_WIDTH - 0.1, BANK_WIDTH + SHORE_WIDTH);
   const shoreMat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1.0, color: grassTint });
   const shore = new THREE.Mesh(shoreGeo, shoreMat);
-  shore.rotation.x = -Math.PI / 2;
   shore.position.copy(POND_CENTER);
   shore.position.y = 0.1;
   shore.receiveShadow = true;
@@ -107,7 +114,7 @@ export function createScene({ grassTint = 0xffffff } = {}) {
   const dockGeo = new THREE.BoxGeometry(3, 0.2, 4);
   const dockMat = new THREE.MeshStandardMaterial({ map: woodTexture, roughness: 0.85 });
   const dock = new THREE.Mesh(dockGeo, dockMat);
-  const dockCenterRadius = (SHORE_INNER_RADIUS + WALK_RADIUS) / 2 - 0.5;
+  const dockCenterRadius = pondShape.radiusAt(DOCK_ANGLE) + WALK_BAND_OFFSET * 0.55 - 0.5;
   const dockX = POND_CENTER.x + Math.cos(DOCK_ANGLE) * dockCenterRadius;
   const dockZ = POND_CENTER.z + Math.sin(DOCK_ANGLE) * dockCenterRadius;
   dock.position.set(dockX, 0.3, dockZ);
@@ -133,13 +140,13 @@ export function createScene({ grassTint = 0xffffff } = {}) {
   const swayGroup = new THREE.Group();
   scene.add(swayGroup);
 
-  // Reeds, all the way around the waterline.
+  // Reeds: a light scattering all the way around the waterline, thickening
+  // up noticeably inside every lily-pad/structure cove.
   const reedStemMat = new THREE.MeshStandardMaterial({ color: 0x4a7c3f, roughness: 0.7 });
   const reedHeadMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.8 });
-  const REED_COUNT = 90;
-  for (let i = 0; i < REED_COUNT; i++) {
-    const angle = (i / REED_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.05;
-    const radius = REED_RADIUS + (Math.random() - 0.5) * 2.5;
+  function placeReed(angle, radiusJitter) {
+    const edge = pondShape.radiusAt(angle);
+    const radius = edge + REED_BAND_OFFSET + radiusJitter;
     const height = 0.9 + Math.random() * 0.6;
     const reed = new THREE.Group();
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, height, 5), reedStemMat);
@@ -156,11 +163,23 @@ export function createScene({ grassTint = 0xffffff } = {}) {
     swayGroup.add(reed);
   }
 
-  // Lily pads scattered across the water surface.
+  const BASE_REED_COUNT = 60;
+  for (let i = 0; i < BASE_REED_COUNT; i++) {
+    const angle = (i / BASE_REED_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.04;
+    placeReed(angle, (Math.random() - 0.5) * 2.0);
+  }
+  for (const cove of pondShape.coves) {
+    const extra = Math.round(28 * (cove.density ?? 1));
+    for (let i = 0; i < extra; i++) {
+      const angle = cove.angle + (Math.random() - 0.5) * cove.width * 0.9;
+      placeReed(angle, (Math.random() - 0.5) * 1.6 - 0.3);
+    }
+  }
+
+  // Lily pads: concentrated in the coves (where bass and spinners belong),
+  // with only a light scattering out in the open water for variety.
   const lilyMat = new THREE.MeshStandardMaterial({ color: 0x2f7a3f, roughness: 0.6 });
-  for (let i = 0; i < 26; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = Math.random() * (SHORE_INNER_RADIUS - 3);
+  function placeLilyPad(angle, radius) {
     const lily = new THREE.Mesh(new THREE.CircleGeometry(0.3 + Math.random() * 0.2, 10), lilyMat);
     lily.rotation.x = -Math.PI / 2;
     lily.position.set(
@@ -169,6 +188,21 @@ export function createScene({ grassTint = 0xffffff } = {}) {
       POND_CENTER.z + Math.sin(angle) * radius,
     );
     scene.add(lily);
+  }
+
+  for (let i = 0; i < 8; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.random() * (pondShape.radiusAt(angle) - 3);
+    placeLilyPad(angle, radius);
+  }
+  for (const cove of pondShape.coves) {
+    const count = Math.round(16 * (cove.density ?? 1) * (cove.width / 1.0));
+    for (let i = 0; i < count; i++) {
+      const angle = cove.angle + (Math.random() - 0.5) * cove.width * 0.95;
+      const edge = pondShape.radiusAt(angle);
+      const radius = edge * (0.25 + Math.random() * 0.55); // shallow-to-mid water inside the cove
+      placeLilyPad(angle, radius);
+    }
   }
 
   // Trees ring the outside of the walking path in every direction.
@@ -181,7 +215,8 @@ export function createScene({ grassTint = 0xffffff } = {}) {
   const TREE_COUNT = 26;
   for (let i = 0; i < TREE_COUNT; i++) {
     const angle = (i / TREE_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.15;
-    const radius = TREE_INNER_RADIUS + Math.random() * (TREE_OUTER_RADIUS - TREE_INNER_RADIUS);
+    const edge = pondShape.radiusAt(angle);
+    const radius = edge + TREE_BAND_INNER_OFFSET + Math.random() * TREE_BAND_WIDTH;
     const tree = new THREE.Group();
     const trunkHeight = 2.4 + Math.random() * 1.2;
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, trunkHeight, 6), treeTrunkMat);
