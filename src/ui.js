@@ -10,7 +10,7 @@ export function createHUD(container) {
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
-    <span class="hud-hint">A/D walk · hold click: charge & cast · click: twitch · hold click: reel in (and fight a fish — ease off when the bar runs red) · B tackle box · C log · L change spot</span>
+    <span class="hud-hint">A/D walk · hold click & flick up: cast · spinner: sweep the mouse to work it in · click: twitch · hold click: reel in / fight (ease off when red) · B tackle box · C log · L change spot</span>
   `;
   container.appendChild(bar);
 
@@ -46,12 +46,14 @@ export function createHUD(container) {
     aiming: 'Winding up…',
     inAir: 'Casting',
     waiting: 'Line in the water',
+    working: 'Working the lure',
     reeling: 'Reeling in',
     hanging: 'Line hanging — click to cast',
     biting: 'FISH ON! Hold click to reel',
   };
 
-  function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, hookName, lureName, castingPhase, tension, power }) {
+  function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, hookName, lureName, castingPhase, tension, power, working = false }) {
+    if (working && castingPhase === 'waiting') castingPhase = 'working';
     document.getElementById('hud-credits').textContent = `Credits: ${credits}`;
     document.getElementById('hud-season').textContent = `${season} — ${waterTempC.toFixed(1)}°C`;
     const timeEl = document.getElementById('hud-time');

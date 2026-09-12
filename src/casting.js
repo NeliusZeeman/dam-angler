@@ -14,7 +14,17 @@ const LINE_SEGMENTS = 12;
 const POWER_CHARGE_SECONDS = 1.3; // hold this long for a full-power cast
 const BASE_CAST_REACH = 3; // minimum reach even at zero power
 
-export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, onSplash, onWake }) {
+// Mouse-motion control. Speeds are in screen-widths per second.
+const MOTION_REEL_THRESHOLD = 0.12; // sweep faster than this to work a lure
+const MOTION_REEL_GAIN = 7; // lure retrieve speed per unit of mouse speed
+const MOTION_REEL_MAX = 5.5; // units/sec cap on motion retrieve
+const MOTION_SWAY_GAIN = 3.0; // sideways mouse sweep -> lure swings across
+const MOTION_SWAY_DECAY = 5;
+const BAIT_WIGGLE_GAIN = 0.35; // bait only wiggles under mouse motion
+const FLICK_POWER_GAIN = 0.28; // upward flick on release adds cast power
+const FLICK_POWER_MAX = 0.35;
+
+export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, onSplash, onWake, getLureKind = () => 'bait' }) {
   const bobberGeo = new THREE.SphereGeometry(0.08, 12, 12);
   const bobberMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
   const bobber = new THREE.Mesh(bobberGeo, bobberMat);
@@ -60,6 +70,16 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   let castArmed = false;
   let power = 0;
   const hangOffset = new THREE.Vector3(0, -0.15, 0.05);
+
+  // Mouse motion state: where the cursor is (NDC) and how fast it's moving.
+  const mouseNDC = new THREE.Vector2(0, 0);
+  let moveDxAcc = 0; // accumulated since last update, in screen widths
+  let moveDyAcc = 0;
+  let motionSpeed = 0; // smoothed, screen-widths/sec
+  let flickUp = 0; // recent upward speed, for the cast flick bonus
+  let lureSway = 0; // sideways offset of a worked lure
+  const swayPerp = new THREE.Vector3();
+  const motionToTip = new THREE.Vector3();
 
   // Distance along a flat ray from `origin` in direction `dir` to the point
   // `margin` inside the water's edge. Null if the ray never enters the water.
@@ -165,6 +185,16 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   function update(deltaSeconds, windState) {
     rodTip.getWorldPosition(rodTipWorld);
 
+    // Turn this frame's mouse travel into a smoothed speed, then reset.
+    const dt = Math.max(deltaSeconds, 1e-3);
+    const rawSpeed = Math.hypot(moveDxAcc, moveDyAcc) / dt;
+    motionSpeed += (rawSpeed - motionSpeed) * Math.min(1, dt * 12);
+    const upSpeed = Math.max(0, -moveDyAcc) / dt;
+    flickUp = Math.max(flickUp * Math.max(0, 1 - dt * 6), upSpeed);
+    const frameDx = moveDxAcc;
+    moveDxAcc = 0;
+    moveDyAcc = 0;
+
     if (twitchCooldown > 0) {
       twitchCooldown = Math.max(0, twitchCooldown - deltaSeconds);
     }
@@ -200,10 +230,48 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     }
 
     if (phase === 'waiting') {
+      const lureKind = getLureKind();
+      const working = lureKind === 'lure' && motionSpeed > MOTION_REEL_THRESHOLD;
+
+      if (working) {
+        // Working a lure: mouse sweeps retrieve it, sideways sweeps swing it.
+        motionToTip.subVectors(rodTipWorld, restPosition);
+        motionToTip.y = 0;
+        const dist = motionToTip.length();
+        if (dist <= REEL_ARRIVE_DISTANCE) {
+          phase = 'hanging';
+          twitchOffset.set(0, 0, 0);
+          fightOffset.set(0, 0, 0);
+          lureSway = 0;
+          castArmed = false;
+          return;
+        }
+        motionToTip.normalize();
+        const retrieve = Math.min(MOTION_REEL_MAX, motionSpeed * MOTION_REEL_GAIN);
+        restPosition.addScaledVector(motionToTip, retrieve * deltaSeconds);
+        lureSway += frameDx * MOTION_SWAY_GAIN;
+
+        wakeTimer += deltaSeconds;
+        if (wakeTimer >= WAKE_INTERVAL) {
+          wakeTimer = 0;
+          if (onWake) onWake(restPosition);
+        }
+      } else if (lureKind === 'bait' && motionSpeed > MOTION_REEL_THRESHOLD) {
+        // Bait just wiggles a little when you move the rod -- it's meant to sit.
+        twitchOffset.x += (Math.random() - 0.5) * BAIT_WIGGLE_GAIN * deltaSeconds;
+        twitchOffset.z += (Math.random() - 0.5) * BAIT_WIGGLE_GAIN * deltaSeconds;
+      }
+
+      lureSway *= Math.max(0, 1 - MOTION_SWAY_DECAY * deltaSeconds);
+      motionToTip.subVectors(rodTipWorld, restPosition);
+      motionToTip.y = 0;
+      motionToTip.normalize();
+      swayPerp.set(-motionToTip.z, 0, motionToTip.x);
+
       const decay = Math.max(0, 1 - TWITCH_DECAY_PER_SEC * deltaSeconds);
       twitchOffset.multiplyScalar(decay);
-      bobber.position.copy(restPosition).add(twitchOffset);
-      updateLineCurve(0.22);
+      bobber.position.copy(restPosition).add(twitchOffset).addScaledVector(swayPerp, lureSway);
+      updateLineCurve(working ? 0.08 : 0.22);
     }
 
     if (phase === 'reeling' && !pressing) {
@@ -297,14 +365,23 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     }
   });
   window.addEventListener('mousemove', (e) => {
+    const rect = domElement.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      moveDxAcc += e.movementX / rect.width;
+      moveDyAcc += e.movementY / rect.width;
+    }
     if (phase === 'aiming') updateAimFromPointer(e.clientX, e.clientY);
   });
   window.addEventListener('mouseup', () => {
     if (phase === 'aiming' && castArmed) {
-      // The longer this was held, the further it casts (power meter).
+      // The longer this was held, the further it casts (power meter), and
+      // a sharp upward flick on release adds a bit on top.
       // Only a press that actually started idle/hanging arms a cast -- a
       // press that was mid-reel never does, even if it's still held down
       // when the reel-in finishes and drops into 'hanging'.
+      power = Math.min(1, power + Math.min(FLICK_POWER_MAX, flickUp * FLICK_POWER_GAIN));
       releaseCastAt(aimPoint);
     } else if (phase === 'waiting' && pressing && pressTimer <= REEL_HOLD_THRESHOLD) {
       tapRod();
@@ -322,12 +399,17 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   }
 
   function getState() {
-    return { phase, power };
+    return { phase, power, motionSpeed, working: phase === 'waiting' && getLureKind() === 'lure' && motionSpeed > MOTION_REEL_THRESHOLD };
+  }
+
+  // Cursor position (NDC, -1..1) so the rod in hand can follow the mouse.
+  function getMouseOffset() {
+    return { x: mouseNDC.x, y: mouseNDC.y };
   }
 
   return {
     update, getState, onBite, triggerBite,
     resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position,
-    updateAimFromPointer, aimPoint, onFightHold, isBobberInWater,
+    updateAimFromPointer, aimPoint, onFightHold, isBobberInWater, getMouseOffset,
   };
 }

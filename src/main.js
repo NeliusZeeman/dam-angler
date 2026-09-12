@@ -74,6 +74,7 @@ function startGame(locationId, startTimeOfDay) {
     waterMesh,
     onSplash: (point) => splashEffect.spawn(point),
     onWake: (point) => splashEffect.spawn(point),
+    getLureKind: () => (getGearById(LURES, activeLureId) || LURES[0]).kind,
   });
   const minigame = createMinigame();
   const hud = createHUD(appEl);
@@ -234,7 +235,10 @@ function startGame(locationId, startTimeOfDay) {
     twitchBoostTimer = Math.max(0, twitchBoostTimer - delta);
     rodRecoil *= Math.max(0, 1 - delta * 10);
     const windup = castState.phase === 'aiming' ? castState.power * 0.6 : 0;
-    playerRod.rodGroup.rotation.x = -(rodRecoil + windup) + castSnap;
+    // The rod in hand follows the mouse, so sweeping the cursor works the rod.
+    const mouse = casting.getMouseOffset();
+    playerRod.rodGroup.rotation.x = -(rodRecoil + windup) + castSnap - mouse.y * 0.22;
+    playerRod.rodGroup.rotation.y = -mouse.x * 0.3;
     hud.update({
       credits: save.credits,
       season: envState.season,
@@ -248,6 +252,7 @@ function startGame(locationId, startTimeOfDay) {
       castingPhase: castState.phase,
       tension: mgState.active ? mgState.tension : null,
       power: castState.power,
+      working: castState.working,
     });
 
     renderer.render(scene, camera);

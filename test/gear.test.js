@@ -69,4 +69,13 @@ import { FISH_SPECIES } from '../src/fish.js';
   console.log('PASS: hook tensionBonus/speciesBonus are well-formed');
 }
 
+{
+  for (const lure of LURES) {
+    assert.ok(lure.kind === 'bait' || lure.kind === 'lure', `${lure.id} must be kind 'bait' or 'lure'`);
+  }
+  const spinner = LURES.find((l) => l.id === 'spinner');
+  assert.strictEqual(spinner.kind, 'lure', 'spinner is a worked lure');
+  console.log('PASS: every bait/lure declares a kind; spinner is a worked lure');
+}
+
 console.log('All gear tests passed.');

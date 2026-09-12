@@ -32,15 +32,17 @@ export const HOOKS = [
 ];
 
 // Bait & lures, matched to real South African tackle for each species.
+// kind: 'bait' sits still and waits (mouse movement only wiggles it);
+// 'lure' is worked -- moving the mouse sweeps the rod and retrieves it.
 export const LURES = [
-  { id: 'bread-bait', name: 'Bread Bait', cost: 0, speciesIds: ['mozambique-tilapia'] },
-  { id: 'worm', name: 'Worm', cost: 20, speciesIds: ['mozambique-tilapia', 'banded-tilapia', 'common-carp', 'mirror-carp', 'catfish'] },
-  { id: 'mielies', name: 'Mielies (Corn)', cost: 20, speciesIds: ['common-carp', 'mirror-carp', 'mozambique-tilapia', 'banded-tilapia'] },
-  { id: 'chicken-liver', name: 'Chicken Liver', cost: 35, speciesIds: ['catfish'] },
-  { id: 'frog-bait', name: 'Frog (Platanna)', cost: 45, speciesIds: ['catfish'] },
-  { id: 'spinner', name: 'Spinnerbait', cost: 90, speciesIds: ['largemouth-bass', 'smallmouth-bass', 'tigerfish', 'mozambique-tilapia', 'banded-tilapia'] },
-  { id: 'soft-plastic', name: 'Soft Plastic Lure', cost: 120, speciesIds: ['largemouth-bass'] },
-  { id: 'spoon-lure', name: 'Spoon Lure', cost: 140, speciesIds: ['tigerfish', 'largemouth-bass', 'smallmouth-bass'] },
+  { id: 'bread-bait', name: 'Bread Bait', kind: 'bait', cost: 0, speciesIds: ['mozambique-tilapia'] },
+  { id: 'worm', name: 'Worm', kind: 'bait', cost: 20, speciesIds: ['mozambique-tilapia', 'banded-tilapia', 'common-carp', 'mirror-carp', 'catfish'] },
+  { id: 'mielies', name: 'Mielies (Corn)', kind: 'bait', cost: 20, speciesIds: ['common-carp', 'mirror-carp', 'mozambique-tilapia', 'banded-tilapia'] },
+  { id: 'chicken-liver', name: 'Chicken Liver', kind: 'bait', cost: 35, speciesIds: ['catfish'] },
+  { id: 'frog-bait', name: 'Frog (Platanna)', kind: 'bait', cost: 45, speciesIds: ['catfish'] },
+  { id: 'spinner', name: 'Spinnerbait', kind: 'lure', cost: 90, speciesIds: ['largemouth-bass', 'smallmouth-bass', 'tigerfish', 'mozambique-tilapia', 'banded-tilapia'] },
+  { id: 'soft-plastic', name: 'Soft Plastic Lure', kind: 'lure', cost: 120, speciesIds: ['largemouth-bass'] },
+  { id: 'spoon-lure', name: 'Spoon Lure', kind: 'lure', cost: 140, speciesIds: ['tigerfish', 'largemouth-bass', 'smallmouth-bass'] },
 ];
 
 export function getGearById(list, id) {
