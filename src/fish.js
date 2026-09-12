@@ -10,7 +10,7 @@ export const FISH_SPECIES = [
     minWeightKg: 0.3,
     maxWeightKg: 1.5,
     tempRangeC: [20, 32],
-    preferredLureIds: ['bread-bait', 'worm', 'mielies'],
+    preferredLureIds: ['bread-bait', 'worm', 'mielies', 'spinner'],
     baseValuePerKg: 8,
     // Common warm-water grazer, South Africa's classic "bream" — bites
     // readily through the day, but still needs the right bait.
@@ -25,7 +25,7 @@ export const FISH_SPECIES = [
     minWeightKg: 0.15,
     maxWeightKg: 0.7,
     tempRangeC: [16, 28],
-    preferredLureIds: ['worm', 'mielies'],
+    preferredLureIds: ['worm', 'mielies', 'spinner'],
     baseValuePerKg: 7,
     // Widespread river/dam species, smaller and a touch more skittish than
     // its Mozambique cousin, but just as willing to bite.

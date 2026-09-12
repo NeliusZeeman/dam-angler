@@ -38,7 +38,7 @@ export const LURES = [
   { id: 'mielies', name: 'Mielies (Corn)', cost: 20, speciesIds: ['common-carp', 'mirror-carp', 'mozambique-tilapia', 'banded-tilapia'] },
   { id: 'chicken-liver', name: 'Chicken Liver', cost: 35, speciesIds: ['catfish'] },
   { id: 'frog-bait', name: 'Frog (Platanna)', cost: 45, speciesIds: ['catfish'] },
-  { id: 'spinner', name: 'Spinnerbait', cost: 90, speciesIds: ['largemouth-bass', 'smallmouth-bass', 'tigerfish'] },
+  { id: 'spinner', name: 'Spinnerbait', cost: 90, speciesIds: ['largemouth-bass', 'smallmouth-bass', 'tigerfish', 'mozambique-tilapia', 'banded-tilapia'] },
   { id: 'soft-plastic', name: 'Soft Plastic Lure', cost: 120, speciesIds: ['largemouth-bass'] },
   { id: 'spoon-lure', name: 'Spoon Lure', cost: 140, speciesIds: ['tigerfish', 'largemouth-bass', 'smallmouth-bass'] },
 ];

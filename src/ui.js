@@ -10,7 +10,7 @@ export function createHUD(container) {
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
-    <span class="hud-hint">A/D or ←→ to walk the shore · hold click to cast · click again to twitch · Space to reel · B tackle box · C log</span>
+    <span class="hud-hint">A/D or ←→ to walk · click to cast · click to twitch · hold click to reel in · Space to fight a bite · B tackle box · C log</span>
   `;
   container.appendChild(bar);
 

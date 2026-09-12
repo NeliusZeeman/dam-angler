@@ -53,6 +53,7 @@ const casting = createCasting({
   rodTip: playerRod.tip,
   waterMesh,
   onSplash: (point) => splashEffect.spawn(point),
+  onWake: (point) => splashEffect.spawn(point),
 });
 const minigame = createMinigame();
 const hud = createHUD(appEl);
@@ -137,7 +138,8 @@ casting.onBite(() => {
 });
 
 function rollBitesIfWaiting(delta) {
-  if (casting.getState().phase !== 'waiting') return;
+  const phase = casting.getState().phase;
+  if (phase !== 'waiting' && phase !== 'reeling') return;
   const state = environment.getState();
   const biteChanceMultiplier = twitchBoostTimer > 0 ? 1.8 : 1;
   for (const species of FISH_SPECIES) {

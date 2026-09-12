@@ -4,15 +4,24 @@ const TWITCH_COOLDOWN = 0.35;
 const TWITCH_KICK_UP = 0.14;
 const TWITCH_KICK_SIDE = 0.08;
 const TWITCH_DECAY_PER_SEC = 7;
+const REEL_HOLD_THRESHOLD = 0.18; // press-and-hold longer than this starts reeling in
+const REEL_SPEED = 3.2; // units/sec the lure closes toward the rod tip while reeling
+const REEL_ARRIVE_DISTANCE = 0.35;
+const WAKE_INTERVAL = 0.18; // seconds between wake ripples while reeling
+const LINE_SEGMENTS = 12;
 
-export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, onSplash }) {
+export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, onSplash, onWake }) {
   const bobberGeo = new THREE.SphereGeometry(0.08, 12, 12);
   const bobberMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
   const bobber = new THREE.Mesh(bobberGeo, bobberMat);
   bobber.visible = false;
   scene.add(bobber);
 
-  const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  // The line is drawn as a curve (not a straight segment) so it visibly
+  // bends/sags between casts and pulls taut while being reeled in.
+  const linePositions = new Float32Array((LINE_SEGMENTS + 1) * 3);
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
   const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
   const line = new THREE.Line(lineGeo, lineMat);
   line.visible = false;
@@ -26,10 +35,12 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   const raycaster = new THREE.Raycaster();
   const pointerNDC = new THREE.Vector2();
   const fightOffset = new THREE.Vector3();
+  const curvePointA = new THREE.Vector3();
+  const curvePointB = new THREE.Vector3();
+  const curvePointC = new THREE.Vector3();
+  const curveOut = new THREE.Vector3();
 
   let phase = 'idle';
-  let power = 0;
-  let holding = false;
   let airTime = 0;
   const AIR_DURATION = 1.2;
   const launchTarget = new THREE.Vector3();
@@ -39,21 +50,17 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   let fightProfile = null;
   let fightTimer = 0;
 
-  function startAimHold() {
+  let pressing = false;
+  let pressTimer = 0;
+  let wakeTimer = 0;
+
+  function releaseCastAt(aim) {
     if (phase !== 'idle') return;
-    phase = 'aiming';
-    power = 0;
-  }
-
-  function releaseCast() {
-    if (phase !== 'aiming') return;
     const rod = getRod();
-    const maxDistance = 4 + power * rod.castDistance;
-
-    const toAim = new THREE.Vector3().subVectors(aimPoint, camera.position);
+    const toAim = new THREE.Vector3().subVectors(aim, camera.position);
     toAim.y = 0;
     const aimDistance = toAim.length();
-    const clampedDistance = Math.min(aimDistance, maxDistance);
+    const clampedDistance = Math.min(aimDistance, rod.castDistance);
     toAim.normalize();
 
     launchTarget.copy(camera.position).addScaledVector(toAim, clampedDistance);
@@ -65,7 +72,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   }
 
   function triggerBite(bite) {
-    if (phase !== 'waiting') return;
+    if (phase !== 'waiting' && phase !== 'reeling') return;
     phase = 'biting';
     fightProfile = bite || { speed: 'medium', style: 'steady' };
     fightTimer = 0;
@@ -90,30 +97,48 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
   function resetToIdle() {
     phase = 'idle';
-    power = 0;
     bobber.visible = false;
     line.visible = false;
     twitchOffset.set(0, 0, 0);
     fightOffset.set(0, 0, 0);
     fightProfile = null;
+    pressing = false;
+    pressTimer = 0;
   }
 
-  function updateLine() {
+  function updateLineCurve(sagAmount) {
+    curvePointA.copy(rodTipWorld);
+    curvePointB.copy(bobber.position);
+    curvePointC.lerpVectors(curvePointA, curvePointB, 0.5);
+    curvePointC.y -= sagAmount;
+
     const positions = line.geometry.attributes.position;
-    positions.setXYZ(0, rodTipWorld.x, rodTipWorld.y, rodTipWorld.z);
-    positions.setXYZ(1, bobber.position.x, bobber.position.y, bobber.position.z);
+    for (let i = 0; i <= LINE_SEGMENTS; i++) {
+      const t = i / LINE_SEGMENTS;
+      const inv = 1 - t;
+      curveOut.set(
+        inv * inv * curvePointA.x + 2 * inv * t * curvePointC.x + t * t * curvePointB.x,
+        inv * inv * curvePointA.y + 2 * inv * t * curvePointC.y + t * t * curvePointB.y,
+        inv * inv * curvePointA.z + 2 * inv * t * curvePointC.z + t * t * curvePointB.z,
+      );
+      positions.setXYZ(i, curveOut.x, curveOut.y, curveOut.z);
+    }
     positions.needsUpdate = true;
   }
 
   function update(deltaSeconds, windState) {
     rodTip.getWorldPosition(rodTipWorld);
 
-    if (phase === 'aiming' && holding) {
-      power = Math.min(1, power + deltaSeconds * 0.6);
-    }
-
     if (twitchCooldown > 0) {
       twitchCooldown = Math.max(0, twitchCooldown - deltaSeconds);
+    }
+
+    if (pressing && phase === 'waiting') {
+      pressTimer += deltaSeconds;
+      if (pressTimer > REEL_HOLD_THRESHOLD) {
+        phase = 'reeling';
+        wakeTimer = 0;
+      }
     }
 
     if (phase === 'inAir') {
@@ -124,7 +149,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       target.z += windState.windDirZ * windState.windSpeed * 0.02 * t;
       target.y = Math.sin(t * Math.PI) * 1.5;
       bobber.position.copy(target);
-      updateLine();
+      updateLineCurve(0.05);
       if (t >= 1) {
         phase = 'waiting';
         bobber.position.y = 0;
@@ -138,7 +163,34 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       const decay = Math.max(0, 1 - TWITCH_DECAY_PER_SEC * deltaSeconds);
       twitchOffset.multiplyScalar(decay);
       bobber.position.copy(restPosition).add(twitchOffset);
-      updateLine();
+      updateLineCurve(0.22);
+    }
+
+    if (phase === 'reeling' && !pressing) {
+      phase = 'waiting';
+      restPosition.copy(bobber.position);
+    }
+
+    if (phase === 'reeling') {
+      const toTip = new THREE.Vector3().subVectors(rodTipWorld, bobber.position);
+      toTip.y = 0;
+      const dist = toTip.length();
+      if (dist <= REEL_ARRIVE_DISTANCE) {
+        resetToIdle();
+        return;
+      }
+      toTip.normalize();
+      bobber.position.addScaledVector(toTip, REEL_SPEED * deltaSeconds);
+      bobber.position.y = 0.02 + Math.sin(performance.now() * 0.02) * 0.01;
+
+      wakeTimer += deltaSeconds;
+      if (wakeTimer >= WAKE_INTERVAL) {
+        wakeTimer = 0;
+        if (onWake) onWake(bobber.position);
+      }
+
+      restPosition.copy(bobber.position);
+      updateLineCurve(0.05); // taut while actively reeled
     }
 
     if (phase === 'biting') {
@@ -152,7 +204,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       fightOffset.y = Math.max(0, Math.sin(fightTimer * speedFreq * 1.3)) * styleAmp * 0.5;
 
       bobber.position.copy(restPosition).add(fightOffset);
-      updateLine();
+      updateLineCurve(0.03); // taut -- there's a fish pulling
     }
   }
 
@@ -169,26 +221,27 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   domElement.addEventListener('mousedown', (e) => {
     if (phase === 'idle') {
       updateAimFromPointer(e.clientX, e.clientY);
-      startAimHold();
-      holding = true;
     } else if (phase === 'waiting') {
-      tapRod();
+      pressing = true;
+      pressTimer = 0;
     }
   });
-  window.addEventListener('mousemove', (e) => {
-    if (phase === 'aiming') updateAimFromPointer(e.clientX, e.clientY);
-  });
   window.addEventListener('mouseup', () => {
-    if (phase === 'aiming') { releaseCast(); }
-    holding = false;
+    if (phase === 'idle') {
+      // A quick single click while idle casts straight away -- no charge-up.
+      releaseCastAt(aimPoint);
+    } else if (phase === 'waiting' && pressing && pressTimer <= REEL_HOLD_THRESHOLD) {
+      tapRod();
+    }
+    pressing = false;
   });
 
   function getState() {
-    return { phase, power };
+    return { phase };
   }
 
   return {
-    update, getState, startAimHold, releaseCast, onBite, triggerBite,
+    update, getState, onBite, triggerBite,
     resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position,
     updateAimFromPointer, aimPoint,
   };
