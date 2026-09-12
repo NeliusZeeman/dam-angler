@@ -53,9 +53,11 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   let pressing = false;
   let pressTimer = 0;
   let wakeTimer = 0;
+  let castArmed = false;
+  const hangOffset = new THREE.Vector3(0, -0.15, 0.05);
 
   function releaseCastAt(aim) {
-    if (phase !== 'idle') return;
+    if (phase !== 'idle' && phase !== 'hanging') return;
     const rod = getRod();
     const toAim = new THREE.Vector3().subVectors(aim, camera.position);
     toAim.y = 0;
@@ -176,7 +178,13 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       toTip.y = 0;
       const dist = toTip.length();
       if (dist <= REEL_ARRIVE_DISTANCE) {
-        resetToIdle();
+        // Settle into a dangling-at-the-rod-tip state rather than hiding the
+        // line outright -- and crucially, don't let the mouse press that's
+        // still held from reeling arm a new cast on its eventual release.
+        phase = 'hanging';
+        twitchOffset.set(0, 0, 0);
+        fightOffset.set(0, 0, 0);
+        castArmed = false;
         return;
       }
       toTip.normalize();
@@ -191,6 +199,11 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
       restPosition.copy(bobber.position);
       updateLineCurve(0.05); // taut while actively reeled
+    }
+
+    if (phase === 'hanging') {
+      bobber.position.copy(rodTipWorld).add(hangOffset);
+      updateLineCurve(0.02);
     }
 
     if (phase === 'biting') {
@@ -219,20 +232,28 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   }
 
   domElement.addEventListener('mousedown', (e) => {
-    if (phase === 'idle') {
+    if (phase === 'idle' || phase === 'hanging') {
       updateAimFromPointer(e.clientX, e.clientY);
+      castArmed = true;
     } else if (phase === 'waiting') {
       pressing = true;
       pressTimer = 0;
+      castArmed = false;
+    } else {
+      castArmed = false;
     }
   });
   window.addEventListener('mouseup', () => {
-    if (phase === 'idle') {
-      // A quick single click while idle casts straight away -- no charge-up.
+    if ((phase === 'idle' || phase === 'hanging') && castArmed) {
+      // A quick single click while idle/hanging casts straight away -- no
+      // charge-up, and only a press that actually started in this state
+      // arms a cast (a press that was reeling never does, even if it's
+      // still held down when the reel-in finishes).
       releaseCastAt(aimPoint);
     } else if (phase === 'waiting' && pressing && pressTimer <= REEL_HOLD_THRESHOLD) {
       tapRod();
     }
+    castArmed = false;
     pressing = false;
   });
 
