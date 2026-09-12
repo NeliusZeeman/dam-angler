@@ -1,13 +1,19 @@
 import * as THREE from '../vendor/three.module.js';
+import { POND_CENTER, WATER_RADIUS } from './pond.js';
 
 const SPECIES_APPEARANCE = {
-  tilapia: { color: 0x9fb8c4, belly: 0xd8e6ea, scale: 1.0 },
-  carp: { color: 0xb9863f, belly: 0xe0c090, scale: 1.3 },
-  bass: { color: 0x4f6b3a, belly: 0xb7c98f, scale: 1.15 },
+  'mozambique-tilapia': { color: 0x9fb8c4, belly: 0xd8e6ea, scale: 1.0 },
+  'banded-tilapia': { color: 0x7f9a6c, belly: 0xc9d8ae, scale: 0.75 },
+  'common-carp': { color: 0xb9863f, belly: 0xe0c090, scale: 1.3 },
+  'mirror-carp': { color: 0x9c7a3a, belly: 0xd8b877, scale: 1.5 },
+  'largemouth-bass': { color: 0x4f6b3a, belly: 0xb7c98f, scale: 1.15 },
+  'smallmouth-bass': { color: 0x5c7a52, belly: 0xa9c48f, scale: 0.95 },
+  catfish: { color: 0x3a3a3c, belly: 0x6b6b6e, scale: 1.7 },
+  tigerfish: { color: 0xc9a24a, belly: 0xe8d9a0, scale: 1.1 },
 };
 
 export function createFishMesh(speciesId) {
-  const appearance = SPECIES_APPEARANCE[speciesId] || SPECIES_APPEARANCE.tilapia;
+  const appearance = SPECIES_APPEARANCE[speciesId] || SPECIES_APPEARANCE['mozambique-tilapia'];
   const group = new THREE.Group();
 
   const bodyMat = new THREE.MeshStandardMaterial({ color: appearance.color, roughness: 0.35, metalness: 0.15 });
@@ -64,13 +70,12 @@ export function createFishSwarm(scene, speciesIds, count) {
   for (let i = 0; i < count; i++) {
     const speciesId = speciesIds[i % speciesIds.length];
     const mesh = createFishMesh(speciesId);
-    const radius = 3 + Math.random() * 9;
+    const radius = 3 + Math.random() * (WATER_RADIUS - 5);
     const angle = Math.random() * Math.PI * 2;
     mesh.userData.orbitRadius = radius;
     mesh.userData.orbitAngle = angle;
-    mesh.userData.orbitSpeed = 0.08 + Math.random() * 0.12;
+    mesh.userData.orbitSpeed = 0.06 + Math.random() * 0.1;
     mesh.userData.depth = -0.35 - Math.random() * 0.5;
-    mesh.userData.centerZ = -10;
     mesh.visible = true;
     scene.add(mesh);
     fishes.push(mesh);
@@ -80,10 +85,10 @@ export function createFishSwarm(scene, speciesIds, count) {
 
 export function updateFishSwarm(fishes, elapsedSeconds) {
   for (const fish of fishes) {
-    const { orbitRadius, orbitSpeed, depth, centerZ } = fish.userData;
+    const { orbitRadius, orbitSpeed, depth } = fish.userData;
     const angle = fish.userData.orbitAngle + elapsedSeconds * orbitSpeed;
-    const x = Math.cos(angle) * orbitRadius;
-    const z = centerZ + Math.sin(angle) * orbitRadius;
+    const x = POND_CENTER.x + Math.cos(angle) * orbitRadius;
+    const z = POND_CENTER.z + Math.sin(angle) * orbitRadius;
     fish.position.set(x, depth + Math.sin(elapsedSeconds * 2 + orbitRadius) * 0.06, z);
     fish.rotation.y = -angle - Math.PI / 2;
     if (fish.userData.tail) {

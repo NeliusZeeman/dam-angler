@@ -1,6 +1,6 @@
-import { RODS, LINES, LURES } from './gear.js';
+import { RODS, LINES, HOOKS, LURES } from './gear.js';
 
-export function createShop({ container, save, onSaveChanged }) {
+export function createTackleBox({ container, save, onSaveChanged }) {
   const panel = document.createElement('div');
   panel.className = 'shop-panel hidden';
   container.appendChild(panel);
@@ -9,7 +9,7 @@ export function createShop({ container, save, onSaveChanged }) {
     const rows = items.map((item) => {
       const owned = ownedIds.includes(item.id);
       const equipped = equippedId === item.id;
-      const label = owned ? (equipped ? 'Equipped' : 'Equip') : `Buy (${item.cost})`;
+      const label = owned ? (equipped ? 'In tackle box' : 'Use') : `Buy (${item.cost})`;
       const disabled = (!owned && save.credits < item.cost) || equipped;
       return `<div class="shop-row">
         <span>${item.name}</span>
@@ -22,9 +22,11 @@ export function createShop({ container, save, onSaveChanged }) {
   function refresh() {
     panel.innerHTML = `
       <button class="panel-close" id="shop-close">Close</button>
+      <div class="tackle-credits">Credits: ${save.credits}</div>
       ${renderSection('Rods', RODS, save.ownedRodIds, save.equippedRodId, 'rod')}
       ${renderSection('Lines', LINES, save.ownedLineIds, save.equippedLineId, 'line')}
-      ${renderSection('Lures', LURES, save.ownedLureIds, save.equippedLureId, 'lure')}
+      ${renderSection('Hooks & Rigs', HOOKS, save.ownedHookIds, save.equippedHookId, 'hook')}
+      ${renderSection('Bait & Lures', LURES, save.ownedLureIds, save.equippedLureId, 'lure')}
     `;
     panel.querySelector('#shop-close').addEventListener('click', () => panel.classList.add('hidden'));
     panel.querySelectorAll('button[data-kind]').forEach((btn) => {
@@ -35,12 +37,14 @@ export function createShop({ container, save, onSaveChanged }) {
   function ownedListFor(kind) {
     if (kind === 'rod') return save.ownedRodIds;
     if (kind === 'line') return save.ownedLineIds;
+    if (kind === 'hook') return save.ownedHookIds;
     return save.ownedLureIds;
   }
 
   function itemsFor(kind) {
     if (kind === 'rod') return RODS;
     if (kind === 'line') return LINES;
+    if (kind === 'hook') return HOOKS;
     return LURES;
   }
 
@@ -54,6 +58,7 @@ export function createShop({ container, save, onSaveChanged }) {
     } else {
       if (kind === 'rod') save.equippedRodId = id;
       if (kind === 'line') save.equippedLineId = id;
+      if (kind === 'hook') save.equippedHookId = id;
       if (kind === 'lure') save.equippedLureId = id;
     }
     onSaveChanged();

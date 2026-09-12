@@ -1,16 +1,17 @@
 import * as THREE from '../vendor/three.module.js';
-import { createScene, setupCameraControls, updateSway, updateSun, createPlayerRod } from './scene.js';
+import { createScene, updateSway, updateSun, createPlayerRod } from './scene.js';
 import { createWater, updateWater, createSplashEffect } from './water.js';
 import { createEnvironment } from './environment.js';
 import { FISH_SPECIES, rollForBite, randomWeightFor } from './fish.js';
-import { RODS, LINES, LURES, getGearById } from './gear.js';
+import { RODS, LINES, HOOKS, LURES, getGearById } from './gear.js';
 import { calculatePayout } from './economy.js';
 import { loadSave, saveSave } from './save.js';
 import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
 import { createHUD, renderCatchLog } from './ui.js';
-import { createShop } from './shop.js';
+import { createTackleBox } from './tackleBox.js';
 import { createFishSwarm, updateFishSwarm, createCatchReveal } from './fish3d.js';
+import { createPlayerController } from './player.js';
 
 const appEl = document.getElementById('app');
 
@@ -26,9 +27,10 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 appEl.appendChild(renderer.domElement);
-setupCameraControls(camera, renderer.domElement);
 
-const fishSwarm = createFishSwarm(scene, FISH_SPECIES.map((s) => s.id), 12);
+const playerController = createPlayerController({ camera, domElement: renderer.domElement });
+
+const fishSwarm = createFishSwarm(scene, FISH_SPECIES.map((s) => s.id), 14);
 const catchReveal = createCatchReveal(scene);
 const splashEffect = createSplashEffect(scene);
 const playerRod = createPlayerRod(camera);
@@ -42,6 +44,7 @@ window.addEventListener('resize', () => {
 const save = loadSave();
 let activeRod = getGearById(RODS, save.equippedRodId) || RODS[0];
 let activeLine = getGearById(LINES, save.equippedLineId) || LINES[0];
+let activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
 let activeLureId = save.equippedLureId || LURES[0].id;
 
 const casting = createCasting({
@@ -58,12 +61,13 @@ function onSaveChanged() {
   saveSave(save);
   activeRod = getGearById(RODS, save.equippedRodId) || RODS[0];
   activeLine = getGearById(LINES, save.equippedLineId) || LINES[0];
+  activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
   activeLureId = save.equippedLureId || LURES[0].id;
   playerRod.setTier(activeRod.tier);
 }
 playerRod.setTier(activeRod.tier);
 
-const shop = createShop({ container: appEl, save, onSaveChanged });
+const tackleBox = createTackleBox({ container: appEl, save, onSaveChanged });
 
 const catchLogPanel = document.createElement('div');
 catchLogPanel.className = 'shop-panel hidden';
@@ -77,7 +81,7 @@ function toggleCatchLog() {
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyB') { shop.toggle(); }
+  if (e.code === 'KeyB') { tackleBox.toggle(); }
   if (e.code === 'KeyC') { toggleCatchLog(); }
   if (e.code === 'Space') { minigame.setHolding(true); e.preventDefault(); }
 });
@@ -97,11 +101,21 @@ casting.onTwitch(() => {
 casting.onBite(() => {
   const species = bitingSpecies;
   if (!species) { casting.resetToIdle(); return; }
+
+  // Tigerfish teeth bite straight through anything but a proper wire trace
+  // rig -- no amount of reeling skill saves you without one.
+  if (species.requiresWireTrace && !activeHook.isWireTrace) {
+    hud.showToast(`${species.name} bit clean through your line! You need a Wire Trace Rig.`);
+    casting.resetToIdle();
+    bitingSpecies = null;
+    return;
+  }
+
   const weightKg = randomWeightFor(species);
   minigame.start({
-    species, weightKg, rod: activeRod, line: activeLine,
+    species, weightKg, rod: activeRod, line: activeLine, hook: activeHook,
     onSuccess: () => {
-      const payout = calculatePayout({ species, weightKg, rod: activeRod, line: activeLine });
+      const payout = calculatePayout({ species, weightKg, rod: activeRod, line: activeLine, hook: activeHook });
       save.credits += payout;
       const entry = save.catchLog[species.id] || { count: 0, bestWeightKg: 0 };
       entry.count += 1;
@@ -129,7 +143,8 @@ function rollBitesIfWaiting(delta) {
   for (const species of FISH_SPECIES) {
     if (rollForBite({ species, waterTempC: state.waterTempC, equippedLureId: activeLureId, deltaSeconds: delta, biteChanceMultiplier, timeOfDay: state.timeOfDay })) {
       bitingSpecies = species;
-      casting.triggerBite();
+      casting.triggerBite(species.bite);
+      if (species.bite) hud.showToast(species.bite.label + '!');
       break;
     }
   }
@@ -147,6 +162,7 @@ function animate() {
   environment.tick(delta);
   const envState = environment.getState();
   setWaterTemperature(envState.waterTempC);
+  playerController.update(delta);
   updateWater(waterMesh, now / 1000, camera);
   updateSway(swayGroup, now / 1000, envState.windSpeed);
   updateFishSwarm(fishSwarm, now / 1000);
@@ -174,6 +190,7 @@ function animate() {
     windSpeed: envState.windSpeed,
     rodName: activeRod.name,
     lineName: activeLine.name,
+    hookName: activeHook.name,
     lureName: getGearById(LURES, activeLureId)?.name || 'None',
     castingPhase: casting.getState().phase,
     tension: mgState.active ? mgState.tension : null,
@@ -183,4 +200,4 @@ function animate() {
 }
 animate();
 
-window.__game = { environment, casting, minigame, save, scene, camera, catchReveal, fishSwarm };
+window.__game = { environment, casting, minigame, save, scene, camera, catchReveal, fishSwarm, playerController };

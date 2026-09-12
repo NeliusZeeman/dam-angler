@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { createEnvironment, SEASON_ORDER, SEASON_LENGTH_SECONDS, DAY_CYCLE_SECONDS, TIME_OF_DAY_PHASES } from '../src/environment.js';
+import { createEnvironment, SEASON_ORDER, SEASON_LENGTH_SECONDS, DAY_CYCLE_SECONDS, TIME_OF_DAY_PHASES, PHASE_LENGTH_SECONDS } from '../src/environment.js';
 
 {
   const env = createEnvironment();
@@ -39,31 +39,36 @@ import { createEnvironment, SEASON_ORDER, SEASON_LENGTH_SECONDS, DAY_CYCLE_SECON
 }
 
 {
-  const env = createEnvironment();
-  assert.strictEqual(env.getState().timeOfDay, 'day');
-  console.log('PASS: time of day starts at day');
+  assert.strictEqual(TIME_OF_DAY_PHASES.length, 7);
+  assert.deepStrictEqual(TIME_OF_DAY_PHASES, ['morning', 'midMorning', 'midday', 'afternoon', 'sunset', 'lateTwilight', 'night']);
+  assert.strictEqual(PHASE_LENGTH_SECONDS, 45 * 60);
+  assert.strictEqual(DAY_CYCLE_SECONDS, 7 * 45 * 60);
+  console.log('PASS: seven time-of-day phases at 45 minutes each');
 }
 
 {
   const env = createEnvironment();
-  let cursor = 0;
+  assert.strictEqual(env.getState().timeOfDay, 'morning');
+  console.log('PASS: time of day starts at morning');
+}
+
+{
+  const env = createEnvironment();
   const seen = [];
   for (const phase of TIME_OF_DAY_PHASES) {
-    const length = phase.fraction * DAY_CYCLE_SECONDS;
-    env.tick(length * 0.5);
+    env.tick(PHASE_LENGTH_SECONDS * 0.5);
     seen.push(env.getState().timeOfDay);
-    env.tick(length * 0.5);
-    cursor += length;
+    env.tick(PHASE_LENGTH_SECONDS * 0.5);
   }
-  assert.deepStrictEqual(seen, ['day', 'sunset', 'twilight', 'night'], `expected all four phases in order, got ${seen}`);
-  console.log('PASS: time of day cycles through day, sunset, twilight, night in order');
+  assert.deepStrictEqual(seen, TIME_OF_DAY_PHASES, `expected all seven phases in order, got ${seen}`);
+  console.log('PASS: time of day cycles through all seven phases in order');
 }
 
 {
   const env = createEnvironment();
   env.tick(DAY_CYCLE_SECONDS + 1);
-  assert.strictEqual(env.getState().timeOfDay, 'day', 'expected time of day to wrap back to day after a full cycle');
-  console.log('PASS: time of day wraps back to day after a full cycle');
+  assert.strictEqual(env.getState().timeOfDay, 'morning', 'expected time of day to wrap back to morning after a full cycle');
+  console.log('PASS: time of day wraps back to morning after a full cycle');
 }
 
 {

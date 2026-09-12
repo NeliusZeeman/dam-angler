@@ -4,9 +4,11 @@ export const DEFAULT_SAVE = {
   credits: 0,
   ownedRodIds: ['rod-starter'],
   ownedLineIds: ['line-starter'],
+  ownedHookIds: ['hook-small'],
   ownedLureIds: ['bread-bait'],
   equippedRodId: 'rod-starter',
   equippedLineId: 'line-starter',
+  equippedHookId: 'hook-small',
   equippedLureId: 'bread-bait',
   catchLog: {},
 };

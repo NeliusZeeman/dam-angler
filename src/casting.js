@@ -25,6 +25,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   const aimPoint = new THREE.Vector3(0, 0, -10);
   const raycaster = new THREE.Raycaster();
   const pointerNDC = new THREE.Vector2();
+  const fightOffset = new THREE.Vector3();
 
   let phase = 'idle';
   let power = 0;
@@ -35,6 +36,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   let biteCallback = null;
   let twitchCallback = null;
   let twitchCooldown = 0;
+  let fightProfile = null;
+  let fightTimer = 0;
 
   function startAimHold() {
     if (phase !== 'idle') return;
@@ -61,9 +64,11 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     line.visible = true;
   }
 
-  function triggerBite() {
+  function triggerBite(bite) {
     if (phase !== 'waiting') return;
     phase = 'biting';
+    fightProfile = bite || { speed: 'medium', style: 'steady' };
+    fightTimer = 0;
     if (biteCallback) biteCallback();
   }
 
@@ -89,6 +94,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     bobber.visible = false;
     line.visible = false;
     twitchOffset.set(0, 0, 0);
+    fightOffset.set(0, 0, 0);
+    fightProfile = null;
   }
 
   function updateLine() {
@@ -127,10 +134,24 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       }
     }
 
-    if (phase === 'waiting' || phase === 'biting') {
+    if (phase === 'waiting') {
       const decay = Math.max(0, 1 - TWITCH_DECAY_PER_SEC * deltaSeconds);
       twitchOffset.multiplyScalar(decay);
       bobber.position.copy(restPosition).add(twitchOffset);
+      updateLine();
+    }
+
+    if (phase === 'biting') {
+      fightTimer += deltaSeconds;
+      const speedFreq = { fast: 7, medium: 4, slow: 2 }[fightProfile.speed] || 4;
+      const styleAmp = { aggressive: 0.4, heavy: 0.22, steady: 0.14, nibble: 0.08 }[fightProfile.style] || 0.16;
+      const jitter = fightProfile.style === 'aggressive' ? 0.5 : fightProfile.style === 'nibble' ? 0.3 : 0.08;
+
+      fightOffset.x = Math.sin(fightTimer * speedFreq) * styleAmp + (Math.random() - 0.5) * jitter * 0.15;
+      fightOffset.z = Math.cos(fightTimer * speedFreq * 0.75) * styleAmp * 0.7;
+      fightOffset.y = Math.max(0, Math.sin(fightTimer * speedFreq * 1.3)) * styleAmp * 0.5;
+
+      bobber.position.copy(restPosition).add(fightOffset);
       updateLine();
     }
   }

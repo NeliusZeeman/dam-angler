@@ -8,15 +8,14 @@ const SEASON_BASE_TEMP_C = {
   spring: 19,
 };
 
-// A full day cycle, dominated by the two crepuscular "golden hour" windows
-// (sunset, twilight) where most freshwater fish feed most actively.
-export const DAY_CYCLE_SECONDS = 480; // 8 real minutes per full day
+// Seven stages across the day, each 45 real minutes, per the crepuscular
+// feeding research: dawn/dusk are prime windows, midday is the quiet slack
+// period, and barbel/tigerfish favor the dusk-into-night stretch.
+export const PHASE_LENGTH_SECONDS = 45 * 60;
 export const TIME_OF_DAY_PHASES = [
-  { name: 'day', fraction: 0.42 },
-  { name: 'sunset', fraction: 0.13 },
-  { name: 'twilight', fraction: 0.13 },
-  { name: 'night', fraction: 0.32 },
+  'morning', 'midMorning', 'midday', 'afternoon', 'sunset', 'lateTwilight', 'night',
 ];
+export const DAY_CYCLE_SECONDS = PHASE_LENGTH_SECONDS * TIME_OF_DAY_PHASES.length;
 
 export function createEnvironment() {
   let seasonIndex = 0;
@@ -32,16 +31,10 @@ export function createEnvironment() {
   }
 
   function timeOfDayInfo() {
-    let t = dayElapsed % DAY_CYCLE_SECONDS;
-    for (const phase of TIME_OF_DAY_PHASES) {
-      const phaseLength = phase.fraction * DAY_CYCLE_SECONDS;
-      if (t < phaseLength) {
-        return { name: phase.name, progress: t / phaseLength };
-      }
-      t -= phaseLength;
-    }
-    const last = TIME_OF_DAY_PHASES[TIME_OF_DAY_PHASES.length - 1];
-    return { name: last.name, progress: 0 };
+    const t = dayElapsed % DAY_CYCLE_SECONDS;
+    const index = Math.min(TIME_OF_DAY_PHASES.length - 1, Math.floor(t / PHASE_LENGTH_SECONDS));
+    const progress = (t - index * PHASE_LENGTH_SECONDS) / PHASE_LENGTH_SECONDS;
+    return { name: TIME_OF_DAY_PHASES[index], progress };
   }
 
   function tick(deltaSeconds) {

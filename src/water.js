@@ -1,4 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
+import { POND_CENTER, WATER_RADIUS } from './pond.js';
 
 const vertexShader = `
   varying vec2 vUv;
@@ -47,7 +48,7 @@ const fragmentShader = `
 `;
 
 export function createWater(scene) {
-  const geometry = new THREE.PlaneGeometry(70, 70, 96, 96);
+  const geometry = new THREE.CircleGeometry(WATER_RADIUS, 96, 0, Math.PI * 2);
   const uniforms = {
     uTime: { value: 0 },
     uColor: { value: new THREE.Color(0x2f8ea3) },
@@ -59,7 +60,7 @@ export function createWater(scene) {
   });
   const waterMesh = new THREE.Mesh(geometry, material);
   waterMesh.rotation.x = -Math.PI / 2;
-  waterMesh.position.set(0, 0, -22);
+  waterMesh.position.copy(POND_CENTER);
   scene.add(waterMesh);
 
   const coldColor = new THREE.Color(0x1c4d73);

@@ -10,7 +10,7 @@ export function createHUD(container) {
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
-    <span class="hud-hint">Hold click to cast · click again to twitch the lure · Space to reel · B shop · C log</span>
+    <span class="hud-hint">A/D or ←→ to walk the shore · hold click to cast · click again to twitch · Space to reel · B tackle box · C log</span>
   `;
   container.appendChild(bar);
 
@@ -31,16 +31,19 @@ export function createHUD(container) {
     toastTimer = setTimeout(() => toast.classList.add('hidden'), 2500);
   }
 
-  const TIME_LABELS = { day: 'Day', sunset: 'Sunset', twilight: 'Twilight', night: 'Night' };
+  const TIME_LABELS = {
+    morning: 'Morning', midMorning: 'Mid-Morning', midday: 'Midday', afternoon: 'Afternoon',
+    sunset: 'Sunset', lateTwilight: 'Late Twilight', night: 'Night',
+  };
 
-  function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, lureName, castingPhase, tension }) {
+  function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, hookName, lureName, castingPhase, tension }) {
     document.getElementById('hud-credits').textContent = `Credits: ${credits}`;
     document.getElementById('hud-season').textContent = `${season} — ${waterTempC.toFixed(1)}°C`;
     const timeEl = document.getElementById('hud-time');
     timeEl.textContent = TIME_LABELS[timeOfDay] || timeOfDay;
     timeEl.dataset.time = timeOfDay;
     document.getElementById('hud-wind').textContent = `Wind: ${windSpeed.toFixed(1)}`;
-    document.getElementById('hud-gear').textContent = `${rodName} | ${lineName} | ${lureName}`;
+    document.getElementById('hud-gear').textContent = `${rodName} | ${lineName} | ${hookName} | ${lureName}`;
     document.getElementById('hud-status').textContent = castingPhase;
     tensionWrap.style.display = (castingPhase === 'biting') ? 'block' : 'none';
     if (tension != null) {

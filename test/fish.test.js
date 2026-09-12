@@ -2,14 +2,17 @@ import assert from 'node:assert';
 import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
 
 {
-  assert.strictEqual(FISH_SPECIES.length, 3);
+  assert.strictEqual(FISH_SPECIES.length, 8);
   const ids = FISH_SPECIES.map(f => f.id).sort();
-  assert.deepStrictEqual(ids, ['bass', 'carp', 'tilapia']);
-  console.log('PASS: exactly 3 species defined (tilapia, carp, bass)');
+  assert.deepStrictEqual(ids, [
+    'banded-tilapia', 'catfish', 'common-carp', 'largemouth-bass',
+    'mirror-carp', 'mozambique-tilapia', 'smallmouth-bass', 'tigerfish',
+  ]);
+  console.log('PASS: exactly 8 species defined, including real SA sub-species');
 }
 
 {
-  const tilapia = FISH_SPECIES.find(f => f.id === 'tilapia');
+  const tilapia = FISH_SPECIES.find(f => f.id === 'mozambique-tilapia');
   for (let i = 0; i < 200; i++) {
     const w = randomWeightFor(tilapia);
     assert.ok(w >= tilapia.minWeightKg && w <= tilapia.maxWeightKg, `weight ${w} out of bounds`);
@@ -18,13 +21,13 @@ import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
 }
 
 {
-  const bass = FISH_SPECIES.find(f => f.id === 'bass');
+  const bass = FISH_SPECIES.find(f => f.id === 'largemouth-bass');
   const goodLure = bass.preferredLureIds[0];
   const badLure = 'wrong-lure-id';
   const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
 
   let goodBites = 0, badBites = 0;
-  const trials = 2000;
+  const trials = 4000;
   for (let i = 0; i < trials; i++) {
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: goodLure, deltaSeconds: 1 })) goodBites++;
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: badLure, deltaSeconds: 1 })) badBites++;
@@ -34,7 +37,7 @@ import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
 }
 
 {
-  const bass = FISH_SPECIES.find(f => f.id === 'bass');
+  const bass = FISH_SPECIES.find(f => f.id === 'largemouth-bass');
   const farOutTemp = bass.tempRangeC[1] + 20;
   let bites = 0;
   for (let i = 0; i < 500; i++) {
@@ -45,10 +48,10 @@ import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
 }
 
 {
-  const bass = FISH_SPECIES.find(f => f.id === 'bass');
+  const bass = FISH_SPECIES.find(f => f.id === 'largemouth-bass');
   const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
   let normalBites = 0, boostedBites = 0;
-  const trials = 3000;
+  const trials = 4000;
   for (let i = 0; i < trials; i++) {
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1 })) normalBites++;
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, biteChanceMultiplier: 2 })) boostedBites++;
@@ -58,33 +61,29 @@ import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
 }
 
 {
-  // Every species declares at least one preferred time, and sunset/twilight
-  // together must cover every species (the two "golden hour" bite windows).
   for (const species of FISH_SPECIES) {
     assert.ok(Array.isArray(species.activeTimes) && species.activeTimes.length > 0, `${species.id} must declare activeTimes`);
+    assert.ok(['common', 'uncommon', 'rare'].includes(species.rarity), `${species.id} must declare a valid rarity`);
   }
-  const coversGoldenHour = FISH_SPECIES.every((s) => s.activeTimes.includes('sunset') || s.activeTimes.includes('twilight'));
-  assert.ok(coversGoldenHour, 'every species should be active during sunset and/or twilight');
-  console.log('PASS: every species declares activeTimes and is covered by sunset/twilight');
+  console.log('PASS: every species declares activeTimes and a valid rarity tier');
 }
 
 {
-  const bass = FISH_SPECIES.find(f => f.id === 'bass');
+  const bass = FISH_SPECIES.find(f => f.id === 'largemouth-bass');
   const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
   let onTimeBites = 0, offTimeBites = 0;
-  const trials = 3000;
+  const trials = 4000;
   for (let i = 0; i < trials; i++) {
-    if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, timeOfDay: 'twilight' })) onTimeBites++;
-    if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, timeOfDay: 'day' })) offTimeBites++;
+    if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, timeOfDay: 'sunset' })) onTimeBites++;
+    if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, timeOfDay: 'midday' })) offTimeBites++;
   }
-  assert.ok(onTimeBites > offTimeBites, `expected bass to bite more at twilight (${onTimeBites}) than during the day (${offTimeBites})`);
-  console.log(`PASS: bass (a twilight species) bites more during its active time (twilight=${onTimeBites}, day=${offTimeBites})`);
+  assert.ok(onTimeBites > offTimeBites, `expected bass to bite more at sunset (${onTimeBites}) than at midday (${offTimeBites})`);
+  console.log(`PASS: bass bites more during its active time (sunset=${onTimeBites}, midday=${offTimeBites})`);
 }
 
 {
-  // Omitting timeOfDay entirely (timeOfDay: null) must not gate bites — keeps
-  // rollForBite backward compatible for callers that don't track time.
-  const bass = FISH_SPECIES.find(f => f.id === 'bass');
+  // Omitting timeOfDay entirely (timeOfDay: null) must not gate bites.
+  const bass = FISH_SPECIES.find(f => f.id === 'largemouth-bass');
   const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
   let bites = 0;
   for (let i = 0; i < 500; i++) {
@@ -92,6 +91,31 @@ import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
   }
   assert.ok(bites > 0, 'expected some bites when timeOfDay is omitted');
   console.log('PASS: omitting timeOfDay does not gate bites');
+}
+
+{
+  // Rarity ordering: common species should be much more aggressive (bite
+  // more readily) than rare species -- "bigger fish rare, cheap fish easy".
+  const tilapia = FISH_SPECIES.find(f => f.id === 'mozambique-tilapia');
+  const catfish = FISH_SPECIES.find(f => f.id === 'catfish');
+  const tigerfish = FISH_SPECIES.find(f => f.id === 'tigerfish');
+  assert.ok(tilapia.aggressiveness > catfish.aggressiveness, 'common tilapia should bite more readily than rare catfish');
+  assert.ok(tilapia.aggressiveness > tigerfish.aggressiveness, 'common tilapia should bite more readily than rare tigerfish');
+  assert.ok(tigerfish.baseValuePerKg > tilapia.baseValuePerKg, 'rare tigerfish should be worth more per kg than common tilapia');
+  assert.ok(catfish.baseValuePerKg > tilapia.baseValuePerKg, 'rare catfish should be worth more per kg than common tilapia');
+  console.log('PASS: rare species bite less often and pay more than common species');
+}
+
+{
+  // Every species declares a bite-feel profile used to drive the line/reel
+  // physics; tigerfish must additionally require a wire trace.
+  for (const species of FISH_SPECIES) {
+    assert.ok(species.bite && species.bite.speed && species.bite.style && species.bite.label,
+      `${species.id} must declare a complete bite profile`);
+  }
+  const tigerfish = FISH_SPECIES.find(f => f.id === 'tigerfish');
+  assert.strictEqual(tigerfish.requiresWireTrace, true);
+  console.log('PASS: every species declares a bite profile; tigerfish requires a wire trace');
 }
 
 console.log('All fish tests passed.');

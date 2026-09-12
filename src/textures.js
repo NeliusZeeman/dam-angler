@@ -138,17 +138,22 @@ export function createSunGlow() {
   return sprite;
 }
 
-// Palettes lifted straight from the two art-direction prototypes: "Sunset
-// Angler" (warm plum-to-gold) and "Twilight Waters" (indigo-to-rose).
+// Seven stages across the day. "sunset" and "lateTwilight" are lifted
+// straight from the two art-direction prototypes ("Sunset Angler" warm
+// plum-to-gold, "Twilight Waters" indigo-to-rose); the rest interpolate
+// a believable dawn-to-night arc around them.
 export const TIME_OF_DAY_SKY = {
-  day: { top: 0x3f8fdc, bottom: 0xdcf3ff },
+  morning: { top: 0x6f9fd8, bottom: 0xffd9b0 },
+  midMorning: { top: 0x4a97dd, bottom: 0xdff0ff },
+  midday: { top: 0x3f8fdc, bottom: 0xdcf3ff },
+  afternoon: { top: 0x4a8ecf, bottom: 0xffe3b8 },
   sunset: { top: 0x241536, bottom: 0xffcf7a },
-  twilight: { top: 0x1b2140, bottom: 0xff9d72 },
+  lateTwilight: { top: 0x1b2140, bottom: 0xff9d72 },
   night: { top: 0x0a0e1c, bottom: 0x1b2140 },
 };
 
 export function setSkyColors(skyUniforms, timeOfDay) {
-  const palette = TIME_OF_DAY_SKY[timeOfDay] || TIME_OF_DAY_SKY.day;
+  const palette = TIME_OF_DAY_SKY[timeOfDay] || TIME_OF_DAY_SKY.midday;
   skyUniforms.topColor.value.set(palette.top);
   skyUniforms.bottomColor.value.set(palette.bottom);
 }
