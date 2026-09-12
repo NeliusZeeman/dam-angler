@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
-import { createScene, updateSway, updateSun, createPlayerRod } from './scene.js';
-import { createWater, updateWater, createSplashEffect } from './water.js';
+import { createScene, updateSway, updateSun, updateSeasonFoliage, createPlayerRod } from './scene.js';
+import { createWater, updateWater, setWaterSunDirection, createSplashEffect } from './water.js';
 import { createEnvironment } from './environment.js';
 import { FISH_SPECIES, rollForBite, randomWeightFor } from './fish.js';
 import { RODS, LINES, HOOKS, LURES, getGearById } from './gear.js';
@@ -33,7 +33,7 @@ function startGame(locationId, startTimeOfDay) {
   const location = getLocationById(locationId);
   const localSpecies = FISH_SPECIES.filter((s) => location.speciesIds.includes(s.id));
 
-  const { scene, camera, sunLight, ambientLight, hemiLight, swayGroup, skyUniforms } = createScene({ grassTint: location.grassTint });
+  const { scene, camera, sunLight, ambientLight, hemiLight, swayGroup, skyUniforms, sunGlow, treeLeafMats } = createScene({ grassTint: location.grassTint });
   const { waterMesh, setWaterTemperature } = createWater(scene, {
     coldColor: location.waterTint.cold,
     warmColor: location.waterTint.warm,
@@ -51,7 +51,7 @@ function startGame(locationId, startTimeOfDay) {
 
   const playerController = createPlayerController({ camera, domElement: renderer.domElement });
 
-  const fishSwarm = createFishSwarm(scene, localSpecies.map((s) => s.id), 14);
+  const fishSwarm = createFishSwarm(scene, localSpecies.map((s) => s.id), 24);
   const catchReveal = createCatchReveal(scene);
   const splashEffect = createSplashEffect(scene);
   const playerRod = createPlayerRod(camera);
@@ -96,14 +96,24 @@ function startGame(locationId, startTimeOfDay) {
   function toggleCatchLog() {
     catchLogPanel.classList.toggle('hidden');
     if (!catchLogPanel.classList.contains('hidden')) {
-      renderCatchLog(catchLogPanel, save.catchLog);
+      renderCatchLog(catchLogPanel, save.catchLog, { species: localSpecies, locationName: location.name });
       catchLogPanel.querySelector('[data-close]')?.addEventListener('click', () => catchLogPanel.classList.add('hidden'));
     }
+  }
+
+  function changeFishingSpot() {
+    // Clear the remembered spot so the start menu shows again on reload;
+    // credits, gear and the catch log all persist.
+    save.locationId = null;
+    save.startTimeOfDay = null;
+    saveSave(save);
+    window.location.reload();
   }
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyB') { tackleBox.toggle(); }
     if (e.code === 'KeyC') { toggleCatchLog(); }
+    if (e.code === 'KeyL') { changeFishingSpot(); }
     if (e.code === 'Space') { minigame.setHolding(true); e.preventDefault(); }
   });
   window.addEventListener('keyup', (e) => {
@@ -157,6 +167,12 @@ function startGame(locationId, startTimeOfDay) {
     });
   });
 
+  function startBite(species) {
+    bitingSpecies = species;
+    casting.triggerBite(species.bite);
+    if (species.bite) hud.showToast(species.bite.label + '!');
+  }
+
   function rollBitesIfWaiting(delta) {
     const phase = casting.getState().phase;
     if (phase !== 'waiting' && phase !== 'reeling') return;
@@ -164,9 +180,7 @@ function startGame(locationId, startTimeOfDay) {
     const biteChanceMultiplier = twitchBoostTimer > 0 ? 1.8 : 1;
     for (const species of localSpecies) {
       if (rollForBite({ species, waterTempC: state.waterTempC, equippedLureId: activeLureId, deltaSeconds: delta, biteChanceMultiplier, timeOfDay: state.timeOfDay })) {
-        bitingSpecies = species;
-        casting.triggerBite(species.bite);
-        if (species.bite) hud.showToast(species.bite.label + '!');
+        startBite(species);
         break;
       }
     }
@@ -174,6 +188,9 @@ function startGame(locationId, startTimeOfDay) {
 
   let lastTime = performance.now();
   let lastTimeOfDay = null;
+  let lastSeason = null;
+  let lastCastPhase = 'idle';
+  let castSnap = 0;
 
   function animate() {
     requestAnimationFrame(animate);
@@ -191,20 +208,31 @@ function startGame(locationId, startTimeOfDay) {
     catchReveal.update(delta);
     splashEffect.update(delta);
     if (envState.timeOfDay !== lastTimeOfDay) {
-      updateSun(sunLight, ambientLight, hemiLight, skyUniforms, envState.timeOfDay);
+      const sunDir = updateSun({ sunLight, ambientLight, hemiLight, skyUniforms, sunGlow, scene }, envState.timeOfDay);
+      setWaterSunDirection(waterMesh, sunDir);
       lastTimeOfDay = envState.timeOfDay;
+    }
+    if (envState.season !== lastSeason) {
+      updateSeasonFoliage(treeLeafMats, envState.season);
+      lastSeason = envState.season;
     }
 
     casting.update(delta, envState);
     rollBitesIfWaiting(delta);
     minigame.update(delta);
 
-    twitchBoostTimer = Math.max(0, twitchBoostTimer - delta);
-    rodRecoil *= Math.max(0, 1 - delta * 10);
-    playerRod.rodGroup.rotation.x = -rodRecoil;
-
     const mgState = minigame.getState();
     const castState = casting.getState();
+
+    // Rod feel: tips back while winding up (scaled by the power meter),
+    // snaps forward the instant the cast releases, flicks up on a twitch.
+    if (lastCastPhase === 'aiming' && castState.phase === 'inAir') castSnap = 0.55;
+    lastCastPhase = castState.phase;
+    castSnap *= Math.max(0, 1 - delta * 9);
+    twitchBoostTimer = Math.max(0, twitchBoostTimer - delta);
+    rodRecoil *= Math.max(0, 1 - delta * 10);
+    const windup = castState.phase === 'aiming' ? castState.power * 0.6 : 0;
+    playerRod.rodGroup.rotation.x = -(rodRecoil + windup) + castSnap;
     hud.update({
       credits: save.credits,
       season: envState.season,
@@ -227,5 +255,10 @@ function startGame(locationId, startTimeOfDay) {
   window.__game = {
     environment, casting, minigame, save, scene, camera, catchReveal, fishSwarm,
     playerController, location, localSpecies,
+    // Dev hook: force a bite from a given local species (line must be out).
+    debugForceBite: (speciesId) => {
+      const species = localSpecies.find((s) => s.id === speciesId) || localSpecies[0];
+      startBite(species);
+    },
   };
 }

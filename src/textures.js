@@ -104,7 +104,11 @@ export function createSkyDome(scene) {
       varying vec3 vWorldPosition;
       void main() {
         float h = normalize(vWorldPosition).y;
-        float t = clamp(h * 0.6 + 0.4, 0.0, 1.0);
+        // Keep the horizon band in the bottom color and fade to the top
+        // color by ~35 degrees up, so sunsets read as a gold band under a
+        // darker sky rather than one flat wall of colour.
+        float t = clamp(h * 1.6 + 0.08, 0.0, 1.0);
+        t = t * t * (3.0 - 2.0 * t);
         gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
       }
     `,

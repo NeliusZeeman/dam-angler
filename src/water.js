@@ -43,7 +43,8 @@ const fragmentShader = `
 
     vec3 skyTint = vec3(0.75, 0.9, 1.0) * fresnel * 0.5;
     vec3 color = baseColor + skyTint + glint;
-    gl_FragColor = vec4(color, 0.9);
+    // Translucent enough to see fish moving just under the surface.
+    gl_FragColor = vec4(color, 0.74 + fresnel * 0.2);
   }
 `;
 
@@ -77,6 +78,10 @@ export function createWater(scene, { coldColor: coldHex = 0x1c4d73, warmColor: w
 export function updateWater(waterMesh, elapsedSeconds, camera) {
   waterMesh.material.uniforms.uTime.value = elapsedSeconds;
   waterMesh.material.uniforms.uCameraPos.value.copy(camera.position);
+}
+
+export function setWaterSunDirection(waterMesh, direction) {
+  waterMesh.material.uniforms.uSunDir.value.copy(direction).normalize();
 }
 
 // Splash: an expanding, fading ripple ring plus a handful of flung droplets,

@@ -5,6 +5,10 @@ canvas { display: block; }
 .hud-bar { position: absolute; top: 0; left: 0; right: 0; display: flex; gap: 16px; align-items: center; padding: 8px 16px; background: rgba(0,0,0,0.45); color: #fff; z-index: 2; font-size: 14px; }
 .hud-hint { margin-left: auto; opacity: 0.7; font-size: 12px; }
 #hud-time { padding: 2px 9px; border-radius: 999px; font-weight: 600; font-size: 12px; }
+#hud-status { font-weight: 600; white-space: nowrap; }
+#hud-status[data-phase="biting"] { color: #ffb070; animation: hud-pulse 0.5s ease-in-out infinite alternate; }
+@keyframes hud-pulse { from { opacity: 0.7; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #hud-status[data-phase="biting"] { animation: none; } }
 #hud-time[data-time="morning"] { background: rgba(111,159,216,0.35); color: #ffe3c4; }
 #hud-time[data-time="midMorning"] { background: rgba(74,151,221,0.35); color: #e4f4ff; }
 #hud-time[data-time="midday"] { background: rgba(63,143,220,0.35); color: #cfe8ff; }

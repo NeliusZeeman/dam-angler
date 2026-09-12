@@ -27,13 +27,14 @@ export function createScene({ grassTint = 0xffffff } = {}) {
   const sunLight = new THREE.DirectionalLight(0xfff2d0, 1.2);
   sunLight.position.set(10, 20, 10);
   sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(1024, 1024);
-  sunLight.shadow.camera.left = -14;
-  sunLight.shadow.camera.right = 14;
-  sunLight.shadow.camera.top = 14;
-  sunLight.shadow.camera.bottom = -14;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  // Wide enough to cover the whole walkable shore ring, not just the dock.
+  sunLight.shadow.camera.left = -40;
+  sunLight.shadow.camera.right = 40;
+  sunLight.shadow.camera.top = 40;
+  sunLight.shadow.camera.bottom = -40;
   sunLight.shadow.camera.near = 1;
-  sunLight.shadow.camera.far = 60;
+  sunLight.shadow.camera.far = 160;
   sunLight.shadow.bias = -0.0015;
   scene.add(sunLight);
   scene.add(sunLight.target);
@@ -42,9 +43,34 @@ export function createScene({ grassTint = 0xffffff } = {}) {
   sunGlow.position.copy(sunLight.position).normalize().multiplyScalar(180);
   scene.add(sunGlow);
 
-  // Shore: a walkable ring around the whole dam, textured with grass.
+  // Outer land: a big darker ground disc so the trees beyond the shore ring
+  // stand on something instead of floating over the sky dome.
   const grassTexture = createGrassTexture();
   grassTexture.repeat.set(18, 18);
+  const outerTexture = createGrassTexture();
+  outerTexture.repeat.set(60, 60);
+  const outerGeo = new THREE.RingGeometry(SHORE_OUTER_RADIUS - 0.5, 160, 96, 1);
+  const outerMat = new THREE.MeshStandardMaterial({ map: outerTexture, roughness: 1.0, color: 0x9aa88a });
+  const outerLand = new THREE.Mesh(outerGeo, outerMat);
+  outerLand.rotation.x = -Math.PI / 2;
+  outerLand.position.copy(POND_CENTER);
+  outerLand.position.y = 0.02;
+  outerLand.receiveShadow = true;
+  scene.add(outerLand);
+
+  // Pond bed: a dark, murky floor under the translucent water so it reads as
+  // depth. It must not receive shadows -- at sunset the reeds' long shadows
+  // would otherwise show through the surface as black streaks.
+  const bedGeo = new THREE.CircleGeometry(SHORE_INNER_RADIUS + 0.5, 96);
+  const bedMat = new THREE.MeshStandardMaterial({ color: 0x0b2426, roughness: 1.0 });
+  const pondBed = new THREE.Mesh(bedGeo, bedMat);
+  pondBed.rotation.x = -Math.PI / 2;
+  pondBed.position.copy(POND_CENTER);
+  pondBed.position.y = -0.6;
+  pondBed.receiveShadow = false;
+  scene.add(pondBed);
+
+  // Shore: a walkable ring around the whole dam, textured with grass.
   const shoreGeo = new THREE.RingGeometry(SHORE_INNER_RADIUS, SHORE_OUTER_RADIUS, 96, 1);
   const shoreMat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1.0, color: grassTint });
   const shore = new THREE.Mesh(shoreGeo, shoreMat);
@@ -118,7 +144,7 @@ export function createScene({ grassTint = 0xffffff } = {}) {
     lily.rotation.x = -Math.PI / 2;
     lily.position.set(
       POND_CENTER.x + Math.cos(angle) * radius,
-      0.06,
+      0.16, // clear of the water's vertex-wave amplitude, so no flicker
       POND_CENTER.z + Math.sin(angle) * radius,
     );
     scene.add(lily);
@@ -165,7 +191,21 @@ export function createScene({ grassTint = 0xffffff } = {}) {
     swayGroup.add(tree);
   }
 
-  return { scene, camera, sunLight, ambientLight, hemiLight, swayGroup, skyUniforms };
+  return { scene, camera, sunLight, ambientLight, hemiLight, swayGroup, skyUniforms, sunGlow, treeLeafMats };
+}
+
+// Trees change with the season: full green in summer, orange in autumn,
+// sparse brown-grey in winter, fresh light green in spring.
+const SEASON_LEAF_COLORS = {
+  summer: [0x2f6b3a, 0x3a7d45, 0x275a30],
+  autumn: [0xb8702a, 0xc98a3a, 0x8a5a24],
+  winter: [0x6b5a48, 0x7a6a58, 0x5a4a3a],
+  spring: [0x7fb35a, 0x93c46a, 0x6aa04a],
+};
+
+export function updateSeasonFoliage(treeLeafMats, season) {
+  const palette = SEASON_LEAF_COLORS[season] || SEASON_LEAF_COLORS.summer;
+  treeLeafMats.forEach((mat, i) => mat.color.set(palette[i % palette.length]));
 }
 
 const ROD_TIER_APPEARANCE = {
@@ -237,20 +277,35 @@ export function updateSway(swayGroup, elapsedSeconds, windSpeed) {
 // gold) and "Twilight Waters" (cool amber-on-indigo) art direction, with
 // three extra daytime stages interpolated between them.
 const TIME_OF_DAY_LIGHT = {
-  morning: { sun: 0xffd9b0, sunI: 0.85, ambI: 0.28, hemiI: 0.48 },
-  midMorning: { sun: 0xfff0d0, sunI: 1.05, ambI: 0.32, hemiI: 0.55 },
-  midday: { sun: 0xfff2d0, sunI: 1.25, ambI: 0.36, hemiI: 0.62 },
-  afternoon: { sun: 0xffe3b8, sunI: 1.05, ambI: 0.33, hemiI: 0.55 },
-  sunset: { sun: 0xffb27a, sunI: 1.0, ambI: 0.3, hemiI: 0.42 },
-  lateTwilight: { sun: 0xffbd8a, sunI: 0.55, ambI: 0.22, hemiI: 0.3 },
-  night: { sun: 0x5c6fae, sunI: 0.15, ambI: 0.12, hemiI: 0.18 },
+  // dir: where the sun sits in the sky (x = east/west, y = height). It rises
+  // in the east, arcs overhead, and drops onto the western horizon at sunset;
+  // at night the same glow becomes a small cool moon high in the sky.
+  morning: { sun: 0xffd9b0, sunI: 0.85, ambI: 0.28, hemiI: 0.48, dir: [1.0, 0.22, 0.25], glowScale: 44, glow: 0xffe4b8 },
+  midMorning: { sun: 0xfff0d0, sunI: 1.05, ambI: 0.32, hemiI: 0.55, dir: [0.8, 0.6, 0.2], glowScale: 36, glow: 0xfff2d0 },
+  midday: { sun: 0xfff2d0, sunI: 1.25, ambI: 0.36, hemiI: 0.62, dir: [0.15, 1.0, 0.1], glowScale: 32, glow: 0xfff8e6 },
+  afternoon: { sun: 0xffe3b8, sunI: 1.05, ambI: 0.33, hemiI: 0.55, dir: [-0.65, 0.55, 0.2], glowScale: 40, glow: 0xffe8c0 },
+  sunset: { sun: 0xffb27a, sunI: 1.0, ambI: 0.3, hemiI: 0.42, dir: [-1.0, 0.12, 0.3], glowScale: 70, glow: 0xffb070 },
+  lateTwilight: { sun: 0xffbd8a, sunI: 0.55, ambI: 0.22, hemiI: 0.3, dir: [-1.0, 0.04, 0.4], glowScale: 60, glow: 0xff9a6a },
+  night: { sun: 0x5c6fae, sunI: 0.15, ambI: 0.12, hemiI: 0.18, dir: [0.3, 0.85, -0.5], glowScale: 22, glow: 0xcfd8ff },
 };
 
-export function updateSun(sunLight, ambientLight, hemiLight, skyUniforms, timeOfDay) {
+export function updateSun({ sunLight, ambientLight, hemiLight, skyUniforms, sunGlow, scene }, timeOfDay) {
   const preset = TIME_OF_DAY_LIGHT[timeOfDay] || TIME_OF_DAY_LIGHT.midday;
   sunLight.color.set(preset.sun);
   sunLight.intensity = preset.sunI;
   ambientLight.intensity = preset.ambI;
   hemiLight.intensity = preset.hemiI;
+
+  const dir = new THREE.Vector3(...preset.dir).normalize();
+  sunLight.position.copy(dir).multiplyScalar(60);
+  if (sunGlow) {
+    sunGlow.position.copy(dir).multiplyScalar(180);
+    sunGlow.scale.set(preset.glowScale, preset.glowScale, 1);
+    sunGlow.material.color.set(preset.glow);
+  }
+
   setSkyColors(skyUniforms, timeOfDay);
+  // Fog fades distant objects into the horizon colour, not daylight blue.
+  if (scene && scene.fog) scene.fog.color.copy(skyUniforms.bottomColor.value);
+  return dir;
 }

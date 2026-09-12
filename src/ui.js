@@ -10,7 +10,7 @@ export function createHUD(container) {
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
-    <span class="hud-hint">A/D or ←→ to walk · hold click to charge & cast · click to twitch · hold click to reel in · Space to fight a bite · B tackle box · C log</span>
+    <span class="hud-hint">A/D walk · hold click: charge & cast · click: twitch · hold click: reel in · Space: fight a bite · B tackle box · C log · L change spot</span>
   `;
   container.appendChild(bar);
 
@@ -41,6 +41,16 @@ export function createHUD(container) {
     sunset: 'Sunset', lateTwilight: 'Late Twilight', night: 'Night',
   };
 
+  const STATUS_LABELS = {
+    idle: 'Ready to cast',
+    aiming: 'Winding up…',
+    inAir: 'Casting',
+    waiting: 'Line in the water',
+    reeling: 'Reeling in',
+    hanging: 'Line hanging — click to cast',
+    biting: 'FISH ON! Hold Space',
+  };
+
   function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, hookName, lureName, castingPhase, tension, power }) {
     document.getElementById('hud-credits').textContent = `Credits: ${credits}`;
     document.getElementById('hud-season').textContent = `${season} — ${waterTempC.toFixed(1)}°C`;
@@ -49,7 +59,9 @@ export function createHUD(container) {
     timeEl.dataset.time = timeOfDay;
     document.getElementById('hud-wind').textContent = `Wind: ${windSpeed.toFixed(1)}`;
     document.getElementById('hud-gear').textContent = `${rodName} | ${lineName} | ${hookName} | ${lureName}`;
-    document.getElementById('hud-status').textContent = castingPhase;
+    const statusEl = document.getElementById('hud-status');
+    statusEl.textContent = STATUS_LABELS[castingPhase] || castingPhase;
+    statusEl.dataset.phase = castingPhase;
     tensionWrap.style.display = (castingPhase === 'biting') ? 'block' : 'none';
     if (tension != null) {
       document.getElementById('hud-tension-bar').style.width = `${Math.min(100, tension * 100)}%`;
@@ -63,10 +75,11 @@ export function createHUD(container) {
   return { update, showToast };
 }
 
-export function renderCatchLog(container, catchLog) {
-  const rows = FISH_SPECIES.map((species) => {
-    const entry = catchLog[species.id] || { count: 0, bestWeightKg: 0 };
-    return `<div class="shop-row"><span>${species.name}</span><span>${entry.count} caught, best ${entry.bestWeightKg.toFixed(2)}kg</span></div>`;
+export function renderCatchLog(container, catchLog, { species = FISH_SPECIES, locationName = null } = {}) {
+  const rows = species.map((sp) => {
+    const entry = catchLog[sp.id] || { count: 0, bestWeightKg: 0 };
+    return `<div class="shop-row"><span>${sp.name}</span><span>${entry.count} caught, best ${entry.bestWeightKg.toFixed(2)}kg</span></div>`;
   }).join('');
-  container.innerHTML = `<button class="panel-close" data-close="log">Close</button><h3>Catch Log</h3>${rows}`;
+  const title = locationName ? `Catch Log — ${locationName}` : 'Catch Log';
+  container.innerHTML = `<button class="panel-close" data-close="log">Close</button><h3>${title}</h3>${rows}`;
 }

@@ -75,7 +75,11 @@ export function createFishSwarm(scene, speciesIds, count) {
     mesh.userData.orbitRadius = radius;
     mesh.userData.orbitAngle = angle;
     mesh.userData.orbitSpeed = 0.06 + Math.random() * 0.1;
-    mesh.userData.depth = -0.35 - Math.random() * 0.5;
+    // Shallow enough to be seen through the water surface.
+    mesh.userData.depth = -0.12 - Math.random() * 0.3;
+    // Each fish breaches the surface now and then on its own timer.
+    mesh.userData.jumpPeriod = 14 + Math.random() * 30;
+    mesh.userData.jumpPhase = Math.random() * 40;
     mesh.visible = true;
     scene.add(mesh);
     fishes.push(mesh);
@@ -85,12 +89,18 @@ export function createFishSwarm(scene, speciesIds, count) {
 
 export function updateFishSwarm(fishes, elapsedSeconds) {
   for (const fish of fishes) {
-    const { orbitRadius, orbitSpeed, depth } = fish.userData;
+    const { orbitRadius, orbitSpeed, depth, jumpPeriod, jumpPhase } = fish.userData;
     const angle = fish.userData.orbitAngle + elapsedSeconds * orbitSpeed;
     const x = POND_CENTER.x + Math.cos(angle) * orbitRadius;
     const z = POND_CENTER.z + Math.sin(angle) * orbitRadius;
-    fish.position.set(x, depth + Math.sin(elapsedSeconds * 2 + orbitRadius) * 0.06, z);
+
+    // A short arc above the water once per jumpPeriod seconds.
+    const cycle = (elapsedSeconds + jumpPhase) % jumpPeriod;
+    const jump = cycle < 1.0 ? Math.sin(cycle * Math.PI) * 0.8 : 0;
+
+    fish.position.set(x, depth + Math.sin(elapsedSeconds * 2 + orbitRadius) * 0.06 + jump, z);
     fish.rotation.y = -angle - Math.PI / 2;
+    fish.rotation.z = jump > 0 ? Math.sin(cycle * Math.PI) * 0.9 : 0;
     if (fish.userData.tail) {
       fish.userData.tail.rotation.y = Math.sin(elapsedSeconds * 8) * 0.5;
     }
