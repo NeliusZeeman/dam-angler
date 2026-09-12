@@ -6,6 +6,7 @@ export function createHUD(container) {
   bar.innerHTML = `
     <span id="hud-credits"></span>
     <span id="hud-season"></span>
+    <span id="hud-time"></span>
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
@@ -30,9 +31,14 @@ export function createHUD(container) {
     toastTimer = setTimeout(() => toast.classList.add('hidden'), 2500);
   }
 
-  function update({ credits, season, waterTempC, windSpeed, rodName, lineName, lureName, castingPhase, tension }) {
+  const TIME_LABELS = { day: 'Day', sunset: 'Sunset', twilight: 'Twilight', night: 'Night' };
+
+  function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, lureName, castingPhase, tension }) {
     document.getElementById('hud-credits').textContent = `Credits: ${credits}`;
     document.getElementById('hud-season').textContent = `${season} — ${waterTempC.toFixed(1)}°C`;
+    const timeEl = document.getElementById('hud-time');
+    timeEl.textContent = TIME_LABELS[timeOfDay] || timeOfDay;
+    timeEl.dataset.time = timeOfDay;
     document.getElementById('hud-wind').textContent = `Wind: ${windSpeed.toFixed(1)}`;
     document.getElementById('hud-gear').textContent = `${rodName} | ${lineName} | ${lureName}`;
     document.getElementById('hud-status').textContent = castingPhase;

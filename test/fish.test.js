@@ -57,4 +57,41 @@ import { FISH_SPECIES, rollForBite, randomWeightFor } from '../src/fish.js';
   console.log(`PASS: biteChanceMultiplier increases bite rate (normal=${normalBites}, boosted=${boostedBites})`);
 }
 
+{
+  // Every species declares at least one preferred time, and sunset/twilight
+  // together must cover every species (the two "golden hour" bite windows).
+  for (const species of FISH_SPECIES) {
+    assert.ok(Array.isArray(species.activeTimes) && species.activeTimes.length > 0, `${species.id} must declare activeTimes`);
+  }
+  const coversGoldenHour = FISH_SPECIES.every((s) => s.activeTimes.includes('sunset') || s.activeTimes.includes('twilight'));
+  assert.ok(coversGoldenHour, 'every species should be active during sunset and/or twilight');
+  console.log('PASS: every species declares activeTimes and is covered by sunset/twilight');
+}
+
+{
+  const bass = FISH_SPECIES.find(f => f.id === 'bass');
+  const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
+  let onTimeBites = 0, offTimeBites = 0;
+  const trials = 3000;
+  for (let i = 0; i < trials; i++) {
+    if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, timeOfDay: 'twilight' })) onTimeBites++;
+    if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, timeOfDay: 'day' })) offTimeBites++;
+  }
+  assert.ok(onTimeBites > offTimeBites, `expected bass to bite more at twilight (${onTimeBites}) than during the day (${offTimeBites})`);
+  console.log(`PASS: bass (a twilight species) bites more during its active time (twilight=${onTimeBites}, day=${offTimeBites})`);
+}
+
+{
+  // Omitting timeOfDay entirely (timeOfDay: null) must not gate bites — keeps
+  // rollForBite backward compatible for callers that don't track time.
+  const bass = FISH_SPECIES.find(f => f.id === 'bass');
+  const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
+  let bites = 0;
+  for (let i = 0; i < 500; i++) {
+    if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1 })) bites++;
+  }
+  assert.ok(bites > 0, 'expected some bites when timeOfDay is omitted');
+  console.log('PASS: omitting timeOfDay does not gate bites');
+}
+
 console.log('All fish tests passed.');

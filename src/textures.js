@@ -138,13 +138,17 @@ export function createSunGlow() {
   return sprite;
 }
 
-export function setSkyColors(skyUniforms, season) {
-  const palette = {
-    summer: { top: 0x3f8fdc, bottom: 0xdcf3ff },
-    autumn: { top: 0x6f88ad, bottom: 0xf0dcbb },
-    winter: { top: 0x8ea6c2, bottom: 0xe8eef5 },
-    spring: { top: 0x53a0dc, bottom: 0xe6f6ec },
-  }[season];
+// Palettes lifted straight from the two art-direction prototypes: "Sunset
+// Angler" (warm plum-to-gold) and "Twilight Waters" (indigo-to-rose).
+export const TIME_OF_DAY_SKY = {
+  day: { top: 0x3f8fdc, bottom: 0xdcf3ff },
+  sunset: { top: 0x241536, bottom: 0xffcf7a },
+  twilight: { top: 0x1b2140, bottom: 0xff9d72 },
+  night: { top: 0x0a0e1c, bottom: 0x1b2140 },
+};
+
+export function setSkyColors(skyUniforms, timeOfDay) {
+  const palette = TIME_OF_DAY_SKY[timeOfDay] || TIME_OF_DAY_SKY.day;
   skyUniforms.topColor.value.set(palette.top);
   skyUniforms.bottomColor.value.set(palette.bottom);
 }

@@ -214,16 +214,20 @@ export function updateSway(swayGroup, elapsedSeconds, windSpeed) {
   });
 }
 
-export function updateSun(sunLight, ambientLight, hemiLight, skyUniforms, season) {
-  const seasonLight = {
-    summer: { sun: 0xfff2d0, sunI: 1.2, ambI: 0.35, hemiI: 0.6 },
-    autumn: { sun: 0xffd9a0, sunI: 1.0, ambI: 0.3, hemiI: 0.5 },
-    winter: { sun: 0xcfe3ff, sunI: 0.8, ambI: 0.28, hemiI: 0.45 },
-    spring: { sun: 0xffffe0, sunI: 1.1, ambI: 0.32, hemiI: 0.55 },
-  }[season];
-  sunLight.color.set(seasonLight.sun);
-  sunLight.intensity = seasonLight.sunI;
-  ambientLight.intensity = seasonLight.ambI;
-  hemiLight.intensity = seasonLight.hemiI;
-  setSkyColors(skyUniforms, season);
+// Lighting presets for the day cycle, matching the "Sunset Angler" (warm
+// gold) and "Twilight Waters" (cool amber-on-indigo) art direction.
+const TIME_OF_DAY_LIGHT = {
+  day: { sun: 0xfff2d0, sunI: 1.2, ambI: 0.35, hemiI: 0.6 },
+  sunset: { sun: 0xffb27a, sunI: 1.0, ambI: 0.3, hemiI: 0.42 },
+  twilight: { sun: 0xffbd8a, sunI: 0.55, ambI: 0.22, hemiI: 0.3 },
+  night: { sun: 0x5c6fae, sunI: 0.15, ambI: 0.12, hemiI: 0.18 },
+};
+
+export function updateSun(sunLight, ambientLight, hemiLight, skyUniforms, timeOfDay) {
+  const preset = TIME_OF_DAY_LIGHT[timeOfDay] || TIME_OF_DAY_LIGHT.day;
+  sunLight.color.set(preset.sun);
+  sunLight.intensity = preset.sunI;
+  ambientLight.intensity = preset.ambI;
+  hemiLight.intensity = preset.hemiI;
+  setSkyColors(skyUniforms, timeOfDay);
 }

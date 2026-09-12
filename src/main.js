@@ -124,7 +124,7 @@ function rollBitesIfWaiting(delta) {
   const state = environment.getState();
   const biteChanceMultiplier = twitchBoostTimer > 0 ? 1.8 : 1;
   for (const species of FISH_SPECIES) {
-    if (rollForBite({ species, waterTempC: state.waterTempC, equippedLureId: activeLureId, deltaSeconds: delta, biteChanceMultiplier })) {
+    if (rollForBite({ species, waterTempC: state.waterTempC, equippedLureId: activeLureId, deltaSeconds: delta, biteChanceMultiplier, timeOfDay: state.timeOfDay })) {
       bitingSpecies = species;
       casting.triggerBite();
       break;
@@ -133,7 +133,7 @@ function rollBitesIfWaiting(delta) {
 }
 
 let lastTime = performance.now();
-let lastSeason = null;
+let lastTimeOfDay = null;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -148,9 +148,9 @@ function animate() {
   updateSway(swayGroup, now / 1000, envState.windSpeed);
   updateFishSwarm(fishSwarm, now / 1000);
   catchReveal.update(delta);
-  if (envState.season !== lastSeason) {
-    updateSun(sunLight, ambientLight, hemiLight, skyUniforms, envState.season);
-    lastSeason = envState.season;
+  if (envState.timeOfDay !== lastTimeOfDay) {
+    updateSun(sunLight, ambientLight, hemiLight, skyUniforms, envState.timeOfDay);
+    lastTimeOfDay = envState.timeOfDay;
   }
 
   casting.update(delta, envState);
@@ -165,6 +165,7 @@ function animate() {
   hud.update({
     credits: save.credits,
     season: envState.season,
+    timeOfDay: envState.timeOfDay,
     waterTempC: envState.waterTempC,
     windSpeed: envState.windSpeed,
     rodName: activeRod.name,
