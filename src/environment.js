@@ -17,14 +17,15 @@ export const TIME_OF_DAY_PHASES = [
 ];
 export const DAY_CYCLE_SECONDS = PHASE_LENGTH_SECONDS * TIME_OF_DAY_PHASES.length;
 
-export function createEnvironment() {
+export function createEnvironment({ startTimeOfDay = null } = {}) {
   let seasonIndex = 0;
   let seasonElapsed = 0;
   let windSpeed = 0;
   let windAngle = 0;
   let windTimer = 0;
   let nextGustAt = 5 + Math.random() * 15;
-  let dayElapsed = 0;
+  const startIndex = Math.max(0, TIME_OF_DAY_PHASES.indexOf(startTimeOfDay));
+  let dayElapsed = startIndex * PHASE_LENGTH_SECONDS;
 
   function currentSeason() {
     return SEASON_ORDER[seasonIndex];

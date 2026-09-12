@@ -47,11 +47,11 @@ const fragmentShader = `
   }
 `;
 
-export function createWater(scene) {
+export function createWater(scene, { coldColor: coldHex = 0x1c4d73, warmColor: warmHex = 0x2f8ea3 } = {}) {
   const geometry = new THREE.CircleGeometry(WATER_RADIUS, 96, 0, Math.PI * 2);
   const uniforms = {
     uTime: { value: 0 },
-    uColor: { value: new THREE.Color(0x2f8ea3) },
+    uColor: { value: new THREE.Color(warmHex) },
     uSunDir: { value: new THREE.Vector3(0.4, 0.8, 0.4).normalize() },
     uCameraPos: { value: new THREE.Vector3() },
   };
@@ -63,8 +63,8 @@ export function createWater(scene) {
   waterMesh.position.copy(POND_CENTER);
   scene.add(waterMesh);
 
-  const coldColor = new THREE.Color(0x1c4d73);
-  const warmColor = new THREE.Color(0x2f8ea3);
+  const coldColor = new THREE.Color(coldHex);
+  const warmColor = new THREE.Color(warmHex);
 
   function setWaterTemperature(celsius) {
     const t = Math.min(1, Math.max(0, (celsius - 5) / 25));

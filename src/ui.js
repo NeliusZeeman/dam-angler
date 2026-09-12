@@ -10,7 +10,7 @@ export function createHUD(container) {
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
-    <span class="hud-hint">A/D or ←→ to walk · click to cast · click to twitch · hold click to reel in · Space to fight a bite · B tackle box · C log</span>
+    <span class="hud-hint">A/D or ←→ to walk · hold click to charge & cast · click to twitch · hold click to reel in · Space to fight a bite · B tackle box · C log</span>
   `;
   container.appendChild(bar);
 
@@ -18,6 +18,11 @@ export function createHUD(container) {
   tensionWrap.className = 'hud-tension-wrap';
   tensionWrap.innerHTML = `<div id="hud-tension-bar" class="hud-tension-bar"></div>`;
   container.appendChild(tensionWrap);
+
+  const powerWrap = document.createElement('div');
+  powerWrap.className = 'hud-power-wrap';
+  powerWrap.innerHTML = `<div class="hud-power-label">Cast power</div><div class="hud-power-track"><div id="hud-power-bar"></div></div>`;
+  container.appendChild(powerWrap);
 
   const toast = document.createElement('div');
   toast.className = 'hud-toast hidden';
@@ -36,7 +41,7 @@ export function createHUD(container) {
     sunset: 'Sunset', lateTwilight: 'Late Twilight', night: 'Night',
   };
 
-  function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, hookName, lureName, castingPhase, tension }) {
+  function update({ credits, season, timeOfDay, waterTempC, windSpeed, rodName, lineName, hookName, lureName, castingPhase, tension, power }) {
     document.getElementById('hud-credits').textContent = `Credits: ${credits}`;
     document.getElementById('hud-season').textContent = `${season} — ${waterTempC.toFixed(1)}°C`;
     const timeEl = document.getElementById('hud-time');
@@ -48,6 +53,10 @@ export function createHUD(container) {
     tensionWrap.style.display = (castingPhase === 'biting') ? 'block' : 'none';
     if (tension != null) {
       document.getElementById('hud-tension-bar').style.width = `${Math.min(100, tension * 100)}%`;
+    }
+    powerWrap.style.display = (castingPhase === 'aiming') ? 'block' : 'none';
+    if (power != null) {
+      document.getElementById('hud-power-bar').style.width = `${Math.min(100, power * 100)}%`;
     }
   }
 

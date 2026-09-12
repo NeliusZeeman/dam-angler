@@ -1,6 +1,8 @@
 const SAVE_KEY = 'pond-fishing-save';
 
 export const DEFAULT_SAVE = {
+  locationId: null,
+  startTimeOfDay: null,
   credits: 0,
   ownedRodIds: ['rod-starter'],
   ownedLineIds: ['line-starter'],

@@ -5,7 +5,7 @@ import {
   REED_RADIUS, TREE_INNER_RADIUS, TREE_OUTER_RADIUS, DOCK_ANGLE,
 } from './pond.js';
 
-export function createScene() {
+export function createScene({ grassTint = 0xffffff } = {}) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xcfeeff, 26, 95);
 
@@ -46,7 +46,7 @@ export function createScene() {
   const grassTexture = createGrassTexture();
   grassTexture.repeat.set(18, 18);
   const shoreGeo = new THREE.RingGeometry(SHORE_INNER_RADIUS, SHORE_OUTER_RADIUS, 96, 1);
-  const shoreMat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1.0 });
+  const shoreMat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 1.0, color: grassTint });
   const shore = new THREE.Mesh(shoreGeo, shoreMat);
   shore.rotation.x = -Math.PI / 2;
   shore.position.copy(POND_CENTER);

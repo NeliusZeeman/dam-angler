@@ -9,6 +9,8 @@ const REEL_SPEED = 3.2; // units/sec the lure closes toward the rod tip while re
 const REEL_ARRIVE_DISTANCE = 0.35;
 const WAKE_INTERVAL = 0.18; // seconds between wake ripples while reeling
 const LINE_SEGMENTS = 12;
+const POWER_CHARGE_SECONDS = 1.3; // hold this long for a full-power cast
+const BASE_CAST_REACH = 3; // minimum reach even at zero power
 
 export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, onSplash, onWake }) {
   const bobberGeo = new THREE.SphereGeometry(0.08, 12, 12);
@@ -54,21 +56,24 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   let pressTimer = 0;
   let wakeTimer = 0;
   let castArmed = false;
+  let power = 0;
   const hangOffset = new THREE.Vector3(0, -0.15, 0.05);
 
   function releaseCastAt(aim) {
-    if (phase !== 'idle' && phase !== 'hanging') return;
+    if (phase !== 'aiming') return;
     const rod = getRod();
+    const maxReach = BASE_CAST_REACH + power * rod.castDistance;
     const toAim = new THREE.Vector3().subVectors(aim, camera.position);
     toAim.y = 0;
     const aimDistance = toAim.length();
-    const clampedDistance = Math.min(aimDistance, rod.castDistance);
+    const clampedDistance = Math.min(aimDistance, maxReach);
     toAim.normalize();
 
     launchTarget.copy(camera.position).addScaledVector(toAim, clampedDistance);
     launchTarget.y = 0;
     phase = 'inAir';
     airTime = 0;
+    power = 0;
     bobber.visible = true;
     line.visible = true;
   }
@@ -106,6 +111,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     fightProfile = null;
     pressing = false;
     pressTimer = 0;
+    power = 0;
   }
 
   function updateLineCurve(sagAmount) {
@@ -141,6 +147,10 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
         phase = 'reeling';
         wakeTimer = 0;
       }
+    }
+
+    if (phase === 'aiming' && pressing) {
+      power = Math.min(1, power + deltaSeconds / POWER_CHARGE_SECONDS);
     }
 
     if (phase === 'inAir') {
@@ -234,6 +244,9 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   domElement.addEventListener('mousedown', (e) => {
     if (phase === 'idle' || phase === 'hanging') {
       updateAimFromPointer(e.clientX, e.clientY);
+      phase = 'aiming';
+      power = 0;
+      pressing = true;
       castArmed = true;
     } else if (phase === 'waiting') {
       pressing = true;
@@ -243,12 +256,15 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       castArmed = false;
     }
   });
+  window.addEventListener('mousemove', (e) => {
+    if (phase === 'aiming') updateAimFromPointer(e.clientX, e.clientY);
+  });
   window.addEventListener('mouseup', () => {
-    if ((phase === 'idle' || phase === 'hanging') && castArmed) {
-      // A quick single click while idle/hanging casts straight away -- no
-      // charge-up, and only a press that actually started in this state
-      // arms a cast (a press that was reeling never does, even if it's
-      // still held down when the reel-in finishes).
+    if (phase === 'aiming' && castArmed) {
+      // The longer this was held, the further it casts (power meter).
+      // Only a press that actually started idle/hanging arms a cast -- a
+      // press that was mid-reel never does, even if it's still held down
+      // when the reel-in finishes and drops into 'hanging'.
       releaseCastAt(aimPoint);
     } else if (phase === 'waiting' && pressing && pressTimer <= REEL_HOLD_THRESHOLD) {
       tapRod();
@@ -258,7 +274,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   });
 
   function getState() {
-    return { phase };
+    return { phase, power };
   }
 
   return {

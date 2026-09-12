@@ -53,6 +53,18 @@ import { createEnvironment, SEASON_ORDER, SEASON_LENGTH_SECONDS, DAY_CYCLE_SECON
 }
 
 {
+  const env = createEnvironment({ startTimeOfDay: 'sunset' });
+  assert.strictEqual(env.getState().timeOfDay, 'sunset');
+  console.log('PASS: createEnvironment honors a requested starting time of day');
+}
+
+{
+  const env = createEnvironment({ startTimeOfDay: 'not-a-real-phase' });
+  assert.strictEqual(env.getState().timeOfDay, 'morning', 'unknown startTimeOfDay should fall back to morning');
+  console.log('PASS: an invalid startTimeOfDay falls back to morning');
+}
+
+{
   const env = createEnvironment();
   const seen = [];
   for (const phase of TIME_OF_DAY_PHASES) {
