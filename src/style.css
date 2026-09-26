@@ -38,6 +38,7 @@ body.touch { -webkit-user-select: none; user-select: none; -webkit-tap-highlight
 .tackle-credits { font-weight: 700; color: #ffe08a; padding: 4px 0 6px; font-size: 15px; }
 .shop-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; gap: 8px; }
 .shop-spec { display: block; font-size: 11px; opacity: 0.65; text-transform: capitalize; }
+.shop-note { text-transform: none; }
 .shop-row button { background: #2f6b3a; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
 .shop-row button:disabled { background: #555; cursor: not-allowed; opacity: 0.6; }
 .panel-close { background: #6b2f2f; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; float: right; }
@@ -306,3 +307,15 @@ body.touch .hud-tension-wrap, body.touch .hud-power-wrap { bottom: calc(40px + e
   body.touch .tip-bubble { top: calc(100px + env(safe-area-inset-top)); left: 12px; right: 12px; width: auto; }
   body.touch .rotate-hint { top: auto; bottom: calc(170px + env(safe-area-inset-bottom)); }
 }
+
+/* Rod button switched off while the catch card is up. */
+.touch-rod.off { opacity: 0.4; border-color: rgba(255,255,255,0.35); box-shadow: none; pointer-events: none; }
+
+/* "Keep fishing" is locked for a moment after a catch; a fill shows when it's ready. */
+.catch-close { position: relative; overflow: hidden; }
+.catch-close-label { position: relative; }
+.catch-close-fill { position: absolute; inset: 0; background: rgba(255,255,255,0.35); transform: scaleX(0); transform-origin: left; pointer-events: none; }
+.catch-close.locked { cursor: default; filter: saturate(0.4) brightness(0.8); }
+.catch-close.locked .catch-close-fill { animation: catch-unlock var(--lock-ms, 1500ms) linear forwards; }
+@keyframes catch-unlock { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .catch-close.locked .catch-close-fill { animation: none; } }

@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier, estimateLengthCm } from '../src/fish.js';
+import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier, estimateLengthCm, activityAt } from '../src/fish.js';
 
 {
   // Real-world sanity checks: a 2kg carp is ~48cm, a 10kg barbel ~1.1m.
@@ -157,6 +157,32 @@ import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier, estim
   assert.strictEqual(noPreference, 1, 'a species with no habitat preference should be unaffected by position');
 
   console.log('PASS: habitat multiplier rewards spinners-in-cover for bass, shallows for tilapia, depth for catfish');
+}
+
+{
+  // Daily feeding rhythms match the research on each fish.
+  const a = (id, t) => activityAt(FISH_SPECIES.find((s) => s.id === id), t);
+  for (const s of FISH_SPECIES) {
+    assert.strictEqual(s.activity.length, 7, `${s.id} needs one activity value per time of day`);
+    assert.ok(s.activity.every((v) => v >= 0 && v <= 1), `${s.id} activity must be 0..1`);
+  }
+  // Carp: dawn/dusk peaks, strong at night, slowest in the midday heat.
+  assert.ok(a('common-carp', 'morning') > a('common-carp', 'midday') * 2, 'carp: dawn beats midday');
+  assert.ok(a('common-carp', 'night') > a('common-carp', 'midday'), 'carp feed at night');
+  // Barbel: nocturnal, but not completely off by day.
+  assert.ok(a('catfish', 'night') > a('catfish', 'midday') * 4, 'barbel: night feeders');
+  assert.ok(a('catfish', 'midday') > 0, 'barbel still feed a little by day');
+  // Bass (both): crepuscular -- dawn and dusk beat midday.
+  for (const id of ['largemouth-bass', 'smallmouth-bass']) {
+    assert.ok(a(id, 'morning') > a(id, 'midday') * 2 && a(id, 'sunset') > a(id, 'midday') * 2, `${id}: low-light feeder`);
+  }
+  // Day feeders: kurper, yellowfish, tigerfish all switch off at night.
+  for (const id of ['mozambique-tilapia', 'banded-tilapia', 'smallmouth-yellowfish', 'largescale-yellowfish', 'tigerfish']) {
+    assert.ok(a(id, 'afternoon') > a(id, 'night') * 3, `${id}: daytime feeder`);
+  }
+  // Unknown time of day never blocks a bite.
+  assert.strictEqual(a('catfish', null), 1);
+  console.log('PASS: every fish feeds on its real daily rhythm');
 }
 
 console.log('All fish tests passed.');

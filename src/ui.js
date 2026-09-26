@@ -102,8 +102,12 @@ const ordinal = (n) => {
 // The "fish landed" card: the species photo from assets/fish/<id>.png, plus
 // weight, length, value and how it compares with your best. Closes with the
 // button, Enter, Space or Esc; returns the close function.
-export function showCatchCard(container, { species, weightKg, lengthCm, payout, previousBestKg, count, locationName, timeLabel }) {
-  container.querySelector('.catch-card-wrap')?.remove();
+let closeActiveCatchCard = null;
+
+// `lockMs`: the close button (and keys) stay inactive this long so a finger
+// or key still held from the fight can't dismiss the card unread.
+export function showCatchCard(container, { species, weightKg, lengthCm, payout, previousBestKg, count, locationName, timeLabel, lockMs = 0, onClose = null }) {
+  closeActiveCatchCard?.();
   const firstEver = count === 1;
   const personalBest = !firstEver && weightKg > previousBestKg;
   const badge = firstEver ? 'First one!' : personalBest ? 'New personal best!' : '';
@@ -130,7 +134,7 @@ export function showCatchCard(container, { species, weightKg, lengthCm, payout, 
           <div><dt>Your best</dt><dd>${Math.max(weightKg, previousBestKg).toFixed(2)} kg</dd></div>
         </dl>
         <p class="catch-where">Your ${ordinal(count)} ${species.name} · ${locationName}${timeLabel ? ` · ${timeLabel}` : ''}</p>
-        <button class="catch-close" type="button">Keep fishing</button>
+        <button class="catch-close" type="button"><span class="catch-close-fill"></span><span class="catch-close-label">Keep fishing</span></button>
       </div>
     </div>`;
   container.appendChild(wrap);
@@ -146,19 +150,45 @@ export function showCatchCard(container, { species, weightKg, lengthCm, payout, 
 
   // Clicks on the card mustn't start a cast behind it.
   wrap.addEventListener('mousedown', (e) => e.stopPropagation());
+  wrap.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+  const btn = wrap.querySelector('.catch-close');
+  let locked = lockMs > 0;
+  if (locked) {
+    btn.classList.add('locked');
+    btn.setAttribute('aria-disabled', 'true');
+    btn.style.setProperty('--lock-ms', `${lockMs}ms`);
+    setTimeout(() => {
+      locked = false;
+      btn.classList.remove('locked');
+      btn.removeAttribute('aria-disabled');
+    }, lockMs);
+  }
+
+  let closed = false;
   function onKey(e) {
     if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') {
+      // Swallow them either way -- a held Space from reeling must not
+      // reach the game or close the card while it's locked.
       e.preventDefault();
       e.stopImmediatePropagation();
-      close();
+      if (!locked && !e.repeat) close();
     }
   }
   function close() {
+    if (closed) return;
+    closed = true;
+    if (closeActiveCatchCard === close) closeActiveCatchCard = null;
     window.removeEventListener('keydown', onKey, true);
     wrap.remove();
+    if (onClose) onClose();
   }
+  closeActiveCatchCard = close;
   window.addEventListener('keydown', onKey, true);
-  wrap.querySelector('.catch-close').addEventListener('click', (e) => { e.stopPropagation(); close(); });
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!locked) close();
+  });
   return close;
 }
 

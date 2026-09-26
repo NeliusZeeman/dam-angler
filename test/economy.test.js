@@ -25,8 +25,15 @@ import { RODS, LINES, HOOKS } from '../src/gear.js';
 {
   const bass = FISH_SPECIES.find(f => f.id === 'largemouth-bass');
   const weightKg = 2;
-  const starterPayout = calculatePayout({ species: bass, weightKg, rod: RODS[0], line: LINES[0] });
-  const proPayout = calculatePayout({ species: bass, weightKg, rod: RODS[2], line: LINES[2] });
+  // Each payout carries +-10% luck and the gear bump is only ~5-10%, so
+  // compare averages -- single draws failed about 1 run in 15.
+  const avg = (rod, line) => {
+    let total = 0;
+    for (let i = 0; i < 400; i++) total += calculatePayout({ species: bass, weightKg, rod, line });
+    return Math.round(total / 400);
+  };
+  const starterPayout = avg(RODS[0], LINES[0]);
+  const proPayout = avg(RODS[2], LINES[2]);
   assert.ok(proPayout <= starterPayout * 2, `pro gear payout (${proPayout}) should not exceed 2x starter payout (${starterPayout})`);
   assert.ok(proPayout >= starterPayout, `pro gear payout (${proPayout}) should be at least starter payout (${starterPayout})`);
   console.log(`PASS: gear quality gives a modest payout bump only (starter=${starterPayout}, pro=${proPayout})`);

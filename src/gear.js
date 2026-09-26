@@ -92,6 +92,16 @@ export const LURES = [
   { id: 'bread-bait', name: 'Bread Bait', kind: 'bait', cost: 0, speciesIds: ['mozambique-tilapia', 'common-carp', 'mirror-carp', 'mudfish'] },
   { id: 'worm', name: 'Worm', kind: 'bait', cost: 20, speciesIds: ['mozambique-tilapia', 'banded-tilapia', 'common-carp', 'mirror-carp', 'catfish', 'smallmouth-yellowfish', 'largescale-yellowfish', 'mudfish'] },
   { id: 'mielies', name: 'Mielies (Corn)', kind: 'bait', cost: 20, speciesIds: ['common-carp', 'mirror-carp', 'mozambique-tilapia', 'banded-tilapia', 'smallmouth-yellowfish', 'largescale-yellowfish', 'mudfish'] },
+  // A ball of mielie-meal groundbait packed round a weighted feeder. The
+  // weight (~40g) carries it through the air: less drag slowing it than a
+  // float rig, so it flies further -- as long as the rod can handle it.
+  // Once in, it breaks down into a feeding spot around the hook.
+  {
+    id: 'mieliebom', name: 'Mieliebom (Groundbait Feeder)', kind: 'bait', cost: 60,
+    castDrag: 0.0055, heavy: true, groundbait: true,
+    note: 'Heavy: casts further · builds a feeding spot · carp love it',
+    speciesIds: ['common-carp', 'mirror-carp', 'smallmouth-yellowfish', 'largescale-yellowfish', 'mudfish', 'mozambique-tilapia', 'banded-tilapia'],
+  },
   { id: 'chicken-liver', name: 'Chicken Liver', kind: 'bait', cost: 35, speciesIds: ['catfish'] },
   { id: 'frog-bait', name: 'Frog (Platanna)', kind: 'bait', cost: 45, speciesIds: ['catfish'] },
   { id: 'spinner', name: 'Spinnerbait', kind: 'lure', cost: 90, speciesIds: ['largemouth-bass', 'smallmouth-bass', 'tigerfish', 'mozambique-tilapia', 'banded-tilapia', 'smallmouth-yellowfish', 'largescale-yellowfish'] },

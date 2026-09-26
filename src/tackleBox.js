@@ -11,7 +11,8 @@ export function createTackleBox({ container, save, onSaveChanged }) {
       const equipped = equippedId === item.id;
       const label = owned ? (equipped ? 'In tackle box' : 'Use') : `Buy (${item.cost})`;
       const disabled = (!owned && save.credits < item.cost) || equipped;
-      const spec = item.action ? `<small class="shop-spec">${item.action} action · ${item.power} power</small>` : '';
+      const spec = item.action ? `<small class="shop-spec">${item.action} action · ${item.power} power</small>`
+        : item.note ? `<small class="shop-spec shop-note">${item.note}</small>` : '';
       return `<div class="shop-row">
         <span>${item.name}${spec}</span>
         <button data-kind="${kind}" data-id="${item.id}" ${disabled ? 'disabled' : ''}>${label}</button>

@@ -19,7 +19,7 @@ const BANK_NAMES = {
 };
 const BAIT_PHRASE = {
   'bread-bait': 'bread', worm: 'worms', mielies: 'mielies', 'chicken-liver': 'chicken liver',
-  'frog-bait': 'a platanna', spinner: 'a spinnerbait', 'soft-plastic': 'a soft plastic', 'spoon-lure': 'a spoon',
+  'frog-bait': 'a platanna', mieliebom: 'a mieliebom', spinner: 'a spinnerbait', 'soft-plastic': 'a soft plastic', 'spoon-lure': 'a spoon',
 };
 const TIME_PHRASE = {
   morning: 'first light', midMorning: 'mid-morning', midday: 'midday', afternoon: 'the afternoon',
@@ -37,6 +37,7 @@ const SPOTS = [
 export const LOCAL_TIPS = {
   hartbeespoort: [
     'Harties carp love mielies — build a bed of mielies and put one on the hook.',
+    'A mieliebom packs its own feed round the hook — cast it to the same spot and let the carp find it.',
     'Early mornings and late evenings are the Harties windows. Midday in the sun is hard going.',
     'Bass hide under the hyacinth mats — work a spinnerbait along the edges.',
     'Kurper here take worms best, fished close in.',
@@ -47,6 +48,7 @@ export const LOCAL_TIPS = {
     'The Vaal is a carp and yellowfish nursery — plenty of bites, mostly small fish. Mielies on the bottom keep them coming.',
     'Smallmouth yellowfish fight way above their weight. Ease off and let them run.',
     'Mudfish graze the margins — bread or mielies close to the bank.',
+    'Vaal feeder anglers swear by a mieliebom: yellows and carp crowd onto the groundbait.',
     'Most Vaal anglers put every fish back. The big ones start as the small ones you release.',
     'Smallmouth bass like cooler water and the drowned trees — try a spinner when it turns cold.',
     'Barbel come up into the shallows at dusk — worms or chicken liver.',

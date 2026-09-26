@@ -133,6 +133,7 @@ function startGame(locationId, startTimeOfDay) {
   let activeReel = getGearById(REELS, save.equippedReelId) || REELS[0];
   let activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
   let activeLureId = save.equippedLureId || LURES[0].id;
+  function currentLure() { return getGearById(LURES, activeLureId) || LURES[0]; }
 
   const casting = createCasting({
     scene, camera, domElement: renderer.domElement,
@@ -144,7 +145,15 @@ function startGame(locationId, startTimeOfDay) {
     onWake: (point, size = 1) => splashEffect.ripple(point, size),
     getLureKind: () => (getGearById(LURES, activeLureId) || LURES[0]).kind,
     // Reel and line add launch speed on top of what the rod itself can throw.
-    getCastMultiplier: () => (activeReel.castMultiplier || 1) * (activeLine.castMultiplier || 1),
+    // A heavy feeder on a light rod can't be thrown at full speed -- the
+    // blank folds under the weight instead of flicking it out.
+    getCastMultiplier: () => (activeReel.castMultiplier || 1) * (activeLine.castMultiplier || 1)
+      * (currentLure().heavy && activeRod.power === 'light' ? 0.72 : 1),
+    getCastDrag: () => currentLure().castDrag ?? null,
+    // A mieliebom breaks down where it lands: a feeding spot round the hook.
+    onLanded: (point, inWater) => {
+      if (inWater && currentLure().groundbait) chumSystem.spawn(point, 'groundbait');
+    },
     // Touch screens always aim through the screen centre, like mouse-look.
     isLookLocked: () => touchMode || playerController.isLocked(),
   });
@@ -270,7 +279,7 @@ function startGame(locationId, startTimeOfDay) {
     save.credits -= CHUM_COST;
     saveSave(save);
     chumSystem.spawn(target);
-    hud.showToast('Breadcrumbs thrown — fish will gather here');
+    hud.showToast('Breadcrumbs thrown — fish will find it in a few seconds and stay while it lasts');
   }
 
   // Everything that used to be keyboard-only, as buttons on screen too.
@@ -365,7 +374,13 @@ function startGame(locationId, startTimeOfDay) {
           count: entry.count,
           locationName: location.name,
           timeLabel: phase.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()),
+          lockMs: 1500, // time to read the card before "Keep fishing" works
+          onClose: () => touchControls?.setRodEnabled(true),
         });
+        // The thumb is usually still on the rod button when the fish comes
+        // in: switch it off so it can't cast or dismiss the card by accident.
+        // (After the card opens, so replacing an old card can't re-enable it.)
+        touchControls?.setRodEnabled(false);
         catchReveal.spawn(species.id, casting.bobberPosition);
         casting.resetToIdle();
         bitingSpecies = null;
@@ -398,14 +413,14 @@ function startGame(locationId, startTimeOfDay) {
     const state = environment.getState();
     const habitat = casting.getBobberHabitat();
     const lureKind = (getGearById(LURES, activeLureId) || LURES[0]).kind;
-    const chumMultiplier = chumSystem.multiplierAt(casting.bobberPosition);
+    const chumBoost = chumSystem.boostAt(casting.bobberPosition);
     const waitElapsed = castState.waitElapsed || 0;
     // Ramps from 1x up to a steep 41x as the wait nears the guarantee, so a
     // bite becomes very likely well before the deadline without landing at a
     // predictable moment every time.
     const urgency = 1 + Math.pow(Math.min(1, waitElapsed / BITE_GUARANTEE_SECONDS), 4) * 40;
-    const biteChanceMultiplier = (twitchBoostTimer > 0 ? 1.8 : 1) * chumMultiplier * urgency;
-    const conditions = { waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay, habitat, lureKind };
+    const biteChanceMultiplier = (twitchBoostTimer > 0 ? 1.8 : 1) * urgency;
+    const conditions = { waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay, habitat, lureKind, chumBoost };
     const bite = rollDamBite(localSpecies, location.catchShare, { ...conditions, deltaSeconds: delta, biteChanceMultiplier });
     if (bite) {
       startBite(bite);
@@ -467,7 +482,7 @@ function startGame(locationId, startTimeOfDay) {
       water.setAtmosphere(atmos, envState.windSpeed, windUniforms.uWindDir.value);
       updateWater(waterMesh, elapsed);
       post.setLook(atmos, elapsed, location.skyWarmth);
-      updateFishSwarm(fishSwarm, elapsed, (point) => splashEffect.spawn(point, 0.8));
+      updateFishSwarm(fishSwarm, elapsed, (point) => splashEffect.spawn(point, 0.8), chumSystem.attractors(), delta);
       catchReveal.update(delta);
       splashEffect.update(delta);
       chumSystem.update(delta, elapsed);

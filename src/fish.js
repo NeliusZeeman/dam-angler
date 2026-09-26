@@ -1,6 +1,11 @@
+import { TIME_OF_DAY_PHASES } from './environment.js';
+
 // Species, timing, rarity and bite-feel are grounded in real South African
-// freshwater angling: dawn/dusk are the prime windows for most species,
-// barbel (catfish) and tigerfish favor dusk into full dark, and each fish's
+// freshwater angling and fish-behaviour studies. Each fish's `activity` is
+// how hard it feeds through the day, one value per time of day:
+//   [morning, midMorning, midday, afternoon, sunset, lateTwilight, night]
+// 1 = peak feeding, ~0.1 = almost off the feed. Carp and bass peak at dawn
+// and dusk, barbel at night, kurper and yellowfish by day. Each fish's
 // `bite` profile drives how the line behaves and fights once hooked.
 export const FISH_SPECIES = [
   {
@@ -17,7 +22,8 @@ export const FISH_SPECIES = [
     // Common warm-water grazer, South Africa's classic "bream" — bites
     // readily through the day, but still needs the right bait.
     aggressiveness: 0.55,
-    activeTimes: ['morning', 'midMorning', 'midday', 'afternoon'],
+    // Mainly diurnal; feeds through the warm day, quiet after dark.
+    activity: [0.7, 1, 0.9, 1, 0.6, 0.2, 0.1],
     bite: { speed: 'fast', style: 'nibble', label: 'Quick nibbles' },
     // Grazes the warm, sun-lit margins -- a shallow-water fish.
     habitat: { shallow: true },
@@ -35,7 +41,8 @@ export const FISH_SPECIES = [
     // Widespread river/dam species, smaller and a touch more skittish than
     // its Mozambique cousin, but just as willing to bite.
     aggressiveness: 0.5,
-    activeTimes: ['morning', 'midMorning', 'afternoon'],
+    // Diurnal like its cousin; a touch shyer in the midday glare.
+    activity: [0.7, 1, 0.8, 1, 0.5, 0.15, 0.05],
     bite: { speed: 'fast', style: 'nibble', label: 'Darting little taps' },
     habitat: { shallow: true },
   },
@@ -52,7 +59,8 @@ export const FISH_SPECIES = [
     aggressiveness: 0.32,
     // Opportunistic bottom feeder — feeds from first light through the
     // morning and again from the afternoon into sunset.
-    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset'],
+    // Dawn and dusk peaks, feeds confidently at night, slow in the midday heat.
+    activity: [1, 0.7, 0.35, 0.7, 1, 0.9, 0.8],
     bite: { speed: 'slow', style: 'steady', label: 'A long, steady pull' },
     // Roams the whole dam -- open bottom as much as cover -- so no habitat
     // penalty anywhere (forum reports: most bank anglers' catch is carp).
@@ -70,7 +78,8 @@ export const FISH_SPECIES = [
     // The prized big-scaled carp variant — cautious, and a rare hookup, but
     // a genuinely heavy fish when it happens.
     aggressiveness: 0.16,
-    activeTimes: ['afternoon', 'sunset'],
+    // Big, wary carp: most at home from dusk through the night.
+    activity: [0.9, 0.5, 0.25, 0.6, 1, 1, 0.9],
     bite: { speed: 'slow', style: 'heavy', label: 'Slow, immovable weight' },
     // Big, wary, and holds in the deepest water it can find.
     habitat: { deep: true },
@@ -87,7 +96,8 @@ export const FISH_SPECIES = [
     aggressiveness: 0.22,
     // Dawn/dusk ambush predator, per the "early morning and late afternoon"
     // research finding.
-    activeTimes: ['morning', 'sunset', 'lateTwilight'],
+    // Crepuscular: dawn and dusk peaks, deep and slow at midday, some night feeding.
+    activity: [1, 0.6, 0.3, 0.6, 1, 0.8, 0.45],
     bite: { speed: 'fast', style: 'aggressive', label: 'Aggressive strike!' },
     // The classic ambush predator -- lives in lily pads, timber and docks.
     habitat: { structure: true },
@@ -104,7 +114,8 @@ export const FISH_SPECIES = [
     // Less common in SA (mostly cooler Western/Eastern Cape streams and
     // dams) and a famously fierce pound-for-pound fighter.
     aggressiveness: 0.14,
-    activeTimes: ['morning', 'lateTwilight'],
+    // Low-light hunter: dawn/dusk 'golden hours', feeds under a moon.
+    activity: [1, 0.55, 0.25, 0.55, 1, 0.75, 0.4],
     bite: { speed: 'fast', style: 'aggressive', label: 'Explosive strike!' },
     // Hides in submerged timber -- the Vaal Dam "unicorn" in the drowned forest.
     habitat: { structure: true },
@@ -121,7 +132,8 @@ export const FISH_SPECIES = [
     // "Try evenings or overcast days, when they patrol the margins" — rare
     // bite, but a big, heavy fish when it happens.
     aggressiveness: 0.1,
-    activeTimes: ['lateTwilight', 'night'],
+    // Mostly nocturnal/crepuscular, but will feed by day in murky water.
+    activity: [0.4, 0.2, 0.15, 0.25, 0.6, 1, 1],
     bite: { speed: 'slow', style: 'heavy', label: 'A heavy, dogged pull' },
     // Bottom-dwelling barbel -- holds in the deepest water it can find.
     habitat: { deep: true },
@@ -140,7 +152,8 @@ export const FISH_SPECIES = [
     aggressiveness: 0.08,
     // Jozini guides: they hunt all day, best early and from late afternoon
     // into dusk; only really switch off in the heat of midday and at night.
-    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset', 'lateTwilight'],
+    // Visual daylight hunter: best early and late, off the feed at night.
+    activity: [1, 0.8, 0.4, 0.85, 1, 0.5, 0.1],
     requiresWireTrace: true,
     bite: { speed: 'fast', style: 'aggressive', label: 'Violent, thrashing strike!' },
     // Shoals chase baitfish over open water and along the drop-offs alike.
@@ -160,7 +173,8 @@ export const FISH_SPECIES = [
     lureAffinity: { spinner: 0.5 },
     baseValuePerKg: 16,
     aggressiveness: 0.4,
-    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset'],
+    // Vaal River telemetry: active by day, inactive at night.
+    activity: [0.8, 1, 0.8, 1, 0.8, 0.35, 0.15],
     // Known for a hard, fast fight well above its weight.
     bite: { speed: 'fast', style: 'aggressive', label: 'A sharp tug and a hard run!' },
     habitat: {},
@@ -179,7 +193,8 @@ export const FISH_SPECIES = [
     lureAffinity: { spinner: 0.6, 'spoon-lure': 0.6 },
     baseValuePerKg: 18,
     aggressiveness: 0.3,
-    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset'],
+    // Daytime forager on insects, algae and small fish.
+    activity: [0.9, 1, 0.7, 1, 0.9, 0.35, 0.15],
     bite: { speed: 'fast', style: 'aggressive', label: 'A slam and a powerful run!' },
     // Holds around rocks, drop-offs and drowned timber.
     habitat: { structure: true },
@@ -196,13 +211,51 @@ export const FISH_SPECIES = [
     preferredLureIds: ['mielies', 'bread-bait', 'worm'],
     baseValuePerKg: 6,
     aggressiveness: 0.35,
-    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset'],
+    // Bottom grazer on algae and detritus -- feeds steadily, day and night.
+    activity: [0.8, 0.9, 0.7, 0.9, 0.8, 0.5, 0.4],
     // Sucker-mouthed grazer: fiddly little taps, then a dogged tug.
     bite: { speed: 'slow', style: 'nibble', label: 'Soft, fiddly taps' },
     // Grazes the silty bottom in the shallows and margins.
     habitat: { shallow: true },
   },
 ];
+
+// The times a fish counts as "on the feed" (used by tips and the HUD).
+const ACTIVE_THRESHOLD = 0.75;
+for (const species of FISH_SPECIES) {
+  species.activeTimes = TIME_OF_DAY_PHASES.filter((_, i) => species.activity[i] >= ACTIVE_THRESHOLD);
+}
+
+// How strongly loose feed (breadcrumbs, groundbait) pulls each fish in, 0..1.
+// Grazers and bottom feeders come straight to it; barbel scavenge it; bass
+// and tigers only turn up for the small fish the feed attracts.
+const CHUM_AFFINITY = {
+  'common-carp': 1, 'mirror-carp': 0.9, 'mozambique-tilapia': 1, 'banded-tilapia': 1,
+  mudfish: 1, 'smallmouth-yellowfish': 0.8, 'largescale-yellowfish': 0.7,
+  catfish: 0.5, 'largemouth-bass': 0.25, 'smallmouth-bass': 0.25, tigerfish: 0.3,
+};
+// Mieliebom (a groundbait feeder packed with mielie-meal) is a classic SA
+// carp method; yellowfish and mudfish love it too, kurper pick at it.
+const MIELIEBOM_AFFINITY = {
+  'common-carp': 1.3, 'mirror-carp': 1.3, 'smallmouth-yellowfish': 1.1, 'largescale-yellowfish': 0.9,
+  mudfish: 1.1, 'mozambique-tilapia': 0.6, 'banded-tilapia': 0.6,
+};
+for (const species of FISH_SPECIES) {
+  species.chumAffinity = CHUM_AFFINITY[species.id] ?? 0.5;
+  if (MIELIEBOM_AFFINITY[species.id]) {
+    species.preferredLureIds.push('mieliebom');
+    species.lureAffinity = { ...(species.lureAffinity || {}), mieliebom: MIELIEBOM_AFFINITY[species.id] };
+  }
+}
+
+// How hard a species is feeding at this time of day, 0..1 (1 if unknown).
+export function activityAt(species, timeOfDay) {
+  if (timeOfDay === null || timeOfDay === undefined) return 1;
+  const i = TIME_OF_DAY_PHASES.indexOf(timeOfDay);
+  if (i < 0) return 1;
+  if (species.activity) return species.activity[i];
+  return species.activeTimes?.includes(timeOfDay) ? 1 : 0.25;
+}
 
 export function randomWeightFor(species) {
   return species.minWeightKg + Math.random() * (species.maxWeightKg - species.minWeightKg);
@@ -253,8 +306,7 @@ export function rollForBite({ species, waterTempC, equippedLureId, deltaSeconds,
   const lureMatch = species.preferredLureIds.includes(equippedLureId);
   const lureMultiplier = lureMatch ? 1.0 : 0.15;
 
-  const timeMatch = timeOfDay === null || !species.activeTimes || species.activeTimes.includes(timeOfDay);
-  const timeMultiplier = timeMatch ? 1.0 : 0.25;
+  const timeMultiplier = activityAt(species, timeOfDay);
 
   const habitatMultiplier = habitat ? getHabitatMultiplier(species, { ...habitat, lureKind }) : 1;
 
@@ -272,8 +324,7 @@ export function suitability(species, { waterTempC, equippedLureId, timeOfDay = n
   const lureMultiplier = species.preferredLureIds.includes(equippedLureId)
     ? (species.lureAffinity?.[equippedLureId] ?? 1.0)
     : 0.15;
-  const timeMatch = timeOfDay === null || !species.activeTimes || species.activeTimes.includes(timeOfDay);
-  const timeMultiplier = timeMatch ? 1.0 : 0.25;
+  const timeMultiplier = activityAt(species, timeOfDay);
   const habitatMultiplier = habitat ? getHabitatMultiplier(species, { ...habitat, lureKind }) : 1;
   return lureMultiplier * timeMultiplier * habitatMultiplier;
 }
@@ -282,11 +333,14 @@ export function suitability(species, { waterTempC, equippedLureId, timeOfDay = n
 // makes up there (from forum and venue reports). A fish's pull on your line
 // is its share of the dam's population times how well your bait, the time
 // and the spot suit it. Without a share table every species counts evenly,
-// scaled by how readily it bites.
-export function catchWeights(speciesList, catchShare, opts) {
+// scaled by how readily it bites. `chumBoost` (from feed.js) is the extra
+// pull of loose feed where the line sits; each fish feels it by its
+// chumAffinity, so breadcrumbs bring carp and kurper, not tigerfish.
+export function catchWeights(speciesList, catchShare, { chumBoost = 0, ...opts } = {}) {
   return speciesList.map((species) => {
     const share = catchShare ? (catchShare[species.id] ?? 0) : species.aggressiveness;
-    return share * suitability(species, opts);
+    const feed = 1 + chumBoost * (species.chumAffinity ?? 0.5);
+    return share * suitability(species, opts) * feed;
   });
 }
 
@@ -308,6 +362,7 @@ export const DAM_BITE_RATE = 0.035;
 // fish? Every species gets a fair shot in proportion to its weight -- no
 // list-order advantage. Returns the species or null.
 export function rollDamBite(speciesList, catchShare, { deltaSeconds, biteChanceMultiplier = 1, ...opts }) {
+  // `opts.chumBoost` raises the weights, and so the overall bite rate too.
   const weights = catchWeights(speciesList, catchShare, opts);
   const shareTotal = catchShare
     ? speciesList.reduce((sum, s) => sum + (catchShare[s.id] ?? 0), 0)

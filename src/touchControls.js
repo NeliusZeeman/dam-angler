@@ -65,8 +65,10 @@ export function createTouchControls({ container, domElement, player, casting }) 
 
   // --- Rod button ----------------------------------------------------------
   let rodId = null;
+  let rodEnabled = true;
   rodBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    if (!rodEnabled) return;
     rodId = e.pointerId;
     try { rodBtn.setPointerCapture(e.pointerId); } catch { /* keeps working without capture */ }
     rodBtn.classList.add('pressed');
@@ -115,6 +117,7 @@ export function createTouchControls({ container, domElement, player, casting }) 
   };
   let lastPhase = null;
   function update() {
+    if (!rodEnabled) return;
     const phase = casting.getState().phase;
     if (phase === lastPhase) return;
     lastPhase = phase;
@@ -126,5 +129,20 @@ export function createTouchControls({ container, domElement, player, casting }) 
 
   function setVisible(v) { root.classList.toggle('hidden', !v); }
 
-  return { update, setVisible };
+  // Off while a catch card is up: lets go of any hold, ignores taps, and
+  // says why. Back on when the card closes.
+  function setRodEnabled(on) {
+    rodEnabled = on;
+    rodBtn.disabled = !on;
+    rodBtn.classList.toggle('off', !on);
+    if (!on) {
+      if (rodId !== null) { rodId = null; rodBtn.classList.remove('pressed'); casting.pressEnd(); }
+      rodMain.textContent = 'Landed!';
+      rodSub.textContent = 'read your catch';
+    } else {
+      lastPhase = null; // relabel on the next update
+    }
+  }
+
+  return { update, setVisible, setRodEnabled };
 }

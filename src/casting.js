@@ -29,7 +29,8 @@ const FLOAT_REST = 0.005; // black band sits right on the waterline
 const FLOAT_K = 110;
 const FLOAT_DAMP = 5;
 
-export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, dam, onSplash, onWake, getLureKind = () => 'bait', getCastMultiplier = () => 1, isLookLocked = () => false }) {
+export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, dam, onSplash, onWake, getLureKind = () => 'bait', getCastMultiplier = () => 1, isLookLocked = () => false,
+  getCastDrag = () => null, onLanded = null }) {
   const bobber = createFloatMesh();
   bobber.visible = false;
   scene.add(bobber);
@@ -188,7 +189,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       from: rodTipWorld,
       dirX: castDir.x, dirZ: castDir.z,
       speed: launchSpeed(getRod(), castPower, getCastMultiplier()),
-      drag: DRAG[kind] ?? DRAG.bait,
+      // A heavy rig (mieliebom feeder) has its own, lower drag.
+      drag: getCastDrag() ?? DRAG[kind] ?? DRAG.bait,
       wind: { x: lastWind.windDirX * lastWind.windSpeed * 0.35, z: lastWind.windDirZ * lastWind.windSpeed * 0.35 },
       surfaceAt: surfaceHeight,
     });
@@ -423,12 +425,14 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
         restPosition.copy(bobber.position);
         twitchOffset.set(0, 0, 0);
         waitTimer = 0;
-        if (isPointInWater(bobber.position)) {
+        const landedInWater = isPointInWater(bobber.position);
+        if (landedInWater) {
           // Plops in: dives under, then bobs back up and settles.
           floatY = 0;
           floatVy = -1.0 - Math.min(0.8, launchFrom.distanceTo(launchTarget) * 0.02);
           if (onSplash) onSplash(bobber.position, 0.65);
         }
+        if (onLanded) onLanded(bobber.position.clone(), landedInWater);
       }
     }
 

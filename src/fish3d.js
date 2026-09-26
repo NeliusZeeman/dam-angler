@@ -1,6 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { fishSkinTexture, finRayTexture } from './gfx/pixelTextures.js';
 import { mergeGeometries } from './gfx/terrain.js';
+import { FISH_SPECIES } from './fish.js';
 
 // Each species: size, body proportions, fin layout and a skin recipe that
 // fishSkinTexture paints pixel by pixel (back/belly colours, scale pattern,
@@ -406,8 +407,13 @@ export function createFishSwarm(scene, speciesIds, count, dam) {
     const cx = dam.spawn.x + (Math.random() - 0.5) * 90;
     const cz = dam.shoreZ(cx) + radius + 3 + Math.pow(Math.random(), 1.4) * 60;
     const angle = Math.random() * Math.PI * 2;
+    mesh.userData.speciesId = speciesId;
+    mesh.userData.homeCenter = { x: cx, z: cz };
+    mesh.userData.homeRadius = radius;
     mesh.userData.orbitCenter = { x: cx, z: cz };
     mesh.userData.orbitRadius = radius;
+    // Where this fish would sit on a feeding spot, so a shoal spreads out.
+    mesh.userData.feedOffset = { x: (Math.random() - 0.5) * 2.2, z: (Math.random() - 0.5) * 2.2 };
     mesh.userData.orbitAngle = angle;
     mesh.userData.orbitSpeed = 0.06 + Math.random() * 0.1;
     // Shallow enough to be seen through the water surface, but deep enough
@@ -427,8 +433,32 @@ export function createFishSwarm(scene, speciesIds, count, dam) {
 }
 
 // onBreach(position) fires as a fish leaves the water and again as it
-// drops back in, so jumps throw up a splash.
-export function updateFishSwarm(fishes, elapsedSeconds, onBreach = null) {
+// drops back in, so jumps throw up a splash. `attractors` are feeding spots
+// ({x, z, strength}): fish that like the feed swim over, circle tight over
+// it while it lasts, and wander back home as it runs out.
+const FEED_REACH = 45; // metres a fish will travel to a feeding spot
+export function updateFishSwarm(fishes, elapsedSeconds, onBreach = null, attractors = [], deltaSeconds = 0.016) {
+  for (const fish of fishes) {
+    const ud = fish.userData;
+    if (ud.homeCenter) {
+      const affinity = FISH_SPECIES.find((s) => s.id === ud.speciesId)?.chumAffinity ?? 0.5;
+      let best = null, bestPull = 0;
+      for (const a of attractors) {
+        const d = Math.hypot(a.x - ud.homeCenter.x, a.z - ud.homeCenter.z);
+        const pull = a.strength * affinity * Math.max(0, 1 - d / FEED_REACH);
+        if (pull > bestPull) { bestPull = pull; best = a; }
+      }
+      const drawn = best && bestPull > 0.12;
+      const tx = drawn ? best.x + ud.feedOffset.x : ud.homeCenter.x;
+      const tz = drawn ? best.z + ud.feedOffset.z : ud.homeCenter.z;
+      const tr = drawn ? 0.9 + 1.2 * (1 - bestPull) : ud.homeRadius;
+      // Swim there at a steady cruise rather than teleporting.
+      const ease = 1 - Math.exp(-deltaSeconds * 0.35);
+      ud.orbitCenter.x += (tx - ud.orbitCenter.x) * ease;
+      ud.orbitCenter.z += (tz - ud.orbitCenter.z) * ease;
+      ud.orbitRadius += (tr - ud.orbitRadius) * ease;
+    }
+  }
   for (const fish of fishes) {
     const { orbitRadius, orbitSpeed, depth, jumpPeriod, jumpPhase } = fish.userData;
     const angle = fish.userData.orbitAngle + elapsedSeconds * orbitSpeed;
