@@ -26,12 +26,17 @@ const SETTINGS = [
     hint: 'How fast the view turns when you move the mouse (and Q/E).',
     options: [{ value: 0.6, label: 'Slow' }, { value: 1, label: 'Normal' }, { value: 1.5, label: 'Fast' }],
   },
+  {
+    key: 'volume', label: 'Sound',
+    hint: 'Wind, water, birds, the reel and the splash. Press M in the game to mute.',
+    options: [{ value: 0, label: 'Off' }, { value: 0.35, label: 'Low' }, { value: 0.7, label: 'Medium' }, { value: 1, label: 'High' }],
+  },
 ];
 
 // The title screen shown every time the game opens. Continue picks up the
 // last dam and time; New Game goes to the dam/time picker; the tackle box,
 // catch log and settings all work from here without starting a session.
-export function showMainMenu(container, { save, onContinue, onNewGame }) {
+export function showMainMenu(container, { save, onContinue, onNewGame, onSettingsChanged = () => {} }) {
   const overlay = document.createElement('div');
   overlay.className = 'main-menu';
   container.appendChild(overlay);
@@ -83,7 +88,7 @@ export function showMainMenu(container, { save, onContinue, onNewGame }) {
       <div class="mm-card">
         <h2 class="mm-heading">Settings</h2>
         ${rows}
-        <p class="mm-note">Settings apply the next time you start fishing.</p>
+        <p class="mm-note">Sound changes straight away; the rest apply the next time you start fishing.</p>
         <button class="mm-btn mm-back" data-go="home" type="button">Back</button>
       </div>`;
   }
@@ -96,6 +101,7 @@ export function showMainMenu(container, { save, onContinue, onNewGame }) {
       const setting = SETTINGS.find((s) => s.key === btn.dataset.key);
       save.settings[setting.key] = setting.options[Number(btn.dataset.opt)].value;
       saveSave(save);
+      onSettingsChanged(setting.key);
       render();
     }));
   }

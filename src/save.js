@@ -19,6 +19,7 @@ export const DEFAULT_SAVE = {
     quality: 'auto', // 'auto' (low on phones/small tablets) | 'high' | 'low'
     showHints: true, // the controls reminder along the top bar
     turnSpeed: 1, // multiplier on Q/E, edge-of-screen and right-drag turning
+    volume: 0.7, // 0 = sound off .. 1 = loud
   },
 };
 

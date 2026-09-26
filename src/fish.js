@@ -261,6 +261,23 @@ export function randomWeightFor(species) {
   return species.minWeightKg + Math.random() * (species.maxWeightKg - species.minWeightKg);
 }
 
+// The one that almost got away: about 1 bite in 300 is a trophy -- a fish
+// far bigger than the species normally runs (1.5-2.1x its usual maximum),
+// strong enough to break even the best line if you haul on it.
+export const TROPHY_CHANCE = 1 / 300;
+export function rollTrophy(rng = Math.random) {
+  return rng() < TROPHY_CHANCE;
+}
+export function trophyWeightFor(species, rng = Math.random) {
+  return species.maxWeightKg * (1.5 + rng() * 0.6);
+}
+
+// How big this fish is for its kind: 0 = smallest, 1 = the usual maximum,
+// above 1 = a trophy.
+export function sizeRatio(species, weightKg) {
+  return weightKg / species.maxWeightKg;
+}
+
 // Length from weight with the standard W = a * L^3 relation (grams,
 // centimetres). `a` is the species' condition factor: deep-bodied tilapia
 // weigh the most per centimetre, long lean barbel the least.

@@ -15,7 +15,7 @@ export function createHUD(container, { showHints = true, touch = false } = {}) {
     <span id="hud-wind"></span>
     <span id="hud-gear"></span>
     <span id="hud-status"></span>
-    ${showHints ? '<span class="hud-hint">Mouse: look &amp; aim · WASD walk (Shift run) · hold click for power, release to cast · click: twitch · hold click: reel/fight · Esc: menu</span>' : ''}
+    ${showHints ? '<span class="hud-hint">Mouse: look &amp; aim · WASD walk (Shift run) · hold click for power, release to cast · click: twitch · hold click: reel/fight · M: mute · Esc: menu</span>' : ''}
   `;
   container.appendChild(bar);
 
@@ -108,7 +108,8 @@ export function createHUD(container, { showHints = true, touch = false } = {}) {
 export function renderCatchLog(container, catchLog, { species = FISH_SPECIES, locationName = null } = {}) {
   const rows = species.map((sp) => {
     const entry = catchLog[sp.id] || { count: 0, bestWeightKg: 0 };
-    return `<div class="shop-row"><span>${sp.name}</span><span>${entry.count} caught, best ${entry.bestWeightKg.toFixed(2)}kg</span></div>`;
+    const trophies = entry.trophies ? ` · ${entry.trophies} ${entry.trophies > 1 ? "trophies" : "trophy"}` : '';
+    return `<div class="shop-row"><span>${sp.name}</span><span>${entry.count} caught, best ${entry.bestWeightKg.toFixed(2)}kg${trophies}</span></div>`;
   }).join('');
   const title = locationName ? `Catch Log — ${locationName}` : 'Catch Log';
   container.innerHTML = `<button class="panel-close" data-close="log">Close</button><h3>${title}</h3>${rows}`;
@@ -127,11 +128,11 @@ let closeActiveCatchCard = null;
 
 // `lockMs`: the close button (and keys) stay inactive this long so a finger
 // or key still held from the fight can't dismiss the card unread.
-export function showCatchCard(container, { species, weightKg, lengthCm, payout, previousBestKg, count, locationName, timeLabel, lockMs = 0, onClose = null }) {
+export function showCatchCard(container, { species, weightKg, lengthCm, payout, previousBestKg, count, locationName, timeLabel, trophy = false, lockMs = 0, onClose = null }) {
   closeActiveCatchCard?.();
   const firstEver = count === 1;
   const personalBest = !firstEver && weightKg > previousBestKg;
-  const badge = firstEver ? 'First one!' : personalBest ? 'New personal best!' : '';
+  const badge = trophy ? 'TROPHY — the big one! (x3 value)' : firstEver ? 'First one!' : personalBest ? 'New personal best!' : '';
 
   const wrap = document.createElement('div');
   wrap.className = 'catch-card-wrap';
@@ -143,7 +144,7 @@ export function showCatchCard(container, { species, weightKg, lengthCm, payout, 
           <strong>${species.name}</strong>
           <small>Add a picture as assets/fish/${species.id}.png</small>
         </div>
-        ${badge ? `<span class="catch-badge">${badge}</span>` : ''}
+        ${badge ? `<span class="catch-badge${trophy ? ' trophy' : ''}">${badge}</span>` : ''}
       </div>
       <div class="catch-body">
         <p class="catch-kicker">Landed · <span class="catch-rarity" data-rarity="${species.rarity}">${RARITY_LABEL[species.rarity] || species.rarity}</span></p>

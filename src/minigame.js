@@ -29,6 +29,7 @@ export function createMinigame() {
   // `canLand()`: is the fish actually at your feet? Winning the line isn't a
   // catch on its own -- the fish has to be brought in to the bank or stand.
   let landingBlocked = false;
+  let hookStrain = 0; // seconds of hauling in the red
   // `stamina` stretches the fight: 1 = a quick kurper, ~2-3 = a big carp or
   // barbel that takes a long time to tire (see fightMotion.fightStamina).
   function start({ species, weightKg, rod, line, hook = null, reel = null, onSuccess, onFailure, canLand = () => true, stamina = 1 }) {
@@ -41,6 +42,7 @@ export function createMinigame() {
     holding = false;
     airborne = 0;
     strainedInAir = 0;
+    hookStrain = 0;
     fishPulling = false;
     context = { species, weightKg, rod, line, hook, reel, onSuccess, onFailure, canLand, stamina: Math.max(0.5, stamina) };
   }
@@ -54,6 +56,7 @@ export function createMinigame() {
   // it turns toward you (or stops) and you don't reel does the line go loose.
   let fishPulling = false;
   const DRAG_TENSION = 0.28; // how tight the line sits while a fish runs against the drag
+  const DRAG_TIRE = 0.45; // how fast a run against the drag tires it, vs. reeling
   function setFishPulling(value) {
     fishPulling = value;
   }
@@ -108,7 +111,9 @@ export function createMinigame() {
     } else if (fishPulling) {
       // Line peeling off against the drag: tight, but not climbing.
       tension += (DRAG_TENSION * lineRelief - tension) * Math.min(1, deltaSeconds * 2);
-      progress = Math.max(0, progress - (PROGRESS_LOSS_RATE / context.stamina) * deltaSeconds);
+      // Every run against the drag wears it down -- how a big fish that
+      // would break the line if you hauled on it is landed with patience.
+      progress += (PROGRESS_RATE * DRAG_TIRE * style.progressMul / context.stamina) * deltaSeconds;
     } else {
       tension -= SLACK_RATE * deltaSeconds;
       // It recovers while you rest -- at the same stamina-scaled pace, so a
@@ -132,8 +137,14 @@ export function createMinigame() {
     const hookKg = (hook && hook.strengthKg) || 6;
     // Only when you're really hauling (tension bar in the red): play a big
     // fish gently on a small hook and you can still land it.
-    if (tension > 0.72 && pullKg > hookKg) {
-      const straightenPerSecond = Math.min(0.9, 0.6 * (pullKg / hookKg - 0.8));
+    // Only while you're winding in the red -- a lunge you give line to
+    // doesn't open it.
+    // A fish doesn't haul its whole weight on the hook: about half of it.
+    const hookLoadKg = weightKg * style.load * 0.5;
+    // It takes sustained hauling in the red, not a brief touch of it.
+    hookStrain = holding && tension > 0.72 ? hookStrain + deltaSeconds : 0;
+    if (hookStrain > 0.45 && hookLoadKg > hookKg) {
+      const straightenPerSecond = Math.min(0.9, 0.5 * (hookLoadKg / hookKg - 0.8));
       if (Math.random() < straightenPerSecond * deltaSeconds) {
         active = false;
         onFailure('hook-straightened');

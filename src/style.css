@@ -357,3 +357,7 @@ body.touch .hud-distance { bottom: calc(84px + env(safe-area-inset-bottom)); }
 }
 .update-banner:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 body.touch .update-banner { top: calc(100px + env(safe-area-inset-top)); }
+
+/* Trophy catch: the big one. */
+.catch-badge.trophy { background: linear-gradient(90deg, #ffe07a, #ff5c5c); color: #1a0a10; font-size: 13px; box-shadow: 0 0 18px rgba(255, 200, 90, 0.7); }
+.catch-card:has(.catch-badge.trophy) { border-color: #ffcf7a; box-shadow: 0 0 40px rgba(255, 190, 80, 0.45), 0 24px 70px rgba(0,0,0,0.55); }

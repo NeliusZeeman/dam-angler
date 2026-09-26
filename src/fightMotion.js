@@ -1,3 +1,5 @@
+import { FISH_SPECIES } from './fish.js';
+
 // Where a hooked fish is, second by second, while you fight it -- pure
 // maths, no graphics, so it can be tested. casting.js moves the float and
 // line to it and main.js draws the fish when it breaks the surface.
@@ -41,9 +43,24 @@ export function fightStyleFor(speciesId) {
   return FIGHT_STYLES[speciesId] || DEFAULT_STYLE;
 }
 
-// How long a fish takes to tire: its species stamina, more for a big one.
+// How big a fish is for its kind (1 = the species' usual maximum).
+function sizeOf(speciesId, weightKg) {
+  const species = FISH_SPECIES.find((s) => s.id === speciesId);
+  return species ? weightKg / species.maxWeightKg : Math.min(1, weightKg / 6);
+}
+
+// How long a fish takes to tire: its species stamina, scaled by how big it
+// is for its kind -- a small one gives up quickly, a full-size one fights on,
+// a trophy (well past the usual maximum) seems never to tire.
 export function fightStamina(speciesId, weightKg = 1) {
-  return fightStyleFor(speciesId).stamina * (0.8 + Math.min(1, weightKg / 6) * 0.6);
+  const size = sizeOf(speciesId, weightKg);
+  return fightStyleFor(speciesId).stamina * (0.4 + 1.2 * Math.min(2.2, size));
+}
+
+// How hard a fish swims and resists the reel: 1 for an average fish of its
+// kind, less for a small one, much more for a big one or a trophy.
+export function fightStrength(speciesId, weightKg = 1) {
+  return 0.7 + 0.6 * Math.min(2.2, sizeOf(speciesId, weightKg));
 }
 
 const MIN_DISTANCE = 1.0; // reeled right in to the rod tip (as far as the water allows)
@@ -62,6 +79,9 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
   let jumpT = -1, jumpDur = 1, jumpH = 0;
   let depth = style.depth * 0.5;
   let speed = 0;
+  // How strong this particular fish is (see fightStrength): bigger fish
+  // run faster and give up line more grudgingly. Set once its weight is known.
+  let strength = 1;
 
   const state = {
     x, z, y: 0, depth, heading, speed: 0, jumping: false, jumpStarted: false, jumpLanded: false,
@@ -85,7 +105,7 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     runLeft -= dt;
     // Tiring: the further the fight goes, the weaker its runs.
     const tire = 1 - 0.55 * Math.min(1, progress);
-    const targetSpeed = style.runSpeed * tire * (running ? 1 : 0.35);
+    const targetSpeed = style.runSpeed * strength * tire * (running ? 1 : 0.35);
     speed += (targetSpeed - speed) * Math.min(1, dt * 4);
 
     // Swim, turning away from the bank when it runs out of water.
@@ -103,7 +123,8 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     const dx = nx - rod.x, dz = nz - rod.z;
     const dist = Math.hypot(dx, dz) || 1e-6;
     let newDist = dist;
-    if (holding) newDist = Math.max(MIN_DISTANCE, dist - reelSpeed * dt);
+    // A heavy fish gives up line more slowly against the reel.
+    if (holding) newDist = Math.max(MIN_DISTANCE, dist - (reelSpeed / (0.55 + 0.45 * strength)) * dt);
     newDist = Math.min(newDist, LINE_ON_SPOOL);
     if (newDist !== dist) {
       const cx = rod.x + (dx / dist) * newDist, cz = rod.z + (dz / dist) * newDist;
@@ -150,5 +171,5 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     return state;
   }
 
-  return { update, state };
+  return { update, state, setStrength: (s) => { strength = s; } };
 }

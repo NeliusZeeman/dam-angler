@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { createMinigame } from '../src/minigame.js';
-import { FISH_SPECIES } from '../src/fish.js';
+import { FISH_SPECIES, TROPHY_CHANCE, trophyWeightFor } from '../src/fish.js';
 import { RODS, LINES, HOOKS } from '../src/gear.js';
 import { fightStamina } from '../src/fightMotion.js';
 
@@ -153,24 +153,62 @@ const carp = FISH_SPECIES.find((f) => f.id === 'common-carp');
   const strong = flatOut({ rod: RODS.find((r) => r.id === 'rod-carp'), line: byId(LINES, 'line-jbraid-30'), hook: byId(HOOKS, 'hook-circle') });
   assert.ok((weak.landed || 0) === 0, `starter gear can't take a barbel flat-out (${JSON.stringify(weak)})`);
   assert.ok((strong.landed || 0) >= 95, `30lb J-Braid and a circle hook can (${JSON.stringify(strong)})`);
-  // A 6kg carp hauled hard on light line: the fine-wire size 10 opens up,
-  // a size-6 hair rig never does.
+  // A big carp hauled hard in the red on strong line (so the line isn't the
+  // weak link): the fine-wire size 10 opens up, a size-6 hair rig never does.
   const carp = FISH_SPECIES.find((s) => s.id === 'common-carp');
   const haul = (hookId) => {
     let opened = 0;
     for (let n = 0; n < 200; n++) {
       const mg = createMinigame();
       let result = null;
-      mg.start({ species: carp, weightKg: 6, rod: RODS[0], line: byId(LINES, 'line-starter'), hook: byId(HOOKS, hookId), onSuccess: () => { result = 'landed'; }, onFailure: (r) => { result = r; } });
+      mg.start({ species: carp, weightKg: 7.6, rod: RODS[0], line: byId(LINES, 'line-jbraid-30'), hook: byId(HOOKS, hookId), onSuccess: () => { result = 'landed'; }, onFailure: (r) => { result = r; } });
       mg.setHolding(true);
       for (let t = 0; t < 6 && !result; t += 0.05) mg.update(0.05);
       if (result === 'hook-straightened') opened++;
     }
     return opened;
   };
-  assert.ok(haul('hook-small') > 0, 'a size-10 fine-wire hook can open up on a 6kg carp');
-  assert.strictEqual(haul('hook-carp-hair'), 0, 'a size-6 hair rig never opens on a 6kg carp');
+  assert.ok(haul('hook-small') > 50, 'a size-10 fine-wire hook often opens on a big carp hauled in the red (~45%)');
+  assert.strictEqual(haul('hook-carp-hair'), 0, 'a size-6 hair rig never opens on it');
   console.log(`PASS: strong line and hooks hold (barbel flat-out: starter ${JSON.stringify(weak)}, J-Braid ${JSON.stringify(strong)})`);
+}
+
+{
+  // The big one: a 1-in-300 trophy snaps even 30lb braid if you haul on it,
+  // but played carefully -- reel between its runs, let it run against the
+  // drag -- it can be landed. And bigger fish fight longer on any gear.
+  const carp = FISH_SPECIES.find((s) => s.id === 'common-carp');
+  assert.ok(Math.abs(TROPHY_CHANCE - 1 / 300) < 1e-9, 'a trophy is about 1 bite in 300');
+  const trophyKg = trophyWeightFor(carp, () => 0.5);
+  assert.ok(trophyKg > carp.maxWeightKg * 1.5, `a trophy is far over the usual maximum (${trophyKg.toFixed(1)} kg)`);
+  const top = { rod: RODS.find((r) => r.id === 'rod-carp'), line: LINES.find((l) => l.id === 'line-jbraid-30'), hook: HOOKS.find((h) => h.id === 'hook-carp-hair') };
+  const fight = (weightKg, careful) => {
+    const counts = {};
+    let total = 0;
+    for (let n = 0; n < 100; n++) {
+      const mg = createMinigame();
+      let result = null;
+      mg.start({ species: carp, weightKg, ...top, stamina: fightStamina('common-carp', weightKg), onSuccess: () => { result = 'landed'; }, onFailure: (r) => { result = r; } });
+      let t = 0, run = 0, runOn = false;
+      for (; t < 600 && !result; t += 0.05) {
+        run -= 0.05;
+        if (run <= 0) { runOn = !runOn; run = runOn ? 1 + Math.random() * 2 : 1.5 + Math.random() * 3; }
+        const hold = careful ? (!runOn && mg.getState().tension < 0.68) : true;
+        mg.setFishPulling(runOn && !hold);
+        mg.setHolding(hold);
+        mg.update(0.05);
+      }
+      total += t;
+      counts[result] = (counts[result] || 0) + 1;
+    }
+    return { counts, avg: total / 100 };
+  };
+  const hauled = fight(trophyKg, false), played = fight(trophyKg, true);
+  assert.ok((hauled.counts.landed || 0) === 0, `hauling a trophy breaks even top gear (${JSON.stringify(hauled.counts)})`);
+  assert.ok((played.counts.landed || 0) >= 90, `playing it carefully lands it (${JSON.stringify(played.counts)})`);
+  const small = fight(1.2, true).avg, full = fight(7.8, true).avg;
+  assert.ok(full > small * 1.8 && played.avg > full * 1.5, `bigger fish fight longer (small ${small.toFixed(0)}s, full-size ${full.toFixed(0)}s, trophy ${played.avg.toFixed(0)}s)`);
+  console.log(`PASS: trophy carp breaks top gear when hauled, lands when played (${played.avg.toFixed(0)}s); small ${small.toFixed(0)}s vs full-size ${full.toFixed(0)}s`);
 }
 
 {

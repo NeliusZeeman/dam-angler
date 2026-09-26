@@ -623,6 +623,11 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     }
   }
 
+  // Once the fish's weight is known: how hard it swims and resists the reel.
+  function setFightStrength(strength) {
+    fightMotion?.setStrength(strength);
+  }
+
   // The hooked fish, for drawing it: where it is, which way it's heading,
   // and whether it's in the air.
   function getFightFish() {
@@ -768,7 +773,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     getPredictedLanding: (out) => computeLanding(aimPoint, phase === 'aiming' ? power : 0, out || new THREE.Vector3()),
     getBobberHabitat: () => habitatAt(bobber.position),
     isPointInWater,
-    pressStart, pressEnd, addMotion, getFightFish,
+    pressStart, pressEnd, addMotion, getFightFish, setFightStrength,
   };
 }
 

@@ -4,7 +4,7 @@ import { createWater, updateWater, createSplashEffect } from './water.js';
 import { createPostPipeline } from './gfx/post.js';
 import { windUniforms } from './gfx/wind.js';
 import { createEnvironment, TIME_OF_DAY_PHASES } from './environment.js';
-import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm } from './fish.js';
+import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm, rollTrophy, trophyWeightFor } from './fish.js';
 import { RODS, LINES, REELS, HOOKS, LURES, getGearById } from './gear.js';
 import { calculatePayout } from './economy.js';
 import { loadSave, saveSave } from './save.js';
@@ -12,7 +12,7 @@ import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
 import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble } from './ui.js';
 import { randomTip } from './tips.js';
-import { fightStamina } from './fightMotion.js';
+import { fightStamina, fightStrength } from './fightMotion.js';
 import { createTouchControls, isTouchDevice, isSmallOrMobileScreen } from './touchControls.js';
 import { createTackleBox } from './tackleBox.js';
 import { createFishSwarm, updateFishSwarm, createCatchReveal, createFishMesh, setFishSwim } from './fish3d.js';
@@ -25,6 +25,7 @@ import { seedFromString } from './gfx/noise.js';
 import { createChumSystem, CHUM_COST } from './chum.js';
 import { createPauseMenu } from './pauseMenu.js';
 import { startVersionWatch, reloadToLatest, assetTag } from './versionCheck.js';
+import { createAudio } from './audio.js';
 
 const appEl = document.getElementById('app');
 const save = loadSave();
@@ -61,8 +62,15 @@ function enterImmersive() {
   } catch { /* not supported (iPhone Safari) -- plays fine in the browser */ }
 }
 
+// Sound: all generated live (audio.js). Browsers only allow it after a tap,
+// click or key, so every gesture makes sure it's unlocked (phones can also
+// suspend it when the screen locks).
+const audio = createAudio({ volume: save.settings.volume ?? 0.7 });
+['pointerdown', 'touchend', 'keydown'].forEach((type) => document.addEventListener(type, () => audio.unlock(), { capture: true, passive: true }));
+
 function openMainMenu() {
   showMainMenu(appEl, {
+    onSettingsChanged: () => audio.setVolume(save.settings.volume ?? 0.7),
     save,
     onContinue: () => { enterImmersive(); startGame(save.locationId, save.startTimeOfDay || 'morning'); },
     onNewGame: () => showStartMenu(appEl, ({ locationId, timeOfDay }) => {
@@ -159,7 +167,11 @@ function startGame(locationId, startTimeOfDay) {
     rodTip: playerRod.tip,
     waterMesh,
     dam,
-    onSplash: (point, strength = 1) => splashEffect.spawn(point, strength),
+    onSplash: (point, strength = 1) => {
+      splashEffect.spawn(point, strength);
+      // 0.65 is the rig landing -- that gets its own plop (onLanded).
+      if (strength !== 0.65) audio.splash(strength * hearingFalloff(point));
+    },
     onWake: (point, size = 1) => splashEffect.ripple(point, size),
     getLureKind: () => (getGearById(LURES, activeLureId) || LURES[0]).kind,
     // Reel and line add launch speed on top of what the rod itself can throw.
@@ -170,6 +182,7 @@ function startGame(locationId, startTimeOfDay) {
     getCastDrag: () => currentLure().castDrag ?? null,
     // A mieliebom breaks down where it lands: a feeding spot round the hook.
     onLanded: (point, inWater) => {
+      if (inWater) audio.plop((currentLure().heavy ? 1.4 : 0.8) * hearingFalloff(point, 120));
       if (inWater && currentLure().groundbait) chumSystem.spawn(point, 'groundbait');
       // The distance counter shows how far that cast went for a moment.
       const me = playerController.getPosition();
@@ -256,6 +269,36 @@ function startGame(locationId, startTimeOfDay) {
     window.location.reload();
   }
 
+  // Sounds further off are quieter: 1 at your feet, fading out by `range` m.
+  function hearingFalloff(point, range = 70) {
+    const me = playerController.getPosition();
+    return Math.max(0, 1 - Math.hypot(point.x - me.x, point.z - me.z) / range);
+  }
+  // The cast whoosh fires the moment a wound-up cast is released.
+  let soundPhase = 'idle', soundPower = 0;
+  function updateSound(delta) {
+    const cs = casting.getState();
+    if (cs.phase === 'aiming') soundPower = cs.power;
+    if (soundPhase === 'aiming' && cs.phase === 'inAir') audio.cast(soundPower);
+    soundPhase = cs.phase;
+    const mg = minigame.getState();
+    const fish = casting.getFightFish();
+    const env = environment.getState();
+    audio.update(delta, {
+      active: !paused,
+      windSpeed: env.windSpeed,
+      timeOfDay: env.timeOfDay,
+      // Winding: reeling line in, fighting a fish you're gaining on, or
+      // working a lure back.
+      reelRate: cs.phase === 'reeling' ? 1
+        : mg.active && mg.holding && !fish?.takingLine ? 1
+          : cs.working ? 0.5 : 0,
+      // The drag screams while a fish strips line.
+      dragRate: mg.active && fish?.takingLine ? 1 : 0,
+      tension: mg.active ? mg.tension : 0,
+    });
+  }
+
   let paused = false;
   function setPaused(value) {
     paused = value;
@@ -305,6 +348,7 @@ function startGame(locationId, startTimeOfDay) {
     save.credits -= CHUM_COST;
     saveSave(save);
     chumSystem.spawn(target);
+    audio.splash(0.35 * hearingFalloff(target));
     hud.showToast('Breadcrumbs thrown — fish will find it in a few seconds and stay while it lasts');
   }
 
@@ -351,6 +395,15 @@ function startGame(locationId, startTimeOfDay) {
     if (e.code === 'KeyL') { changeFishingSpot(); }
     if (e.code === 'KeyF') { throwChum(); }
     if (e.code === 'KeyT') { showTip(); }
+    if (e.code === 'KeyM') {
+      // Quick mute: M toggles sound off and back to the last volume.
+      const on = (save.settings.volume ?? 0.7) > 0;
+      if (on) save.settings.lastVolume = save.settings.volume;
+      save.settings.volume = on ? 0 : (save.settings.lastVolume || 0.7);
+      saveSave(save);
+      audio.setVolume(save.settings.volume);
+      hud.showToast(on ? 'Sound off (M)' : 'Sound on (M)');
+    }
     if (e.code === 'Space') { minigame.setHolding(true); e.preventDefault(); }
   });
   window.addEventListener('keyup', (e) => {
@@ -380,11 +433,17 @@ function startGame(locationId, startTimeOfDay) {
       return;
     }
 
-    const weightKg = randomWeightFor(species);
+    // About 1 bite in 300 is the big one: a trophy far over the usual size.
+    const trophy = forceTrophy || rollTrophy();
+    forceTrophy = false;
+    const weightKg = trophy ? trophyWeightFor(species) : randomWeightFor(species);
+    if (trophy) hud.showToast('Something BIG is on! Don\'t horse it — ease off in the red and let it run.');
+    // Bigger fish run harder and give up line more slowly -- on any gear.
+    casting.setFightStrength(fightStrength(species.id, weightKg));
     showFightFish(species, weightKg);
     minigame.start({
       species, weightKg, rod: activeRod, line: activeLine, hook: activeHook, reel: activeReel,
-      stamina: fightStamina(species.id, weightKg), // carp and barbel fight long
+      stamina: fightStamina(species.id, weightKg), // big fish (and trophies) fight long
       // It's only a catch once it's at your feet: at the bank, or beside
       // the stand -- never while it's still out in open water.
       canLand: () => {
@@ -393,11 +452,14 @@ function startGame(locationId, startTimeOfDay) {
         return !!f && !f.jumping && Math.hypot(f.position.x - me.x, f.position.z - me.z) <= LAND_REACH;
       },
       onSuccess: () => {
-        const payout = calculatePayout({ species, weightKg, rod: activeRod, line: activeLine, hook: activeHook });
+        audio.landed();
+        // A trophy pays triple.
+        const payout = calculatePayout({ species, weightKg, rod: activeRod, line: activeLine, hook: activeHook }) * (trophy ? 3 : 1);
         save.credits += payout;
         const entry = save.catchLog[species.id] || { count: 0, bestWeightKg: 0 };
         const previousBestKg = entry.bestWeightKg;
         entry.count += 1;
+        if (trophy) entry.trophies = (entry.trophies || 0) + 1;
         entry.bestWeightKg = Math.max(entry.bestWeightKg, weightKg);
         save.catchLog[species.id] = entry;
         saveSave(save);
@@ -409,6 +471,7 @@ function startGame(locationId, startTimeOfDay) {
           count: entry.count,
           locationName: location.name,
           timeLabel: phase.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()),
+          trophy,
           lockMs: 1500, // time to read the card before "Keep fishing" works
           onClose: () => touchControls?.setRodEnabled(true),
         });
@@ -424,6 +487,7 @@ function startGame(locationId, startTimeOfDay) {
       onFailure: (reason) => {
         saveSave(save);
         hideFightFish();
+        if (reason === 'line-snapped' || reason === 'hook-straightened') audio.snap();
         hud.showToast({
           'threw-hook': 'It jumped and threw the hook! Ease off when a fish jumps.',
           'hook-straightened': `The hook straightened out — ${activeHook.name} is too light for a ${weightKg.toFixed(1)} kg fish. Try a stronger hook.`,
@@ -486,10 +550,14 @@ function startGame(locationId, startTimeOfDay) {
     }
   }
 
+  let forceTrophy = false; // dev hook: the next bite is a trophy
   function startBite(species) {
+    audio.bite();
     bitingSpecies = species;
-    casting.triggerBite(species.bite, species.id);
+    // The bite message first, so a trophy's "Something BIG" warning (shown
+    // as the fight starts) is the one left on screen.
     if (species.bite) hud.showToast(species.bite.label + '!');
+    casting.triggerBite(species.bite, species.id);
   }
 
   // The hooked fish itself: hidden in the murk while it's deep, seen as it
@@ -603,7 +671,10 @@ function startGame(locationId, startTimeOfDay) {
       water.setAtmosphere(atmos, envState.windSpeed, windUniforms.uWindDir.value);
       updateWater(waterMesh, elapsed);
       post.setLook(atmos, elapsed, location.skyWarmth);
-      updateFishSwarm(fishSwarm, elapsed, (point) => splashEffect.spawn(point, 0.8), chumSystem.attractors(), delta);
+      updateFishSwarm(fishSwarm, elapsed, (point) => {
+        splashEffect.spawn(point, 0.8);
+        audio.splash(0.5 * hearingFalloff(point));
+      }, chumSystem.attractors(), delta);
       catchReveal.update(delta);
       splashEffect.update(delta);
       chumSystem.update(delta, elapsed);
@@ -621,6 +692,7 @@ function startGame(locationId, startTimeOfDay) {
       touchControls?.update();
       updateFightFish(elapsed);
       tickLandingHint(delta);
+      updateSound(delta);
       updateDistanceCounter(delta);
       minigame.update(delta);
 
@@ -714,7 +786,7 @@ function startGame(locationId, startTimeOfDay) {
 
   window.__game = {
     environment, casting, minigame, save, scene, camera, catchReveal, fishSwarm,
-    playerController, location, localSpecies, dam, chumSystem, world, renderer, water, post, playerRod,
+    playerController, location, localSpecies, dam, chumSystem, world, renderer, water, post, playerRod, audio,
     // Dev hook: GPU-synchronised cost of one full frame, in ms.
     timeFrame: (frames = 10) => {
       const gl = renderer.getContext();
@@ -739,8 +811,9 @@ function startGame(locationId, startTimeOfDay) {
       }
     },
     // Dev hook: force a bite from a given local species (line must be out).
-    debugForceBite: (speciesId) => {
+    debugForceBite: (speciesId, { trophy = false } = {}) => {
       const species = localSpecies.find((s) => s.id === speciesId) || localSpecies[0];
+      forceTrophy = trophy;
       startBite(species);
     },
   };
