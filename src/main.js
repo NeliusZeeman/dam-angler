@@ -12,9 +12,10 @@ import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
 import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble } from './ui.js';
 import { randomTip } from './tips.js';
+import { fightStamina } from './fightMotion.js';
 import { createTouchControls, isTouchDevice, isSmallOrMobileScreen } from './touchControls.js';
 import { createTackleBox } from './tackleBox.js';
-import { createFishSwarm, updateFishSwarm, createCatchReveal } from './fish3d.js';
+import { createFishSwarm, updateFishSwarm, createCatchReveal, createFishMesh, setFishSwim } from './fish3d.js';
 import { createPlayerController } from './player.js';
 import { getLocationById } from './locations.js';
 import { showStartMenu } from './startMenu.js';
@@ -153,9 +154,17 @@ function startGame(locationId, startTimeOfDay) {
     // A mieliebom breaks down where it lands: a feeding spot round the hook.
     onLanded: (point, inWater) => {
       if (inWater && currentLure().groundbait) chumSystem.spawn(point, 'groundbait');
+      // The distance counter shows how far that cast went for a moment.
+      const me = playerController.getPosition();
+      castResult = { meters: Math.hypot(point.x - me.x, point.z - me.z), showFor: 2.5 };
     },
     // Touch screens always aim through the screen centre, like mouse-look.
     isLookLocked: () => touchMode || playerController.isLocked(),
+    getFightInput: () => minigame.getState(),
+    onFishJump: (point, duration) => {
+      minigame.jump(duration);
+      hud.showToast('It jumps! Ease off — don\'t reel while it\'s in the air!');
+    },
   });
   const touchControls = touchMode
     ? createTouchControls({ container: appEl, domElement: renderer.domElement, player: playerController, casting })
@@ -355,8 +364,17 @@ function startGame(locationId, startTimeOfDay) {
     }
 
     const weightKg = randomWeightFor(species);
+    showFightFish(species, weightKg);
     minigame.start({
       species, weightKg, rod: activeRod, line: activeLine, hook: activeHook, reel: activeReel,
+      stamina: fightStamina(species.id, weightKg), // carp and barbel fight long
+      // It's only a catch once it's at your feet: at the bank, or beside
+      // the stand -- never while it's still out in open water.
+      canLand: () => {
+        const f = casting.getFightFish();
+        const me = playerController.getPosition();
+        return !!f && !f.jumping && Math.hypot(f.position.x - me.x, f.position.z - me.z) <= LAND_REACH;
+      },
       onSuccess: () => {
         const payout = calculatePayout({ species, weightKg, rod: activeRod, line: activeLine, hook: activeHook });
         save.credits += payout;
@@ -381,23 +399,105 @@ function startGame(locationId, startTimeOfDay) {
         // in: switch it off so it can't cast or dismiss the card by accident.
         // (After the card opens, so replacing an old card can't re-enable it.)
         touchControls?.setRodEnabled(false);
+        hideFightFish();
         catchReveal.spawn(species.id, casting.bobberPosition);
         casting.resetToIdle();
         bitingSpecies = null;
       },
       onFailure: (reason) => {
         saveSave(save);
-        hud.showToast(reason === 'line-snapped' ? 'Line snapped!' : 'The fish got away.');
+        hideFightFish();
+        hud.showToast({
+          'threw-hook': 'It jumped and threw the hook! Ease off when a fish jumps.',
+          'hook-straightened': `The hook straightened out — ${activeHook.name} is too light for a ${weightKg.toFixed(1)} kg fish. Try a stronger hook.`,
+          'line-snapped': `Line snapped! ${activeLine.name} couldn't take the strain.`,
+        }[reason] || 'The fish got away.');
         casting.resetToIdle();
         bitingSpecies = null;
       },
     });
   });
 
+  // The distance counter: metres from where you stand (flat, like a
+  // rangefinder) to wherever the action is right now.
+  let castResult = null;
+  const aimLanding = new THREE.Vector3();
+  function updateDistanceCounter(delta) {
+    const me = playerController.getPosition();
+    const flat = (p) => Math.hypot(p.x - me.x, p.z - me.z);
+    const phase = casting.getState().phase;
+    if (castResult) castResult.showFor -= delta;
+    if (phase === 'biting') {
+      const f = casting.getFightFish();
+      if (f) {
+        const trend = f.takingLine ? 'out' : minigame.getState().holding ? 'in' : '';
+        hud.setDistance('Fish', flat(f.position), { trend });
+        return;
+      }
+    }
+    if (castResult && castResult.showFor > 0 && (phase === 'waiting' || phase === 'reeling')) {
+      hud.setDistance('Cast', castResult.meters, { highlight: true });
+      return;
+    }
+    if (phase === 'inAir' || phase === 'waiting' || phase === 'reeling') {
+      hud.setDistance(phase === 'inAir' ? 'Cast' : 'Line', flat(casting.bobberPosition));
+      return;
+    }
+    if (phase === 'idle' || phase === 'hanging' || phase === 'aiming') {
+      // Where the aim ring sits: this cast's distance at the power so far.
+      casting.getPredictedLanding(aimLanding);
+      hud.setDistance('Aim', flat(aimLanding));
+      return;
+    }
+    hud.setDistance(null);
+  }
+
+  // How close (metres, flat) the fish must come to you to be landed.
+  const LAND_REACH = 4.2;
+  let landHintTimer = 0;
+  function tickLandingHint(delta) {
+    landHintTimer -= delta;
+    const s = minigame.getState();
+    if (s.active && s.slack && !s.airborne && landHintTimer <= 0) {
+      hud.showToast('Slack line — it\'s swimming toward you. Reel in or it throws the hook!');
+      landHintTimer = 2.5;
+      return;
+    }
+    if (s.active && s.landingBlocked && landHintTimer <= 0) {
+      hud.showToast("It's at the edge but you're too far back — walk to the water to land it");
+      landHintTimer = 4;
+    }
+  }
+
   function startBite(species) {
     bitingSpecies = species;
-    casting.triggerBite(species.bite);
+    casting.triggerBite(species.bite, species.id);
     if (species.bite) hud.showToast(species.bite.label + '!');
+  }
+
+  // The hooked fish itself: hidden in the murk while it's deep, seen as it
+  // comes up near the top, and in full view when it jumps.
+  let fightFishMesh = null;
+  function showFightFish(species, weightKg) {
+    hideFightFish();
+    fightFishMesh = createFishMesh(species.id);
+    // Sized to the real fish: the model is ~0.62 m long at scale 1.
+    fightFishMesh.scale.setScalar((estimateLengthCm(species, weightKg) / 100) / 0.62);
+    fightFishMesh.visible = false;
+    scene.add(fightFishMesh);
+  }
+  function hideFightFish() {
+    if (fightFishMesh) scene.remove(fightFishMesh);
+    fightFishMesh = null;
+  }
+  function updateFightFish(elapsed) {
+    const f = casting.getFightFish();
+    if (!fightFishMesh || !f) { if (fightFishMesh) fightFishMesh.visible = false; return; }
+    fightFishMesh.visible = f.jumping || f.depth < 0.45;
+    fightFishMesh.position.copy(f.position);
+    // The model faces +x; turn it to its heading, nose up/down in a leap.
+    fightFishMesh.rotation.set(0, -f.heading, f.pitch, 'YXZ');
+    setFishSwim(fightFishMesh, elapsed * (f.jumping ? 20 : 12), f.jumping ? 2.2 : 1.4);
   }
 
   // A cast that's sat this long is guaranteed a bite -- the exact moment
@@ -420,7 +520,11 @@ function startGame(locationId, startTimeOfDay) {
     // predictable moment every time.
     const urgency = 1 + Math.pow(Math.min(1, waitElapsed / BITE_GUARANTEE_SECONDS), 4) * 40;
     const biteChanceMultiplier = (twitchBoostTimer > 0 ? 1.8 : 1) * urgency;
-    const conditions = { waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay, habitat, lureKind, chumBoost };
+    const conditions = {
+      waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay, habitat, lureKind, chumBoost,
+      // The right hook and line for the fish get more bites.
+      gearBite: (s) => (activeHook.biteBonus?.[s.id] ?? 1) * (activeLine.biteBonus?.[s.id] ?? 1),
+    };
     const bite = rollDamBite(localSpecies, location.catchShare, { ...conditions, deltaSeconds: delta, biteChanceMultiplier });
     if (bite) {
       startBite(bite);
@@ -493,9 +597,14 @@ function startGame(locationId, startTimeOfDay) {
       }
 
       casting.update(delta, envState);
+      // A fish running away keeps the line tight against the drag.
+      minigame.setFishPulling(!!casting.getFightFish()?.takingLine);
       rollBitesIfWaiting(delta);
       tickTips(delta);
       touchControls?.update();
+      updateFightFish(elapsed);
+      tickLandingHint(delta);
+      updateDistanceCounter(delta);
       minigame.update(delta);
 
       const mgState = minigame.getState();

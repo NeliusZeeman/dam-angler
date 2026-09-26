@@ -336,11 +336,14 @@ export function suitability(species, { waterTempC, equippedLureId, timeOfDay = n
 // scaled by how readily it bites. `chumBoost` (from feed.js) is the extra
 // pull of loose feed where the line sits; each fish feels it by its
 // chumAffinity, so breadcrumbs bring carp and kurper, not tigerfish.
-export function catchWeights(speciesList, catchShare, { chumBoost = 0, ...opts } = {}) {
+// `gearBite(species)` (optional): extra pull from the right hook and line --
+// a hair rig for carp, fluorocarbon for line-shy bass (see gear.js biteBonus).
+export function catchWeights(speciesList, catchShare, { chumBoost = 0, gearBite = null, ...opts } = {}) {
   return speciesList.map((species) => {
     const share = catchShare ? (catchShare[species.id] ?? 0) : species.aggressiveness;
     const feed = 1 + chumBoost * (species.chumAffinity ?? 0.5);
-    return share * suitability(species, opts) * feed;
+    const gear = gearBite ? gearBite(species) : 1;
+    return share * suitability(species, opts) * feed * gear;
   });
 }
 

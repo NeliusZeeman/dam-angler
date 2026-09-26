@@ -1,6 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { waterSurfaceY } from './water.js';
 import { simulateCast, launchSpeed, DRAG } from './castPhysics.js';
+import { createFightMotion, fightStyleFor } from './fightMotion.js';
 
 const TWITCH_COOLDOWN = 0.35;
 const TWITCH_KICK_UP = 0.14;
@@ -30,7 +31,10 @@ const FLOAT_K = 110;
 const FLOAT_DAMP = 5;
 
 export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, dam, onSplash, onWake, getLureKind = () => 'bait', getCastMultiplier = () => 1, isLookLocked = () => false,
-  getCastDrag = () => null, onLanded = null }) {
+  getCastDrag = () => null, onLanded = null,
+  // During a fight: {progress 0..1, holding} from the fight minigame, and a
+  // callback when the hooked fish leaps clear of the water.
+  getFightInput = () => ({ progress: 0, holding: false }), onFishJump = null }) {
   const bobber = createFloatMesh();
   bobber.visible = false;
   scene.add(bobber);
@@ -118,6 +122,10 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   let twitchCooldown = 0;
   let fightProfile = null;
   let fightTimer = 0;
+  let fightMotion = null; // the hooked fish swimming, running and jumping
+  const fightRod = { x: 0, z: 0 };
+  const fightFish = new THREE.Vector3(); // where the fish itself is (for drawing it)
+  let fightWakeTimer = 0;
   // How long the bobber has been fishable (waiting/reeling, actually in the
   // water) since the current cast landed -- drives the guaranteed-bite timer.
   let waitTimer = 0;
@@ -241,7 +249,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     line.visible = true;
   }
 
-  function triggerBite(bite) {
+  // `speciesId` picks how the hooked fish swims, runs and jumps.
+  function triggerBite(bite, speciesId = null) {
     if (phase !== 'waiting' && phase !== 'reeling') return;
     phase = 'biting';
     fightProfile = bite || { speed: 'medium', style: 'steady' };
@@ -249,6 +258,14 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     thrashTimer = 0.3;
     restPosition.copy(bobber.position);
     waitTimer = 0;
+    fightRod.x = rodTipWorld.x; fightRod.z = rodTipWorld.z;
+    fightMotion = createFightMotion({
+      start: { x: bobber.position.x, z: bobber.position.z },
+      rod: fightRod,
+      style: fightStyleFor(speciesId),
+      isWater: (x, z) => dam.isWater(x, z) && dam.waterDist(x, z) > 0.8,
+    });
+    wakeTimer = 0;
     if (biteCallback) biteCallback();
   }
 
@@ -277,6 +294,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     twitchOffset.set(0, 0, 0);
     fightOffset.set(0, 0, 0);
     fightProfile = null;
+    fightMotion = null;
     pressing = false;
     pressTimer = 0;
     power = 0;
@@ -549,8 +567,31 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       const styleAmp = { aggressive: 0.4, heavy: 0.22, steady: 0.14, nibble: 0.08 }[fightProfile.style] || 0.16;
       const jitter = fightProfile.style === 'aggressive' ? 0.5 : fightProfile.style === 'nibble' ? 0.3 : 0.08;
 
-      fightOffset.x = Math.sin(fightTimer * speedFreq) * styleAmp + (Math.random() - 0.5) * jitter * 0.15;
-      fightOffset.z = Math.cos(fightTimer * speedFreq * 0.75) * styleAmp * 0.7;
+      // The fish swims, runs and gets reeled in; the float is dragged
+      // along after it (the float sits on the line a little way up from the
+      // hook, so it trails the fish), with the old head-shake on top.
+      fightRod.x = rodTipWorld.x; fightRod.z = rodTipWorld.z;
+      const fish = fightMotion ? fightMotion.update(deltaSeconds, getFightInput()) : null;
+      if (fish) {
+        const nowS = performance.now() / 1000;
+        fightFish.set(fish.x, surfaceAt({ x: fish.x, z: fish.z }, nowS) + fish.y, fish.z);
+        const trail = Math.min(1, deltaSeconds * 6);
+        restPosition.x += (fish.x - restPosition.x) * trail;
+        restPosition.z += (fish.z - restPosition.z) * trail;
+        if (fish.jumpStarted) {
+          if (onSplash) onSplash(fightFish, 1.1);
+          if (onFishJump) onFishJump(fightFish.clone(), fish.jumpDuration);
+        }
+        if (fish.jumpLanded && onSplash) onSplash(fightFish, 1.2);
+        // A fish near the top pushes a wake as it runs.
+        fightWakeTimer -= deltaSeconds;
+        if (!fish.jumping && fish.depth < 1.1 && fish.speed > 0.8 && fightWakeTimer <= 0 && onWake) {
+          onWake(fightFish.clone().setY(0), 0.5 + fish.speed * 0.15);
+          fightWakeTimer = 0.28;
+        }
+      }
+      fightOffset.x = Math.sin(fightTimer * speedFreq) * styleAmp * 0.5 + (Math.random() - 0.5) * jitter * 0.1;
+      fightOffset.z = Math.cos(fightTimer * speedFreq * 0.75) * styleAmp * 0.35;
       fightOffset.y = 0;
       bobber.position.copy(restPosition).add(fightOffset);
 
@@ -573,8 +614,21 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
         if (style !== 'nibble' && onSplash) onSplash(bobber.position, violent ? 0.9 : 0.55);
         else if (onWake) onWake(bobber.position, 0.8);
       }
-      updateLineCurve(0.03); // taut -- there's a fish pulling
+      // Taut -- there's a fish pulling. Mid-jump the line runs straight to
+      // the fish in the air instead of the float.
+      if (fish && fish.jumping) {
+        bobber.position.lerp(fightFish, Math.min(1, deltaSeconds * 8));
+      }
+      updateLineCurve(0.03);
     }
+  }
+
+  // The hooked fish, for drawing it: where it is, which way it's heading,
+  // and whether it's in the air.
+  function getFightFish() {
+    if (phase !== 'biting' || !fightMotion) return null;
+    const s = fightMotion.state;
+    return { position: fightFish, heading: s.heading, pitch: s.pitch || 0, jumping: s.jumping, depth: s.depth, takingLine: s.takingLine };
   }
 
   function updateAimFromPointer(clientX, clientY) {
@@ -714,7 +768,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     getPredictedLanding: (out) => computeLanding(aimPoint, phase === 'aiming' ? power : 0, out || new THREE.Vector3()),
     getBobberHabitat: () => habitatAt(bobber.position),
     isPointInWater,
-    pressStart, pressEnd, addMotion,
+    pressStart, pressEnd, addMotion, getFightFish,
   };
 }
 

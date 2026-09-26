@@ -4,8 +4,27 @@ import { FISH_SPECIES } from '../src/fish.js';
 
 {
   assert.strictEqual(RODS.length, 5);
-  assert.strictEqual(LINES.length, 3);
-  console.log('PASS: five rods (across 3 tiers) and 3 line tiers');
+  assert.ok(LINES.length >= 6, 'a real range of lines');
+  for (const line of LINES) {
+    assert.ok(line.breakKg > 0 && ['mono', 'braid', 'fluoro'].includes(line.type), `${line.id} has a breaking strain and a line type`);
+    // Names carry the real rating, e.g. "15lb (6.8kg)".
+    assert.ok(/\d+lb \(\d+(\.\d)?kg\)/.test(line.name), `${line.id} name shows lb and kg`);
+  }
+  for (const hook of HOOKS) {
+    assert.ok(hook.strengthKg > 0 && hook.holdBonus >= 0 && hook.holdBonus < 1, `${hook.id} has strength and hold`);
+  }
+  console.log(`PASS: five rods, ${LINES.length} real lines (lb/kg rated), every hook rated`);
+}
+
+{
+  // Forum guidance: carp 14lb+ (6.8kg) to cast a mielie-bom, barbel 20lb+,
+  // tigerfish on a wire trace -- the shop has the right line for each.
+  assert.ok(LINES.some((l) => l.breakKg >= 6.8 && l.breakKg < 9 && l.type === 'mono'), 'a 15lb carp mono');
+  assert.ok(LINES.some((l) => l.breakKg >= 9), 'a 20lb+ line for barbel');
+  assert.ok(LINES.some((l) => l.type === 'fluoro' && l.biteBonus?.['largemouth-bass'] > 1), 'fluorocarbon that line-shy bass bite more on');
+  assert.ok(HOOKS.some((h) => h.biteBonus?.['common-carp'] > 1.3), 'a carp hair rig');
+  assert.ok(HOOKS.some((h) => h.biteBonus?.['largemouth-bass'] > 1), 'an offset worm hook for bass');
+  console.log('PASS: the shop covers what SA anglers recommend for each fish');
 }
 
 {
@@ -39,11 +58,18 @@ import { FISH_SPECIES } from '../src/fish.js';
     assert.ok(sortedRods[i].cost > sortedRods[i - 1].cost, 'rod cost should increase with tier');
     assert.ok(sortedRods[i].tensionTolerance >= sortedRods[i - 1].tensionTolerance, 'tension tolerance should not decrease with tier');
   }
-  const sortedLines = [...LINES].sort((a, b) => a.tier - b.tier);
-  for (let i = 1; i < sortedLines.length; i++) {
-    assert.ok(sortedLines[i].cost > sortedLines[i - 1].cost, 'line cost should increase with tier');
-    assert.ok(sortedLines[i].breakStrength >= sortedLines[i - 1].breakStrength, 'break strength should not decrease with tier');
+  // Lines: a stronger line of the same type costs more (fluorocarbon costs
+  // more than a stronger mono, as in the shops), and tiers don't get weaker.
+  for (const type of ['mono', 'braid', 'fluoro']) {
+    const same = LINES.filter((l) => l.type === type).sort((a, b) => a.breakKg - b.breakKg);
+    for (let i = 1; i < same.length; i++) {
+      assert.ok(same[i].cost > same[i - 1].cost, `${same[i].id}: stronger ${type} should cost more`);
+    }
   }
+  const sortedLines = [...LINES].sort((a, b) => a.tier - b.tier);
+  const bestAtTier = (t) => Math.max(...LINES.filter((l) => l.tier === t).map((l) => l.breakStrength));
+  for (let t = 2; t <= 3; t++) assert.ok(bestAtTier(t) >= bestAtTier(t - 1), 'best line gets stronger with tier');
+  assert.ok(sortedLines.length === LINES.length);
   console.log('PASS: higher tiers cost more and have equal-or-better stats');
 }
 

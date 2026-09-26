@@ -28,6 +28,26 @@ export function createHUD(container, { showHints = true, touch = false } = {}) {
   powerWrap.innerHTML = `<div class="hud-power-label">Cast power</div><div class="hud-power-track"><div id="hud-power-bar"></div></div>`;
   container.appendChild(powerWrap);
 
+  // Distance counter, bottom centre: where the cast will land, how far it
+  // went, how far out the line is, and -- in a fight -- how far the fish is
+  // and whether it's taking line or coming in.
+  const distEl = document.createElement('div');
+  distEl.className = 'hud-distance hidden';
+  distEl.innerHTML = '<span class="hud-distance-label"></span><span class="hud-distance-value"></span><span class="hud-distance-trend"></span>';
+  container.appendChild(distEl);
+  function setDistance(label, meters, { trend = '', highlight = false } = {}) {
+    if (label == null || meters == null || !Number.isFinite(meters)) {
+      distEl.classList.add('hidden');
+      return;
+    }
+    distEl.classList.remove('hidden');
+    distEl.classList.toggle('highlight', highlight);
+    distEl.dataset.trend = trend;
+    distEl.querySelector('.hud-distance-label').textContent = label;
+    distEl.querySelector('.hud-distance-value').textContent = `${meters.toFixed(1)} m`;
+    distEl.querySelector('.hud-distance-trend').textContent = trend === 'out' ? 'taking line' : trend === 'in' ? 'coming in' : '';
+  }
+
   const toast = document.createElement('div');
   toast.className = 'hud-toast hidden';
   container.appendChild(toast);
@@ -81,7 +101,7 @@ export function createHUD(container, { showHints = true, touch = false } = {}) {
     }
   }
 
-  return { update, showToast };
+  return { update, showToast, setDistance };
 }
 
 export function renderCatchLog(container, catchLog, { species = FISH_SPECIES, locationName = null } = {}) {

@@ -11,8 +11,13 @@ export function createTackleBox({ container, save, onSaveChanged }) {
       const equipped = equippedId === item.id;
       const label = owned ? (equipped ? 'In tackle box' : 'Use') : `Buy (${item.cost})`;
       const disabled = (!owned && save.credits < item.cost) || equipped;
+      // Rods: action and power. Lines: type and breaking strain. Hooks: how
+      // big a fish they'll hold. Plus each item's own short note.
+      const lineSpec = item.breakKg ? `${{ mono: 'Mono', braid: 'Braid', fluoro: 'Fluorocarbon' }[item.type] || ''} · breaks at ${item.breakKg} kg` : '';
+      const hookSpec = item.strengthKg ? `Holds fish to ~${item.strengthKg} kg` : '';
+      const specText = [lineSpec || hookSpec, item.note].filter(Boolean).join(' · ');
       const spec = item.action ? `<small class="shop-spec">${item.action} action · ${item.power} power</small>`
-        : item.note ? `<small class="shop-spec shop-note">${item.note}</small>` : '';
+        : specText ? `<small class="shop-spec shop-note">${specText}</small>` : '';
       return `<div class="shop-row">
         <span>${item.name}${spec}</span>
         <button data-kind="${kind}" data-id="${item.id}" ${disabled ? 'disabled' : ''}>${label}</button>
@@ -21,17 +26,34 @@ export function createTackleBox({ container, save, onSaveChanged }) {
     return `<h3>${title}</h3>${rows}`;
   }
 
+  // One section at a time, picked from tabs along the top -- the full list
+  // is taller than most screens and the bait section used to sit out of
+  // sight below the fold. Opens on Bait, the thing you change most.
+  const TABS = [
+    { kind: 'lure', label: 'Bait', title: 'Bait & Lures', items: () => LURES, owned: () => save.ownedLureIds, equipped: () => save.equippedLureId },
+    { kind: 'rod', label: 'Rods', title: 'Rods', items: () => RODS, owned: () => save.ownedRodIds, equipped: () => save.equippedRodId },
+    { kind: 'reel', label: 'Reels', title: 'Reels', items: () => REELS, owned: () => save.ownedReelIds, equipped: () => save.equippedReelId },
+    { kind: 'line', label: 'Line', title: 'Lines', items: () => LINES, owned: () => save.ownedLineIds, equipped: () => save.equippedLineId },
+    { kind: 'hook', label: 'Hooks', title: 'Hooks & Rigs', items: () => HOOKS, owned: () => save.ownedHookIds, equipped: () => save.equippedHookId },
+  ];
+  let activeTab = 'lure';
+
   function refresh() {
+    const tab = TABS.find((t) => t.kind === activeTab) || TABS[0];
     panel.innerHTML = `
       <button class="panel-close" id="shop-close">Close</button>
       <div class="tackle-credits">Credits: ${save.credits}</div>
-      ${renderSection('Rods', RODS, save.ownedRodIds, save.equippedRodId, 'rod')}
-      ${renderSection('Reels', REELS, save.ownedReelIds, save.equippedReelId, 'reel')}
-      ${renderSection('Lines', LINES, save.ownedLineIds, save.equippedLineId, 'line')}
-      ${renderSection('Hooks & Rigs', HOOKS, save.ownedHookIds, save.equippedHookId, 'hook')}
-      ${renderSection('Bait & Lures', LURES, save.ownedLureIds, save.equippedLureId, 'lure')}
+      <div class="tackle-tabs" role="tablist">
+        ${TABS.map((t) => `<button type="button" role="tab" class="tackle-tab ${t.kind === tab.kind ? 'on' : ''}" aria-selected="${t.kind === tab.kind}" data-tab="${t.kind}">${t.label}</button>`).join('')}
+      </div>
+      ${renderSection(tab.title, tab.items(), tab.owned(), tab.equipped(), tab.kind)}
     `;
     panel.querySelector('#shop-close').addEventListener('click', () => panel.classList.add('hidden'));
+    panel.querySelectorAll('[data-tab]').forEach((btn) => btn.addEventListener('click', () => {
+      activeTab = btn.dataset.tab;
+      refresh();
+      panel.scrollTop = 0;
+    }));
     panel.querySelectorAll('button[data-kind]').forEach((btn) => {
       btn.addEventListener('click', () => handleClick(btn.dataset.kind, btn.dataset.id));
     });

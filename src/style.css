@@ -319,3 +319,30 @@ body.touch .hud-tension-wrap, body.touch .hud-power-wrap { bottom: calc(40px + e
 .catch-close.locked .catch-close-fill { animation: catch-unlock var(--lock-ms, 1500ms) linear forwards; }
 @keyframes catch-unlock { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) { .catch-close.locked .catch-close-fill { animation: none; } }
+
+/* Tackle box tabs: one section at a time so nothing hides below the fold. */
+.tackle-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 6px; }
+.tackle-tab {
+  flex: 1 1 auto; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06); color: #fff; font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.tackle-tab.on { background: #ffcf7a; color: #1a1024; border-color: #ffcf7a; }
+.tackle-tab:focus-visible { outline: 2px solid #ffcf7a; outline-offset: 2px; }
+body.touch .tackle-tab { min-height: 36px; }
+
+/* Distance counter, bottom centre above the power / tension bars. */
+.hud-distance {
+  position: absolute; left: 50%; bottom: calc(64px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; align-items: baseline; gap: 8px; padding: 5px 14px; border-radius: 999px; z-index: 2;
+  background: rgba(0,0,0,0.5); color: #fff; pointer-events: none; white-space: nowrap;
+  font-variant-numeric: tabular-nums; transition: transform 0.2s ease;
+}
+.hud-distance.hidden { display: none; }
+.hud-distance-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; }
+.hud-distance-value { font-size: 18px; font-weight: 800; }
+.hud-distance-trend { font-size: 11px; font-weight: 700; }
+.hud-distance[data-trend="out"] .hud-distance-trend { color: #ff8a70; }
+.hud-distance[data-trend="in"] .hud-distance-trend { color: #8fe0a0; }
+.hud-distance.highlight { background: rgba(255, 207, 122, 0.9); color: #1a1024; transform: translateX(-50%) scale(1.12); }
+body.touch .hud-distance { bottom: calc(84px + env(safe-area-inset-bottom)); }
+@media (prefers-reduced-motion: reduce) { .hud-distance { transition: none; } }
