@@ -1,7 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
-import { POND_CENTER, BANK_SURFACE_Y } from './pond.js';
+import { waterSurfaceY } from './water.js';
+import { simulateCast, launchSpeed, DRAG } from './castPhysics.js';
 
-const WATER_LANDING_MARGIN = 1.0; // a cast always lands at least this far past the sand into open water
 const TWITCH_COOLDOWN = 0.35;
 const TWITCH_KICK_UP = 0.14;
 const TWITCH_KICK_SIDE = 0.08;
@@ -10,9 +10,8 @@ const REEL_HOLD_THRESHOLD = 0.18; // press-and-hold longer than this starts reel
 const REEL_SPEED = 3.2; // units/sec the lure closes toward the rod tip while reeling
 const REEL_ARRIVE_DISTANCE = 0.35;
 const WAKE_INTERVAL = 0.18; // seconds between wake ripples while reeling
-const LINE_SEGMENTS = 12;
+const LINE_SEGMENTS = 28;
 const POWER_CHARGE_SECONDS = 1.3; // hold this long for a full-power cast
-const BASE_CAST_REACH = 3; // minimum reach even at zero power
 
 // Mouse-motion control. Speeds are in screen-widths per second.
 const MOTION_REEL_THRESHOLD = 0.12; // sweep faster than this to work a lure
@@ -24,22 +23,70 @@ const BAIT_WIGGLE_GAIN = 0.35; // bait only wiggles under mouse motion
 const FLICK_POWER_GAIN = 0.28; // upward flick on release adds cast power
 const FLICK_POWER_MAX = 0.35;
 
-export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, pondShape, onSplash, onWake, getLureKind = () => 'bait', getCastMultiplier = () => 1 }) {
-  const bobberGeo = new THREE.SphereGeometry(0.08, 12, 12);
-  const bobberMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
-  const bobber = new THREE.Mesh(bobberGeo, bobberMat);
+// Float physics: a buoyancy spring toward the water surface, lightly damped
+// so it bobs a few times after landing or being twitched.
+const FLOAT_REST = 0.005; // black band sits right on the waterline
+const FLOAT_K = 110;
+const FLOAT_DAMP = 5;
+
+export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, dam, onSplash, onWake, getLureKind = () => 'bait', getCastMultiplier = () => 1, isLookLocked = () => false }) {
+  const bobber = createFloatMesh();
   bobber.visible = false;
   scene.add(bobber);
 
   // The line is drawn as a curve (not a straight segment) so it visibly
-  // bends/sags between casts and pulls taut while being reeled in.
-  const linePositions = new Float32Array((LINE_SEGMENTS + 1) * 3);
+  // bends/sags between casts and pulls taut while being reeled in. It's a
+  // thin camera-facing ribbon rather than a 1px GL line, kept about two
+  // pixels wide at any distance so it stays readable where it lies across
+  // the water. It draws after the water surface, and the stretch a fish has
+  // dragged under shows faintly through it (per-vertex alpha).
+  const LINE_POINTS = LINE_SEGMENTS + 1;
+  const linePts = Array.from({ length: LINE_POINTS }, () => new THREE.Vector3());
+  const lineUnder = new Float32Array(LINE_POINTS);
   const lineGeo = new THREE.BufferGeometry();
-  lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
-  const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-  const line = new THREE.Line(lineGeo, lineMat);
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(LINE_POINTS * 2 * 3), 3));
+  lineGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(LINE_POINTS * 2 * 4), 4));
+  const lineIdx = [];
+  for (let i = 0; i < LINE_SEGMENTS; i++) {
+    const a = i * 2;
+    lineIdx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  }
+  lineGeo.setIndex(lineIdx);
+  const lineMat = new THREE.MeshBasicMaterial({
+    vertexColors: true, transparent: true, side: THREE.DoubleSide, depthWrite: false, fog: false,
+  });
+  const line = new THREE.Mesh(lineGeo, lineMat);
+  line.frustumCulled = false;
+  line.renderOrder = 20; // after the (transparent) water surface
   line.visible = false;
   scene.add(line);
+  const ribbonTangent = new THREE.Vector3();
+  const ribbonView = new THREE.Vector3();
+  const ribbonSide = new THREE.Vector3();
+
+  function buildLineRibbon() {
+    const pos = lineGeo.getAttribute('position');
+    const col = lineGeo.getAttribute('color');
+    for (let i = 0; i < LINE_POINTS; i++) {
+      const p = linePts[i];
+      ribbonTangent.subVectors(linePts[Math.min(LINE_POINTS - 1, i + 1)], linePts[Math.max(0, i - 1)]);
+      ribbonView.subVectors(camera.position, p);
+      const dist = ribbonView.length();
+      ribbonSide.crossVectors(ribbonTangent, ribbonView);
+      if (ribbonSide.lengthSq() < 1e-12) ribbonSide.set(1, 0, 0);
+      // ~2px wide wherever it is: world width grows with distance.
+      const half = Math.max(0.0008, dist * 0.0011);
+      ribbonSide.normalize().multiplyScalar(half);
+      pos.setXYZ(i * 2, p.x - ribbonSide.x, p.y - ribbonSide.y, p.z - ribbonSide.z);
+      pos.setXYZ(i * 2 + 1, p.x + ribbonSide.x, p.y + ribbonSide.y, p.z + ribbonSide.z);
+      const under = lineUnder[i];
+      const alpha = under ? 0.3 : 0.9;
+      const shade = under ? 0.7 : 0.95;
+      for (let k = 0; k < 2; k++) col.setXYZW(i * 2 + k, shade, shade, shade * 0.95, alpha);
+    }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+  }
 
   const rodTipWorld = new THREE.Vector3();
   const target = new THREE.Vector3();
@@ -56,13 +103,23 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
   let phase = 'idle';
   let airTime = 0;
-  const AIR_DURATION = 1.2;
+  let airDuration = 1.2;
+  let flightPath = [];
   const launchTarget = new THREE.Vector3();
+  const launchFrom = new THREE.Vector3();
+  let floatY = 0;
+  let floatVy = 0;
+  let rippleTimer = 0;
+  let thrashTimer = 1;
+  let lastWind = { windSpeed: 0, windDirX: 1, windDirZ: 0 };
   let biteCallback = null;
   let twitchCallback = null;
   let twitchCooldown = 0;
   let fightProfile = null;
   let fightTimer = 0;
+  // How long the bobber has been fishable (waiting/reeling, actually in the
+  // water) since the current cast landed -- drives the guaranteed-bite timer.
+  let waitTimer = 0;
 
   let pressing = false;
   let pressTimer = 0;
@@ -81,120 +138,66 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   const swayPerp = new THREE.Vector3();
   const motionToTip = new THREE.Vector3();
 
-  function angleAndDist(point) {
-    const dx = point.x - POND_CENTER.x;
-    const dz = point.z - POND_CENTER.z;
-    return { theta: Math.atan2(dz, dx), dist: Math.hypot(dx, dz) };
-  }
-
-  function distanceFromCenter(point) {
-    return angleAndDist(point).dist;
-  }
-
-  // Open water only -- the sand bank is dry land, whatever the water mesh
-  // underneath it says. The pond's shoreline isn't a circle, so this checks
-  // the actual edge in the point's own direction.
+  // Open water only -- the dry bank is land, whatever the water mesh under
+  // it says.
   function isPointInWater(point) {
-    const { theta, dist } = angleAndDist(point);
-    return dist < pondShape.radiusAt(theta);
+    return dam.isWater(point.x, point.z);
   }
 
-  // Distances along a flat ray from `origin` in direction `dir` at which it
-  // enters and leaves the open water (the shoreline pulled `margin` in).
-  // Null if the ray never crosses the water. The shoreline is an arbitrary
-  // radius-per-angle curve (not a circle), so this walks the ray in small
-  // steps and bisects across each crossing rather than solving in closed
-  // form -- robust for any shape, and this runs on one ray, not per pixel.
-  function waterCrossing(origin, dir, margin) {
-    const maxDist = 48;
-    const coarseStep = 0.35;
-    const insideAt = (t) => {
-      const x = origin.x + dir.x * t;
-      const z = origin.z + dir.z * t;
-      const theta = Math.atan2(z - POND_CENTER.z, x - POND_CENTER.x);
-      const dist = Math.hypot(x - POND_CENTER.x, z - POND_CENTER.z);
-      return dist < pondShape.radiusAt(theta) - margin;
-    };
-    const bisect = (loT, hiT, loInside) => {
-      let lo = loT, hi = hiT;
-      for (let i = 0; i < 14; i++) {
-        const mid = (lo + hi) / 2;
-        if (insideAt(mid) === loInside) lo = mid; else hi = mid;
-      }
-      return (lo + hi) / 2;
-    };
-
-    let prevT = 0;
-    let prevInside = insideAt(0);
-    let enter = prevInside ? 0 : null;
-    let exit = null;
-    for (let t = coarseStep; t <= maxDist; t += coarseStep) {
-      const inside = insideAt(t);
-      if (inside !== prevInside) {
-        const crossT = bisect(prevT, t, prevInside);
-        if (inside && enter === null) enter = crossT;
-        else if (!inside && enter !== null && exit === null) exit = crossT;
-      }
-      prevInside = inside;
-      prevT = t;
-      if (enter !== null && exit !== null) break;
-    }
-    if (enter === null) return null;
-    if (exit === null) exit = maxDist;
-    return { enter, exit };
-  }
+  // What the lure would come down onto at (x, z): the water surface, or the
+  // ground (or a stand's deck) on land.
+  const surfaceHeight = (x, z) => (dam.isWater(x, z) ? 0 : dam.floorHeight(x, z));
 
   // Height a lure sits/travels at for a given xz: on the water surface in
-  // the open, and once it's been dragged up onto the sand, lifting through
-  // the air toward the rod tip as the line shortens.
+  // the open; on land it lies on the ground, lifting through the air toward
+  // the rod tip as the last few metres of line come in.
   function lureHeightAt(point) {
-    const { theta, dist } = angleAndDist(point);
-    const edge = pondShape.radiusAt(theta);
-    if (dist < edge) return 0.02;
-    const tipDist = distanceFromCenter(rodTipWorld);
-    const span = Math.max(0.5, tipDist - edge);
-    const f = Math.min(1, (dist - edge) / span);
-    const restY = BANK_SURFACE_Y + 0.06;
+    if (isPointInWater(point)) return 0.02;
+    const restY = dam.floorHeight(point.x, point.z) + 0.05;
+    const toTip = Math.hypot(point.x - rodTipWorld.x, point.z - rodTipWorld.z);
+    const f = 1 - Math.min(1, toTip / 6);
     return restY + f * f * Math.max(0, rodTipWorld.y - restY);
   }
 
-  // What habitat a point in the water is: which zone (open water vs a
-  // lily-pad/structure cove) and how deep it is (0 at the edge, 1 at the
-  // deepest reachable point in that direction). Feeds the position-based
-  // bite bonuses in fish.js.
+  // What habitat a point in the water is: which zone (open water vs lily
+  // pads / timber / reeds) and how deep it is (0 at the bank, 1 out in the
+  // deepest water). Feeds the position-based bite bonuses in fish.js.
   function habitatAt(point) {
-    const { theta, dist } = angleAndDist(point);
-    const zone = pondShape.zoneAt(theta);
-    const depthFactor = pondShape.depthFactorAt(theta, dist);
-    return { zone: zone.type, depthFactor };
+    return { zone: dam.zoneAt(point.x, point.z).type, depthFactor: dam.depthFactorAt(point.x, point.z) };
   }
 
-  const landingScratch = new THREE.Vector3();
-
-  // Where a cast released right now would land: toward the cursor's point
-  // on the water, as far as the current power and gear allow, never short
-  // of open water and never past the far bank. Shared by the actual cast
-  // and the on-water aim ring.
-  function computeLanding(aim, castPower, out) {
-    const rod = getRod();
-    const maxReach = BASE_CAST_REACH + castPower * rod.castDistance * getCastMultiplier();
-    const toAim = landingScratch.subVectors(aim, camera.position);
-    toAim.y = 0;
-    const aimDistance = toAim.length();
-    if (aimDistance < 1e-4) toAim.set(0, 0, -1); else toAim.normalize();
-
-    // Even a feather-light tap has to clear the sand -- the player stands
-    // on the bank, so a short lob that landed on it could never be fished
-    // (and no fish should ever bite a lure lying on dry sand).
-    const crossing = waterCrossing(camera.position, toAim, WATER_LANDING_MARGIN);
-    let clampedDistance = Math.min(aimDistance, maxReach);
-    if (crossing) {
-      clampedDistance = Math.max(crossing.enter, Math.min(clampedDistance, crossing.exit));
+  // ─── Cast flight ──────────────────────────────────────────────────────────
+  // The cursor picks the direction; how far it goes is physics: the rod's
+  // launch speed x the power you built up (reel and line add a little), then
+  // gravity, air drag on the rig and the wind decide where it comes down.
+  const castDir = new THREE.Vector3();
+  function flightFor(castPower, yawJitter = 0) {
+    castDir.subVectors(aimPoint, camera.position);
+    castDir.y = 0;
+    if (castDir.lengthSq() < 1e-6) {
+      camera.getWorldDirection(castDir);
+      castDir.y = 0;
     }
+    castDir.normalize();
+    if (yawJitter) {
+      const c = Math.cos(yawJitter), sn = Math.sin(yawJitter);
+      castDir.set(castDir.x * c - castDir.z * sn, 0, castDir.x * sn + castDir.z * c);
+    }
+    const kind = getLureKind();
+    return simulateCast({
+      from: rodTipWorld,
+      dirX: castDir.x, dirZ: castDir.z,
+      speed: launchSpeed(getRod(), castPower, getCastMultiplier()),
+      drag: DRAG[kind] ?? DRAG.bait,
+      wind: { x: lastWind.windDirX * lastWind.windSpeed * 0.35, z: lastWind.windDirZ * lastWind.windSpeed * 0.35 },
+      surfaceAt: surfaceHeight,
+    });
+  }
 
-    out.copy(camera.position).addScaledVector(toAim, clampedDistance);
-    out.y = 0;
-    return out;
+  // Where a cast at this power would come down (no scatter) -- the aim ring.
+  function computeLanding(aim, castPower, out) {
+    const { landing } = flightFor(castPower);
+    return out.set(landing.x, landing.y, landing.z);
   }
 
   // Aim ring on the water: shows exactly where the cast will land.
@@ -221,7 +224,14 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
   function releaseCastAt(aim) {
     if (phase !== 'aiming') return;
-    computeLanding(aim, power, launchTarget);
+    // Real casts scatter a little: more with a soft fibreglass rod, least
+    // with the pinpoint bass rod; and no two releases are quite the same.
+    const spread = ((getRod().spread ?? 2) * Math.PI) / 180;
+    const flight = flightFor(power * (0.97 + Math.random() * 0.06), (Math.random() + Math.random() - 1) * spread);
+    flightPath = flight.path;
+    airDuration = Math.max(0.2, flight.time);
+    launchFrom.copy(rodTipWorld);
+    launchTarget.set(flight.landing.x, flight.landing.y, flight.landing.z);
     phase = 'inAir';
     airTime = 0;
     power = 0;
@@ -234,6 +244,9 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     phase = 'biting';
     fightProfile = bite || { speed: 'medium', style: 'steady' };
     fightTimer = 0;
+    thrashTimer = 0.3;
+    restPosition.copy(bobber.position);
+    waitTimer = 0;
     if (biteCallback) biteCallback();
   }
 
@@ -255,6 +268,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
   function resetToIdle() {
     phase = 'idle';
+    bobber.rotation.set(0, 0, 0);
+    floatVy = 0;
     bobber.visible = false;
     line.visible = false;
     twitchOffset.set(0, 0, 0);
@@ -263,15 +278,28 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     pressing = false;
     pressTimer = 0;
     power = 0;
+    waitTimer = 0;
   }
 
+  function surfaceAt(p, now) {
+    return waterSurfaceY(p.x, p.z, now, dam.waterDist(p.x, p.z));
+  }
+
+  // The line hangs from the rod tip to the float in a sagging curve, bowed
+  // sideways by the wind. Wherever that curve would dip below the water it
+  // lies on the surface instead -- slack line floats, it doesn't sink
+  // through the dam. (The very end still follows the float if a fish has
+  // pulled it under.)
   function updateLineCurve(sagAmount) {
+    const now = performance.now() / 1000;
     curvePointA.copy(rodTipWorld);
     curvePointB.copy(bobber.position);
     curvePointC.lerpVectors(curvePointA, curvePointB, 0.5);
     curvePointC.y -= sagAmount;
+    const bow = sagAmount * lastWind.windSpeed * 0.05;
+    curvePointC.x += lastWind.windDirX * bow;
+    curvePointC.z += lastWind.windDirZ * bow;
 
-    const positions = line.geometry.attributes.position;
     for (let i = 0; i <= LINE_SEGMENTS; i++) {
       const t = i / LINE_SEGMENTS;
       const inv = 1 - t;
@@ -280,13 +308,56 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
         inv * inv * curvePointA.y + 2 * inv * t * curvePointC.y + t * t * curvePointB.y,
         inv * inv * curvePointA.z + 2 * inv * t * curvePointC.z + t * t * curvePointB.z,
       );
-      positions.setXYZ(i, curveOut.x, curveOut.y, curveOut.z);
+      lineUnder[i] = 0;
+      if (isPointInWater(curveOut)) {
+        // Lies *on* the surface, just clear of the swell's crests so the
+        // water can't swallow it -- except the end a fish has pulled under.
+        const surf = surfaceAt(curveOut, now);
+        const floor = surf + 0.014;
+        if (i < LINE_SEGMENTS - 1 && curveOut.y < floor) curveOut.y = floor;
+        else if (curveOut.y < surf) lineUnder[i] = 1;
+      }
+      linePts[i].copy(curveOut);
     }
-    positions.needsUpdate = true;
+    buildLineRibbon();
+  }
+
+  // Buoyancy: spring the float toward the local water surface (plus `sink`,
+  // negative when something is pulling it under), let it rock on the swell
+  // and lean toward a tight line, and ring the water when it bobs hard.
+  const leanDir = new THREE.Vector3();
+  function floatOnWater(dt, sink, lean) {
+    const now = performance.now() / 1000;
+    const target = surfaceAt(bobber.position, now) + FLOAT_REST + sink;
+    const steps = Math.ceil(dt / 0.01);
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      floatVy += ((target - floatY) * FLOAT_K - floatVy * FLOAT_DAMP) * h;
+      floatY += floatVy * h;
+    }
+    bobber.position.y = floatY;
+    leanDir.subVectors(rodTipWorld, bobber.position);
+    leanDir.y = 0;
+    if (leanDir.lengthSq() > 1e-6) leanDir.normalize();
+    const rockX = Math.sin(now * 1.7 + bobber.position.x) * 0.06;
+    const rockZ = Math.sin(now * 1.3 + bobber.position.z) * 0.06;
+    bobber.rotation.set(leanDir.z * lean + rockX, 0, -leanDir.x * lean + rockZ);
+    rippleTimer -= dt;
+    if (Math.abs(floatVy) > 0.18 && rippleTimer <= 0 && onWake) {
+      onWake(bobber.position, 0.5);
+      rippleTimer = 0.35;
+    }
   }
 
   function update(deltaSeconds, windState) {
     rodTip.getWorldPosition(rodTipWorld);
+    if (windState) lastWind = windState;
+
+    // Clock only runs while there's actually a fishable line in the water --
+    // pauses if the lure's up on the sand or the rod's just hanging.
+    if ((phase === 'waiting' || phase === 'reeling') && isBobberInWater()) {
+      waitTimer += deltaSeconds;
+    }
 
     // Turn this frame's mouse travel into a smoothed speed, then reset.
     const dt = Math.max(deltaSeconds, 1e-3);
@@ -319,6 +390,9 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     const canCast = phase === 'idle' || phase === 'hanging' || phase === 'aiming';
     reticle.visible = canCast;
     if (canCast) {
+      // Walking and turning move the view without any pointer event, so
+      // re-aim through the screen centre every frame.
+      if (isLookLocked()) updateAimFromPointer(0, 0);
       computeLanding(aimPoint, phase === 'aiming' ? power : 0, reticle.position);
       reticle.position.y = 0.06;
       // Grow with distance so the ring reads the same size near or far.
@@ -330,20 +404,31 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     }
 
     if (phase === 'inAir') {
+      // Ballistic arc: shoots out fast and slows under air drag, rising to
+      // its apex and dropping onto the water, drifting with the wind.
       airTime += deltaSeconds;
-      const t = Math.min(1, airTime / AIR_DURATION);
-      target.copy(rodTipWorld).lerp(launchTarget, t);
-      target.x += windState.windDirX * windState.windSpeed * 0.02 * t;
-      target.z += windState.windDirZ * windState.windSpeed * 0.02 * t;
-      target.y = Math.sin(t * Math.PI) * 1.5;
+      const t = Math.min(1, airTime / airDuration);
+      // Follow the simulated flight path (sampled at 60Hz): a hard cast
+      // covers it fast, a soft lob hangs in the air.
+      const fi = Math.min(flightPath.length - 1, airTime * 60);
+      const i0 = Math.floor(fi), i1 = Math.min(flightPath.length - 1, i0 + 1), fr = fi - i0;
+      const p0 = flightPath[i0], p1 = flightPath[i1];
+      target.set(p0.x + (p1.x - p0.x) * fr, p0.y + (p1.y - p0.y) * fr, p0.z + (p1.z - p0.z) * fr);
       bobber.position.copy(target);
-      updateLineCurve(0.05);
+      bobber.rotation.set(t * 7, 0, t * 2);
+      updateLineCurve(0.1 * t);
       if (t >= 1) {
         phase = 'waiting';
         bobber.position.y = 0;
         restPosition.copy(bobber.position);
         twitchOffset.set(0, 0, 0);
-        if (onSplash) onSplash(bobber.position);
+        waitTimer = 0;
+        if (isPointInWater(bobber.position)) {
+          // Plops in: dives under, then bobs back up and settles.
+          floatY = 0;
+          floatVy = -1.0 - Math.min(0.8, launchFrom.distanceTo(launchTarget) * 0.02);
+          if (onSplash) onSplash(bobber.position, 0.65);
+        }
       }
     }
 
@@ -389,10 +474,20 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       const decay = Math.max(0, 1 - TWITCH_DECAY_PER_SEC * deltaSeconds);
       twitchOffset.multiplyScalar(decay);
       bobber.position.copy(restPosition).add(twitchOffset).addScaledVector(swayPerp, lureSway);
-      // On the sand (after a reel-in was stopped short) the lure lies on top
-      // of the bank, not under it.
-      bobber.position.y = lureHeightAt(bobber.position);
-      updateLineCurve(working ? 0.08 : (isPointInWater(bobber.position) ? 0.22 : 0.05));
+      if (isPointInWater(bobber.position)) {
+        // A twitch jerks the float toward the rod and ducks it under.
+        const duck = -twitchOffset.y * 0.8;
+        floatOnWater(deltaSeconds, duck, working ? 0.35 : 0.1);
+        updateLineCurve(working ? 0.08 : 0.6);
+      } else {
+        // On the sand (after a reel-in was stopped short) it lies on its
+        // side on top of the bank, not under it.
+        bobber.position.y = lureHeightAt(bobber.position);
+        bobber.rotation.set(0, 0, 1.35);
+        floatY = bobber.position.y;
+        floatVy = 0;
+        updateLineCurve(0.05);
+      }
     }
 
     if (phase === 'reeling' && !pressing) {
@@ -416,14 +511,22 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       }
       toTip.normalize();
       bobber.position.addScaledVector(toTip, REEL_SPEED * deltaSeconds);
-      // Skims the surface in the water; once it's dragged onto the sand it
-      // lifts through the air to the rod tip instead of tunnelling under it.
-      bobber.position.y = lureHeightAt(bobber.position) + Math.sin(performance.now() * 0.02) * 0.01;
+      if (isPointInWater(bobber.position)) {
+        // Skims the surface, dragged low and leaning into the pull.
+        floatOnWater(deltaSeconds, -0.015, 0.55);
+      } else {
+        // Dragged onto the sand it lifts through the air to the rod tip
+        // instead of tunnelling under it.
+        bobber.position.y = lureHeightAt(bobber.position);
+        bobber.rotation.set(0, 0, 0);
+        floatY = bobber.position.y;
+        floatVy = 0;
+      }
 
       wakeTimer += deltaSeconds;
       if (wakeTimer >= WAKE_INTERVAL) {
         wakeTimer = 0;
-        if (onWake && isPointInWater(bobber.position)) onWake(bobber.position);
+        if (onWake && isPointInWater(bobber.position)) onWake(bobber.position, 0.7);
       }
 
       restPosition.copy(bobber.position);
@@ -432,6 +535,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
     if (phase === 'hanging') {
       bobber.position.copy(rodTipWorld).add(hangOffset);
+      bobber.rotation.set(0, 0, 0);
       updateLineCurve(0.02);
     }
 
@@ -443,18 +547,42 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
       fightOffset.x = Math.sin(fightTimer * speedFreq) * styleAmp + (Math.random() - 0.5) * jitter * 0.15;
       fightOffset.z = Math.cos(fightTimer * speedFreq * 0.75) * styleAmp * 0.7;
-      fightOffset.y = Math.max(0, Math.sin(fightTimer * speedFreq * 1.3)) * styleAmp * 0.5;
-
+      fightOffset.y = 0;
       bobber.position.copy(restPosition).add(fightOffset);
+
+      // The float goes under the way each fish bites: nibbles dip it in
+      // little stabs, a steady fish slides it under, a heavy one holds it
+      // down, and an aggressive strike buries it and keeps yanking.
+      const style = fightProfile.style;
+      let sink;
+      if (style === 'nibble') sink = -0.02 - 0.07 * Math.max(0, Math.sin(fightTimer * 8)) ** 2;
+      else if (style === 'steady') sink = -0.1 - 0.04 * Math.sin(fightTimer * 2);
+      else if (style === 'heavy') sink = -0.17;
+      else sink = -0.2 + 0.06 * Math.sin(fightTimer * 6);
+      floatOnWater(deltaSeconds, sink, 0.6);
+
+      // Fighters thrash at the surface now and then.
+      thrashTimer -= deltaSeconds;
+      if (thrashTimer <= 0) {
+        const violent = style === 'aggressive';
+        thrashTimer = violent ? 0.6 + Math.random() * 1.4 : 1.8 + Math.random() * 2.5;
+        if (style !== 'nibble' && onSplash) onSplash(bobber.position, violent ? 0.9 : 0.55);
+        else if (onWake) onWake(bobber.position, 0.8);
+      }
       updateLineCurve(0.03); // taut -- there's a fish pulling
     }
   }
 
   function updateAimFromPointer(clientX, clientY) {
     if (!waterMesh) return;
-    const rect = domElement.getBoundingClientRect();
-    pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    if (isLookLocked()) {
+      // Mouse-look: you aim with your head, at the centre of the screen.
+      pointerNDC.set(0, 0);
+    } else {
+      const rect = domElement.getBoundingClientRect();
+      pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    }
     raycaster.setFromCamera(pointerNDC, camera);
     const hit = raycaster.intersectObject(waterMesh)[0];
     if (hit) {
@@ -484,9 +612,12 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     fightHoldCallback = callback;
   }
 
-  domElement.addEventListener('mousedown', (e) => {
+  // The one "rod button": the left mouse button on desktop, the Cast/Reel
+  // button on touch screens. Press = start charging a cast / start reeling /
+  // hold a fighting fish; release = cast / twitch / ease off.
+  function pressStart(clientX = 0, clientY = 0) {
     if (phase === 'idle' || phase === 'hanging') {
-      updateAimFromPointer(e.clientX, e.clientY);
+      updateAimFromPointer(clientX, clientY);
       phase = 'aiming';
       power = 0;
       pressing = true;
@@ -502,20 +633,41 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     } else {
       castArmed = false;
     }
+  }
+
+  // Rod/lure motion from a mouse move or a finger drag, in pixels.
+  function addMotion(dx, dy) {
+    const rect = domElement.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    moveDxAcc += dx / rect.width;
+    moveDyAcc += dy / rect.width;
+  }
+
+  domElement.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return; // right button looks around, never casts
+    pressStart(e.clientX, e.clientY);
   });
   window.addEventListener('mousemove', (e) => {
     const rect = domElement.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
-      mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      moveDxAcc += e.movementX / rect.width;
-      moveDyAcc += e.movementY / rect.width;
+      // With the mouse captured the rod rides with the view, centred.
+      if (isLookLocked()) mouseNDC.set(0, 0);
+      else {
+        mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      }
+      addMotion(e.movementX, e.movementY);
     }
     // The cursor is the aim: keep the landing point tracking it whenever a
     // cast is possible, not only once the button is down.
     if (phase === 'aiming' || phase === 'idle' || phase === 'hanging') updateAimFromPointer(e.clientX, e.clientY);
   });
-  window.addEventListener('mouseup', () => {
+  window.addEventListener('mouseup', (e) => {
+    if (e.button !== 0) return;
+    pressEnd();
+  });
+
+  function pressEnd() {
     if (phase === 'aiming' && castArmed) {
       // The longer this was held, the further it casts (power meter), and
       // a sharp upward flick on release adds a bit on top.
@@ -533,14 +685,17 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     }
     castArmed = false;
     pressing = false;
-  });
+  }
 
   function isBobberInWater() {
     return bobber.visible && isPointInWater(bobber.position);
   }
 
   function getState() {
-    return { phase, power, motionSpeed, working: phase === 'waiting' && getLureKind() === 'lure' && motionSpeed > MOTION_REEL_THRESHOLD };
+    return {
+      phase, power, motionSpeed, waitElapsed: waitTimer,
+      working: phase === 'waiting' && getLureKind() === 'lure' && motionSpeed > MOTION_REEL_THRESHOLD,
+    };
   }
 
   // Cursor position (NDC, -1..1) so the rod in hand can follow the mouse.
@@ -555,5 +710,35 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     getPredictedLanding: (out) => computeLanding(aimPoint, phase === 'aiming' ? power : 0, out || new THREE.Vector3()),
     getBobberHabitat: () => habitatAt(bobber.position),
     isPointInWater,
+    pressStart, pressEnd, addMotion,
   };
+}
+
+// A classic painted float: white keel under the water, red cap above a black
+// band, and a fluorescent antenna tip that still shows up after dark.
+function createFloatMesh() {
+  const profile = [
+    [0.0, -0.075], [0.022, -0.062], [0.04, -0.035], [0.046, -0.005], [0.044, 0.02],
+    [0.032, 0.048], [0.014, 0.066], [0.006, 0.07], [0.005, 0.15], [0.0, 0.152],
+  ].map(([r, y]) => new THREE.Vector2(r, y));
+  const geo = new THREE.LatheGeometry(profile, 16);
+  const pos = geo.getAttribute('position');
+  const colors = [];
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y < -0.004) colors.push(0.9, 0.9, 0.88);
+    else if (y < 0.008) colors.push(0.05, 0.05, 0.05);
+    else if (y < 0.069) colors.push(0.85, 0.06, 0.04);
+    else colors.push(1.0, 0.45, 0.05);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  const float = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35 }));
+  const tip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.009, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0xff7a1a, emissive: 0xff6010, emissiveIntensity: 2.5 }),
+  );
+  tip.position.y = 0.15;
+  float.add(tip);
+  float.castShadow = true;
+  return float;
 }

@@ -1,14 +1,26 @@
 import assert from 'node:assert';
-import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier } from '../src/fish.js';
+import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier, estimateLengthCm } from '../src/fish.js';
 
 {
-  assert.strictEqual(FISH_SPECIES.length, 8);
+  // Real-world sanity checks: a 2kg carp is ~48cm, a 10kg barbel ~1.1m.
+  const byId = (id) => FISH_SPECIES.find((s) => s.id === id);
+  const carp = estimateLengthCm(byId('common-carp'), 2);
+  const barbel = estimateLengthCm(byId('catfish'), 10);
+  assert.ok(carp > 44 && carp < 54, `2kg carp length ${carp.toFixed(1)}cm`);
+  assert.ok(barbel > 100 && barbel < 125, `10kg barbel length ${barbel.toFixed(1)}cm`);
+  assert.ok(estimateLengthCm(byId('tigerfish'), 4) > estimateLengthCm(byId('tigerfish'), 2), 'heavier is longer');
+  console.log('PASS: catch lengths estimated from weight are realistic');
+}
+
+{
+  assert.strictEqual(FISH_SPECIES.length, 11);
   const ids = FISH_SPECIES.map(f => f.id).sort();
   assert.deepStrictEqual(ids, [
     'banded-tilapia', 'catfish', 'common-carp', 'largemouth-bass',
-    'mirror-carp', 'mozambique-tilapia', 'smallmouth-bass', 'tigerfish',
+    'largescale-yellowfish', 'mirror-carp', 'mozambique-tilapia', 'mudfish', 'smallmouth-bass',
+    'smallmouth-yellowfish', 'tigerfish',
   ]);
-  console.log('PASS: exactly 8 species defined, including real SA sub-species');
+  console.log('PASS: exactly 11 species defined, including real SA sub-species');
 }
 
 {
@@ -27,7 +39,7 @@ import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier } from
   const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
 
   let goodBites = 0, badBites = 0;
-  const trials = 4000;
+  const trials = 40000; // bites are ~0.4%/s -- 4000 trials was flaky (~1 run in 40)
   for (let i = 0; i < trials; i++) {
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: goodLure, deltaSeconds: 1 })) goodBites++;
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: badLure, deltaSeconds: 1 })) badBites++;
@@ -51,7 +63,7 @@ import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier } from
   const bass = FISH_SPECIES.find(f => f.id === 'largemouth-bass');
   const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
   let normalBites = 0, boostedBites = 0;
-  const trials = 4000;
+  const trials = 40000; // bites are ~0.4%/s -- 4000 trials was flaky (~1 run in 40)
   for (let i = 0; i < trials; i++) {
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1 })) normalBites++;
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, biteChanceMultiplier: 2 })) boostedBites++;
@@ -72,7 +84,7 @@ import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier } from
   const bass = FISH_SPECIES.find(f => f.id === 'largemouth-bass');
   const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
   let onTimeBites = 0, offTimeBites = 0;
-  const trials = 4000;
+  const trials = 40000; // bites are ~0.4%/s -- 4000 trials was flaky (~1 run in 40)
   for (let i = 0; i < trials; i++) {
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, timeOfDay: 'sunset' })) onTimeBites++;
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1, timeOfDay: 'midday' })) offTimeBites++;
@@ -86,7 +98,8 @@ import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier } from
   const bass = FISH_SPECIES.find(f => f.id === 'largemouth-bass');
   const midTemp = (bass.tempRangeC[0] + bass.tempRangeC[1]) / 2;
   let bites = 0;
-  for (let i = 0; i < 500; i++) {
+  // ~0.4% a second, so give it long enough that zero bites is vanishingly rare.
+  for (let i = 0; i < 5000; i++) {
     if (rollForBite({ species: bass, waterTempC: midTemp, equippedLureId: bass.preferredLureIds[0], deltaSeconds: 1 })) bites++;
   }
   assert.ok(bites > 0, 'expected some bites when timeOfDay is omitted');

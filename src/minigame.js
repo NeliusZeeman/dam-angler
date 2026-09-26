@@ -65,8 +65,11 @@ export function createMinigame() {
     runTimer += deltaSeconds;
     if (runTimer >= style.runEvery) {
       runTimer = 0;
-      // A stiffer rod and a good rig soak up a run, not just steady strain.
-      tension += style.runSize * weightLoad * gearRelief;
+      // A good rig soaks up a run, not just steady strain -- and a soft,
+      // moderate/through-action blank cushions the lunge before it ever
+      // reaches the line.
+      const cushion = 1 - Math.min(0.6, rod.shockAbsorb || 0);
+      tension += style.runSize * weightLoad * gearRelief * cushion;
     }
 
     tension = Math.max(0, Math.min(1.2, tension));

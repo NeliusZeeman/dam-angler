@@ -1,4 +1,6 @@
 import assert from 'node:assert';
+import { createWindModel, windFromLabel, MAX_WIND } from '../src/weather.js';
+import { makeRng } from '../src/gfx/noise.js';
 import { createEnvironment, SEASON_ORDER, SEASON_LENGTH_SECONDS, DAY_CYCLE_SECONDS, TIME_OF_DAY_PHASES, PHASE_LENGTH_SECONDS } from '../src/environment.js';
 
 {
@@ -89,6 +91,38 @@ import { createEnvironment, SEASON_ORDER, SEASON_LENGTH_SECONDS, DAY_CYCLE_SECON
   const { timeOfDayProgress } = env.getState();
   assert.ok(timeOfDayProgress >= 0 && timeOfDayProgress <= 1, `timeOfDayProgress out of bounds: ${timeOfDayProgress}`);
   console.log('PASS: timeOfDayProgress stays within 0..1');
+}
+
+{
+  // Natural wind: it never teleports from calm to a gale -- changes build
+  // and ease over time -- yet over a few minutes it visits a real spread of
+  // speeds and the direction wanders rather than flipping.
+  const model = createWindModel(makeRng(42));
+  let prev = null, maxStep = 0, maxTurn = 0, lo = Infinity, hi = -Infinity, prevAng = null;
+  for (let i = 0; i < 6000; i++) {
+    model.tick(0.1, 'afternoon');
+    const s = model.speed;
+    const ang = Math.atan2(model.dirZ, model.dirX);
+    if (prev !== null) maxStep = Math.max(maxStep, Math.abs(s - prev));
+    if (prevAng !== null) {
+      let d = Math.abs(ang - prevAng);
+      if (d > Math.PI) d = Math.PI * 2 - d;
+      maxTurn = Math.max(maxTurn, d);
+    }
+    prev = s; prevAng = ang;
+    if (i > 100) { lo = Math.min(lo, s); hi = Math.max(hi, s); }
+    assert.ok(s >= 0 && s <= MAX_WIND, `wind out of range: ${s}`);
+  }
+  assert.ok(maxStep < 0.6, `wind should change smoothly (biggest 0.1s jump was ${maxStep.toFixed(2)})`);
+  assert.ok(hi - lo > 3, `wind should vary over time (range ${lo.toFixed(1)}..${hi.toFixed(1)})`);
+  assert.ok(maxTurn < 0.1, `direction should drift, not flip (biggest 0.1s turn ${maxTurn.toFixed(3)} rad)`);
+  console.log('PASS: wind varies naturally -- smooth gusts, a spread of speeds, drifting direction');
+}
+
+{
+  assert.strictEqual(windFromLabel(-1, 0), 'E', 'wind blowing west comes from the east');
+  assert.strictEqual(windFromLabel(0, -1), 'N', 'wind blowing south comes from the north');
+  console.log('PASS: wind direction labels');
 }
 
 console.log('All environment tests passed.');

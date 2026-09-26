@@ -3,16 +3,40 @@ import { RODS, LINES, REELS, HOOKS, LURES, getGearById } from '../src/gear.js';
 import { FISH_SPECIES } from '../src/fish.js';
 
 {
-  assert.strictEqual(RODS.length, 3);
+  assert.strictEqual(RODS.length, 5);
   assert.strictEqual(LINES.length, 3);
-  console.log('PASS: exactly 3 rod tiers and 3 line tiers');
+  console.log('PASS: five rods (across 3 tiers) and 3 line tiers');
+}
+
+{
+  const ACTIONS = ['fast', 'moderate', 'through'];
+  for (const rod of RODS) {
+    assert.ok(ACTIONS.includes(rod.action), `${rod.id} has a real rod action`);
+    assert.ok(rod.flex.length > 0 && rod.flex.length <= 1.45, `${rod.id} flex length within the blank`);
+    assert.ok(rod.flex.softness > 0, `${rod.id} has a softness`);
+  }
+  const byId = (id) => getGearById(RODS, id);
+  // Action = where it bends: fast rods bend only in the tip, through-action
+  // carp rods all the way down, moderate bass rods in between.
+  assert.ok(byId('rod-spinning').flex.length < byId('rod-bass').flex.length);
+  assert.ok(byId('rod-bass').flex.length < byId('rod-carp').flex.length);
+  // A moderate bass crankbait rod bows more and cushions lunges better than
+  // a fast spinning rod; the heavy barbel/tiger rod is the stiffest of all.
+  assert.ok(byId('rod-bass').flex.softness > byId('rod-spinning').flex.softness);
+  assert.ok(byId('rod-bass').shockAbsorb > byId('rod-spinning').shockAbsorb);
+  assert.ok(RODS.every((r) => r.flex.softness >= byId('rod-heavy').flex.softness));
+  // Casting: the 12ft carp rod throws furthest, the fibreglass starter least;
+  // the bass rod gives up a little distance for the tightest accuracy.
+  assert.ok(RODS.every((r) => r.castSpeed <= byId('rod-carp').castSpeed));
+  assert.ok(RODS.every((r) => r.castSpeed >= byId('rod-starter').castSpeed));
+  assert.ok(RODS.every((r) => r.spread >= byId('rod-bass').spread));
+  console.log('PASS: rod action/power match real freshwater rods');
 }
 
 {
   const sortedRods = [...RODS].sort((a, b) => a.tier - b.tier);
   for (let i = 1; i < sortedRods.length; i++) {
     assert.ok(sortedRods[i].cost > sortedRods[i - 1].cost, 'rod cost should increase with tier');
-    assert.ok(sortedRods[i].castDistance >= sortedRods[i - 1].castDistance, 'cast distance should not decrease with tier');
     assert.ok(sortedRods[i].tensionTolerance >= sortedRods[i - 1].tensionTolerance, 'tension tolerance should not decrease with tier');
   }
   const sortedLines = [...LINES].sort((a, b) => a.tier - b.tier);

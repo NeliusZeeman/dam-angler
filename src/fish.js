@@ -11,6 +11,8 @@ export const FISH_SPECIES = [
     maxWeightKg: 1.5,
     tempRangeC: [20, 32],
     preferredLureIds: ['bread-bait', 'worm', 'mielies', 'spinner'],
+    // Takes a small spinner now and then, but it's a bait fish at heart.
+    lureAffinity: { spinner: 0.3 },
     baseValuePerKg: 8,
     // Common warm-water grazer, South Africa's classic "bream" — bites
     // readily through the day, but still needs the right bait.
@@ -28,6 +30,7 @@ export const FISH_SPECIES = [
     maxWeightKg: 0.7,
     tempRangeC: [16, 28],
     preferredLureIds: ['worm', 'mielies', 'spinner'],
+    lureAffinity: { spinner: 0.3 },
     baseValuePerKg: 7,
     // Widespread river/dam species, smaller and a touch more skittish than
     // its Mozambique cousin, but just as willing to bite.
@@ -43,15 +46,17 @@ export const FISH_SPECIES = [
     minWeightKg: 1.0,
     maxWeightKg: 8.0,
     tempRangeC: [12, 28],
-    preferredLureIds: ['worm', 'mielies'],
+    // Mielies and dough are the classic SA carp baits; bread flake works too.
+    preferredLureIds: ['worm', 'mielies', 'bread-bait'],
     baseValuePerKg: 14,
     aggressiveness: 0.32,
-    // Opportunistic bottom feeder — morning and afternoon, bridging into
-    // sunset as the water cools.
-    activeTimes: ['morning', 'afternoon', 'sunset'],
+    // Opportunistic bottom feeder — feeds from first light through the
+    // morning and again from the afternoon into sunset.
+    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset'],
     bite: { speed: 'slow', style: 'steady', label: 'A long, steady pull' },
-    // Opportunistic -- roots around cover as readily as open bottom.
-    habitat: { structure: true },
+    // Roams the whole dam -- open bottom as much as cover -- so no habitat
+    // penalty anywhere (forum reports: most bank anglers' catch is carp).
+    habitat: {},
   },
   {
     id: 'mirror-carp',
@@ -60,7 +65,7 @@ export const FISH_SPECIES = [
     minWeightKg: 3.0,
     maxWeightKg: 14,
     tempRangeC: [13, 27],
-    preferredLureIds: ['worm', 'mielies'],
+    preferredLureIds: ['worm', 'mielies', 'bread-bait'],
     baseValuePerKg: 20,
     // The prized big-scaled carp variant — cautious, and a rare hookup, but
     // a genuinely heavy fish when it happens.
@@ -130,19 +135,92 @@ export const FISH_SPECIES = [
     tempRangeC: [18, 30],
     preferredLureIds: ['spoon-lure', 'spinner'],
     baseValuePerKg: 40,
-    // Explosive but scarce dusk striker. Needs a wire trace rig or it bites
-    // clean through the line — see main.js's tigerfish handling.
+    // Explosive striker. Needs a wire trace rig or it bites clean through
+    // the line — see main.js's tigerfish handling.
     aggressiveness: 0.08,
-    activeTimes: ['sunset', 'lateTwilight'],
+    // Jozini guides: they hunt all day, best early and from late afternoon
+    // into dusk; only really switch off in the heat of midday and at night.
+    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset', 'lateTwilight'],
     requiresWireTrace: true,
     bite: { speed: 'fast', style: 'aggressive', label: 'Violent, thrashing strike!' },
-    // Hunts the dropoffs and structure near the bank, per the Jozini research.
+    // Shoals chase baitfish over open water and along the drop-offs alike.
+    habitat: {},
+  },
+  {
+    // Labeobarbus aeneus, native to the Vaal-Orange system -- the Vaal Dam
+    // feeder anglers' bread and butter (43 of 90 fish in one session report).
+    id: 'smallmouth-yellowfish',
+    name: 'Smallmouth Yellowfish',
+    rarity: 'uncommon',
+    minWeightKg: 0.4,
+    maxWeightKg: 4.5,
+    tempRangeC: [10, 27],
+    // Mielies and dough on a feeder, worms, and small spinners and flies.
+    preferredLureIds: ['mielies', 'worm', 'spinner'],
+    lureAffinity: { spinner: 0.5 },
+    baseValuePerKg: 16,
+    aggressiveness: 0.4,
+    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset'],
+    // Known for a hard, fast fight well above its weight.
+    bite: { speed: 'fast', style: 'aggressive', label: 'A sharp tug and a hard run!' },
+    habitat: {},
+  },
+  {
+    // Labeobarbus marequensis, the Limpopo/Olifants/Pongola cousin of the
+    // smallmouth: bigger-scaled, more predatory, a prized fly and artlure
+    // fish in Loskop, Bronkhorstspruit and Jozini.
+    id: 'largescale-yellowfish',
+    name: 'Largescale Yellowfish',
+    rarity: 'rare',
+    minWeightKg: 0.5,
+    maxWeightKg: 6,
+    tempRangeC: [14, 30],
+    preferredLureIds: ['worm', 'mielies', 'spinner', 'spoon-lure'],
+    lureAffinity: { spinner: 0.6, 'spoon-lure': 0.6 },
+    baseValuePerKg: 18,
+    aggressiveness: 0.3,
+    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset'],
+    bite: { speed: 'fast', style: 'aggressive', label: 'A slam and a powerful run!' },
+    // Holds around rocks, drop-offs and drowned timber.
     habitat: { structure: true },
+  },
+  {
+    // Orange River mudfish / moggel (Labeo capensis, L. umbratus): a
+    // bottom-grazing labeo that turns up among the carp on Vaal and Loskop.
+    id: 'mudfish',
+    name: 'Mudfish',
+    rarity: 'common',
+    minWeightKg: 0.3,
+    maxWeightKg: 3.5,
+    tempRangeC: [10, 29],
+    preferredLureIds: ['mielies', 'bread-bait', 'worm'],
+    baseValuePerKg: 6,
+    aggressiveness: 0.35,
+    activeTimes: ['morning', 'midMorning', 'afternoon', 'sunset'],
+    // Sucker-mouthed grazer: fiddly little taps, then a dogged tug.
+    bite: { speed: 'slow', style: 'nibble', label: 'Soft, fiddly taps' },
+    // Grazes the silty bottom in the shallows and margins.
+    habitat: { shallow: true },
   },
 ];
 
 export function randomWeightFor(species) {
   return species.minWeightKg + Math.random() * (species.maxWeightKg - species.minWeightKg);
+}
+
+// Length from weight with the standard W = a * L^3 relation (grams,
+// centimetres). `a` is the species' condition factor: deep-bodied tilapia
+// weigh the most per centimetre, long lean barbel the least.
+const CONDITION_FACTOR = {
+  'mozambique-tilapia': 0.022, 'banded-tilapia': 0.022,
+  'common-carp': 0.017, 'mirror-carp': 0.018,
+  'largemouth-bass': 0.017, 'smallmouth-bass': 0.016,
+  catfish: 0.006, tigerfish: 0.013,
+  'smallmouth-yellowfish': 0.014, 'largescale-yellowfish': 0.015, mudfish: 0.013,
+};
+export function estimateLengthCm(species, weightKg) {
+  const a = CONDITION_FACTOR[species.id] ?? 0.015;
+  return Math.cbrt((weightKg * 1000) / a);
 }
 
 // Where you actually put the lure matters as much as what's on the end of
@@ -183,4 +261,69 @@ export function rollForBite({ species, waterTempC, equippedLureId, deltaSeconds,
   const perSecondChance = 0.02 * species.aggressiveness * lureMultiplier * timeMultiplier * habitatMultiplier * biteChanceMultiplier;
   const chance = 1 - Math.pow(1 - perSecondChance, deltaSeconds);
   return Math.random() < chance;
+}
+
+// How well the current temp/bait/time/spot suits a species, 0..~2.4.
+export function suitability(species, { waterTempC, equippedLureId, timeOfDay = null, habitat = null, lureKind = null }) {
+  const [minT, maxT] = species.tempRangeC;
+  if (waterTempC < minT || waterTempC > maxT) return 0;
+  // A preferred bait counts fully unless the species lists a weaker
+  // `lureAffinity` for it (kurper will hit a spinner, just not often).
+  const lureMultiplier = species.preferredLureIds.includes(equippedLureId)
+    ? (species.lureAffinity?.[equippedLureId] ?? 1.0)
+    : 0.15;
+  const timeMatch = timeOfDay === null || !species.activeTimes || species.activeTimes.includes(timeOfDay);
+  const timeMultiplier = timeMatch ? 1.0 : 0.25;
+  const habitatMultiplier = habitat ? getHabitatMultiplier(species, { ...habitat, lureKind }) : 1;
+  return lureMultiplier * timeMultiplier * habitatMultiplier;
+}
+
+// Each dam's `catchShare` says what share of anglers' catches each species
+// makes up there (from forum and venue reports). A fish's pull on your line
+// is its share of the dam's population times how well your bait, the time
+// and the spot suit it. Without a share table every species counts evenly,
+// scaled by how readily it bites.
+export function catchWeights(speciesList, catchShare, opts) {
+  return speciesList.map((species) => {
+    const share = catchShare ? (catchShare[species.id] ?? 0) : species.aggressiveness;
+    return share * suitability(species, opts);
+  });
+}
+
+function weightedPick(list, weights) {
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  if (total <= 0) return null;
+  let roll = Math.random() * total;
+  for (let i = 0; i < list.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return list[i];
+  }
+  return list[list.length - 1];
+}
+
+// Bites per second with bait, time and spot all in the fish's favour.
+export const DAM_BITE_RATE = 0.035;
+
+// One roll per frame for the whole dam: does anything bite, and if so which
+// fish? Every species gets a fair shot in proportion to its weight -- no
+// list-order advantage. Returns the species or null.
+export function rollDamBite(speciesList, catchShare, { deltaSeconds, biteChanceMultiplier = 1, ...opts }) {
+  const weights = catchWeights(speciesList, catchShare, opts);
+  const shareTotal = catchShare
+    ? speciesList.reduce((sum, s) => sum + (catchShare[s.id] ?? 0), 0)
+    : speciesList.reduce((sum, s) => sum + s.aggressiveness, 0);
+  if (shareTotal <= 0) return null;
+  const suited = weights.reduce((sum, w) => sum + w, 0) / shareTotal;
+  const perSecond = Math.min(0.95, DAM_BITE_RATE * suited * biteChanceMultiplier);
+  const chance = 1 - Math.pow(1 - perSecond, deltaSeconds);
+  if (Math.random() >= chance) return null;
+  return weightedPick(speciesList, weights);
+}
+
+// A line that's sat too long picks a fish the same way, so the "guaranteed"
+// bite still feels like the right fish for this dam and these conditions.
+// Returns null only if literally nothing here can bite (e.g. every local
+// species is outside the current water temperature).
+export function pickGuaranteedBite(speciesList, opts, catchShare = null) {
+  return weightedPick(speciesList, catchWeights(speciesList, catchShare, opts));
 }

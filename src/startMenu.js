@@ -7,7 +7,7 @@ const TIME_LABELS = {
   sunset: 'Sunset', lateTwilight: 'Late Twilight', night: 'Night',
 };
 
-export function showStartMenu(container, onConfirm) {
+export function showStartMenu(container, onConfirm, { onBack = null } = {}) {
   let selectedLocationId = LOCATIONS[0].id;
   let selectedTime = 'morning';
 
@@ -39,8 +39,9 @@ export function showStartMenu(container, onConfirm) {
 
     overlay.innerHTML = `
       <div class="start-menu-inner">
+        ${onBack ? '<button class="start-back" type="button">&larr; Main Menu</button>' : ''}
         <h1>Where do you want to fish?</h1>
-        <p class="start-sub">Three real South African waters, each with a different mix of fish.</p>
+        <p class="start-sub">Six real South African dams, each with a different mix of fish.</p>
         <div class="start-locations">${locationCards}</div>
         <h2>What time is it?</h2>
         <div class="start-times">${timeButtons}</div>
@@ -59,6 +60,10 @@ export function showStartMenu(container, onConfirm) {
         selectedTime = btn.dataset.time;
         render();
       });
+    });
+    overlay.querySelector('.start-back')?.addEventListener('click', () => {
+      overlay.remove();
+      onBack();
     });
     overlay.querySelector('.start-go').addEventListener('click', () => {
       overlay.remove();

@@ -33,4 +33,16 @@ const { loadSave, saveSave, DEFAULT_SAVE } = await import('../src/save.js');
   console.log('PASS: loadSave falls back to defaults on corrupted data');
 }
 
+{
+  // An older save with no settings block still gets every default, and a
+  // save with only some settings keeps them and fills in the rest.
+  localStorage.setItem('pond-fishing-save', JSON.stringify({ credits: 5 }));
+  assert.deepStrictEqual(loadSave().settings, DEFAULT_SAVE.settings);
+  localStorage.setItem('pond-fishing-save', JSON.stringify({ credits: 5, settings: { quality: 'low' } }));
+  const loaded = loadSave();
+  assert.strictEqual(loaded.settings.quality, 'low');
+  assert.strictEqual(loaded.settings.showHints, DEFAULT_SAVE.settings.showHints);
+  console.log('PASS: settings merge over defaults for old and partial saves');
+}
+
 console.log('All save tests passed.');

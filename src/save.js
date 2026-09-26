@@ -15,16 +15,23 @@ export const DEFAULT_SAVE = {
   equippedHookId: 'hook-small',
   equippedLureId: 'bread-bait',
   catchLog: {},
+  settings: {
+    quality: 'auto', // 'auto' (low on phones/small tablets) | 'high' | 'low'
+    showHints: true, // the controls reminder along the top bar
+    turnSpeed: 1, // multiplier on Q/E, edge-of-screen and right-drag turning
+  },
 };
 
 export function loadSave() {
   const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) return { ...DEFAULT_SAVE };
+  if (!raw) return { ...DEFAULT_SAVE, settings: { ...DEFAULT_SAVE.settings } };
   try {
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SAVE, ...parsed };
+    // Settings are merged key by key so saves from before a setting existed
+    // still get its default.
+    return { ...DEFAULT_SAVE, ...parsed, settings: { ...DEFAULT_SAVE.settings, ...(parsed.settings || {}) } };
   } catch {
-    return { ...DEFAULT_SAVE };
+    return { ...DEFAULT_SAVE, settings: { ...DEFAULT_SAVE.settings } };
   }
 }
 

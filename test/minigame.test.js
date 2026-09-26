@@ -62,7 +62,7 @@ const carp = FISH_SPECIES.find((f) => f.id === 'common-carp');
   // the ease-off strategy now lands it.
   const { result } = runFight({
     species: tigerfish, weightKg: 6,
-    gear: { rod: RODS[2], line: LINES[2], hook: HOOKS.find((h) => h.isWireTrace) },
+    gear: { rod: RODS.find((r) => r.id === 'rod-heavy'), line: LINES[2], hook: HOOKS.find((h) => h.isWireTrace) },
     strategy: (s) => s.tension < 0.7,
   });
   assert.strictEqual(result, 'success', `expected top gear to land a big tigerfish, got ${result}`);
