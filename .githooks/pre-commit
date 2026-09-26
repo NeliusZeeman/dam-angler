@@ -1,0 +1,4 @@
+#!/bin/sh
+# Re-stamp version.json so every pushed release tells browsers it's new
+# (see tools/stamp-version.mjs). Enabled with: git config core.hooksPath .githooks
+node tools/stamp-version.mjs >/dev/null && git add version.json

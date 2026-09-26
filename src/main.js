@@ -24,6 +24,7 @@ import { createDam } from './dam.js';
 import { seedFromString } from './gfx/noise.js';
 import { createChumSystem, CHUM_COST } from './chum.js';
 import { createPauseMenu } from './pauseMenu.js';
+import { startVersionWatch, reloadToLatest, assetTag } from './versionCheck.js';
 
 const appEl = document.getElementById('app');
 const save = loadSave();
@@ -33,6 +34,21 @@ document.body.classList.toggle('touch', touchMode);
 
 // Every launch opens on the title screen.
 openMainMenu();
+
+// A newer version published while the game's open: on the menus, just
+// reload onto it; mid-session, offer it without interrupting a fight.
+let gameRunning = false;
+startVersionWatch(() => {
+  if (!gameRunning) { reloadToLatest(); return; }
+  const bar = document.createElement('button');
+  bar.type = 'button';
+  bar.className = 'update-banner';
+  bar.textContent = 'New version available — tap to update';
+  bar.addEventListener('click', (e) => { e.stopPropagation(); reloadToLatest(); });
+  bar.addEventListener('pointerdown', (e) => e.stopPropagation());
+  bar.addEventListener('mousedown', (e) => e.stopPropagation());
+  appEl.appendChild(bar);
+});
 
 // Phones and tablets: go fullscreen and landscape when fishing starts. Both
 // need the tap that started the game, so this runs before the heavy setup.
@@ -74,13 +90,14 @@ function preloadFishImages(speciesList) {
   const load = () => speciesList.forEach((s) => {
     const img = new Image();
     img.decoding = 'async';
-    img.src = `assets/fish/${s.id}.webp`;
+    img.src = `assets/fish/${s.id}.webp${assetTag()}`;
   });
   if ('requestIdleCallback' in window) requestIdleCallback(load, { timeout: 5000 });
   else setTimeout(load, 3000);
 }
 
 function startGame(locationId, startTimeOfDay) {
+  gameRunning = true;
   const location = getLocationById(locationId);
   const localSpecies = FISH_SPECIES.filter((s) => location.speciesIds.includes(s.id));
   // We fish the open dam itself, from its bank and angling stands.

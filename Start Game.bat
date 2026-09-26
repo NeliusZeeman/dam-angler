@@ -20,6 +20,9 @@ echo  The game opens in your browser in a few seconds.
 echo  Keep this window open while you play -- close it to stop the game.
 echo.
 
+rem Stamp the current version so browsers always load the latest files.
+node tools\stamp-version.mjs
+
 rem Open the browser once the server has had a moment to start.
 start "" cmd /c "timeout /t 4 /nobreak >nul & start "" http://localhost:5173"
 

@@ -3,6 +3,7 @@ import { FISH_SPECIES } from './fish.js';
 import { saveSave } from './save.js';
 import { createTackleBox } from './tackleBox.js';
 import { renderCatchLog } from './ui.js';
+import { buildLabel } from './versionCheck.js';
 
 const TIME_LABELS = {
   morning: 'Morning', midMorning: 'Mid-Morning', midday: 'Midday', afternoon: 'Afternoon',
@@ -59,6 +60,7 @@ export function showMainMenu(container, { save, onContinue, onNewGame }) {
         <p class="mm-kicker">South African freshwater angling</p>
         <h1 class="mm-title">Dam Angler</h1>
         <p class="mm-stats"><span>${save.credits} credits</span><span>${totalCaught()} fish landed</span></p>
+        <p class="mm-version">${buildLabel()}</p>
         <nav class="mm-buttons">
           ${hasGame ? `<button class="mm-btn mm-primary" data-go="continue" type="button">Continue<small>${where}</small></button>` : ''}
           <button class="mm-btn ${hasGame ? '' : 'mm-primary'}" data-go="new" type="button">New Game<small>Choose a dam and a time of day</small></button>

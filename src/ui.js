@@ -1,5 +1,6 @@
 import { FISH_SPECIES } from './fish.js';
 import { windFromLabel } from './weather.js';
+import { assetTag } from './versionCheck.js';
 
 export function createHUD(container, { showHints = true, touch = false } = {}) {
   // Touch screens use the on-screen rod button instead of the mouse.
@@ -137,7 +138,7 @@ export function showCatchCard(container, { species, weightKg, lengthCm, payout, 
   wrap.innerHTML = `
     <div class="catch-card" role="dialog" aria-label="${species.name} landed">
       <div class="catch-photo">
-        <img alt="${species.name}" decoding="async" src="assets/fish/${species.id}.webp">
+        <img alt="${species.name}" decoding="async" src="assets/fish/${species.id}.webp${assetTag()}">
         <div class="catch-photo-missing">
           <strong>${species.name}</strong>
           <small>Add a picture as assets/fish/${species.id}.png</small>
@@ -164,7 +165,7 @@ export function showCatchCard(container, { species, weightKg, lengthCm, payout, 
   const img = wrap.querySelector('img');
   const markMissing = () => wrap.querySelector('.catch-photo').classList.add('missing');
   img.addEventListener('error', () => {
-    if (img.src.endsWith('.webp')) img.src = `assets/fish/${species.id}.png`;
+    if (img.src.includes('.webp')) img.src = `assets/fish/${species.id}.png${assetTag()}`;
     else markMissing();
   });
 

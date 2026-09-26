@@ -10,10 +10,41 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="description" content="Fish six real South African dams — carp, bass, barbel, kurper, yellowfish and tigerfish." />
   <title>Dam Angler</title>
-  <link rel="stylesheet" href="src/style.css" />
+  <!-- href set by the loader below, tagged with the current version. -->
+  <link id="game-css" rel="stylesheet" />
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="src/main.js"></script>
+  <script>
+    // Always the latest version: read version.json fresh (never from cache),
+    // then load every game file tagged with that version. A phone or web
+    // host can't hand back an old copy once anything has changed, because
+    // each release asks for different file addresses. (version.json is
+    // written by tools/stamp-version.mjs.)
+    (async function loadLatest() {
+      var build = { version: 'dev', modules: [] };
+      try {
+        var res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) build = await res.json();
+      } catch (e) { /* offline or no stamp yet: load untagged files */ }
+      window.__BUILD__ = build;
+      var tag = build.version === 'dev' ? '' : '?v=' + build.version;
+      // Every module the game imports, mapped to its tagged address.
+      var base = new URL('./', location.href);
+      var imports = {};
+      (build.modules || []).forEach(function (m) {
+        imports[new URL(m, base).href] = new URL(m + tag, base).href;
+      });
+      var map = document.createElement('script');
+      map.type = 'importmap';
+      map.textContent = JSON.stringify({ imports: imports });
+      document.head.appendChild(map);
+      document.getElementById('game-css').href = 'src/style.css' + tag;
+      var main = document.createElement('script');
+      main.type = 'module';
+      main.src = 'src/main.js' + tag;
+      document.body.appendChild(main);
+    })();
+  </script>
 </body>
 </html>
