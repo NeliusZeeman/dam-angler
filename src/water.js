@@ -41,6 +41,7 @@ const fragmentShader = /* glsl */`
 uniform float uTime, uRough, uSunVis, uDay, uFogNear, uFogFar, uClarity, uAlgae, uDepthScale;
 uniform vec3 uSunDir, uSunColor, uDeep, uShallow, uFoamColor, uFogColor, uHorizon;
 uniform vec2 uWindDir;
+uniform float uFlow;
 uniform sampler2D uReflection;
 varying vec3 vWorldPos;
 varying vec4 vReflCoord;
@@ -51,7 +52,11 @@ ${NOISE_GLSL}
 float heightField(vec2 p) {
   vec2 w = uWindDir;
   vec2 side = vec2(-w.y, w.x);
+  // River current: the whole surface pattern slides downstream (+x), with
+  // a fine, fast "riffle" layer on top where the water's moving.
+  p -= vec2(uFlow, 0.0) * uTime;
   float h = vnoise(p * 0.32 - w * uTime * 0.16) * 0.55;
+  h += vnoise(vec2(p.x * 1.6, p.y * 4.0) + vec2(uTime * uFlow * 2.5, 0.0)) * 0.12 * min(1.0, uFlow * 2.5);
   h += vnoise(p * 1.05 - side * uTime * 0.28 + 3.1) * 0.28;
   h += vnoise(p * 3.1 - w * uTime * 0.75 + 7.7) * 0.12 * (0.4 + uRough);
   h += vnoise(p * 7.7 + w * uTime * 1.2) * 0.05 * (0.3 + uRough);
@@ -200,6 +205,7 @@ export function createWater(scene, dam, {
     uDay: { value: 1 },
     uRough: { value: 0.3 },
     uWindDir: { value: new THREE.Vector2(1, 0) },
+    uFlow: { value: dam.spec.flow || 0 },
     uDeep: { value: new THREE.Color() },
     uShallow: { value: new THREE.Color() },
     uFoamColor: { value: new THREE.Color(0.9, 0.92, 0.88) },

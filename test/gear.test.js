@@ -3,17 +3,17 @@ import { RODS, LINES, REELS, HOOKS, LURES, getGearById } from '../src/gear.js';
 import { FISH_SPECIES } from '../src/fish.js';
 
 {
-  assert.strictEqual(RODS.length, 5);
+  assert.strictEqual(RODS.length, 9);
   assert.ok(LINES.length >= 6, 'a real range of lines');
   for (const line of LINES) {
-    assert.ok(line.breakKg > 0 && ['mono', 'braid', 'fluoro'].includes(line.type), `${line.id} has a breaking strain and a line type`);
+    assert.ok(line.breakKg > 0 && ['mono', 'braid', 'fluoro', 'fly'].includes(line.type), `${line.id} has a breaking strain and a line type`);
     // Names carry the real rating, e.g. "15lb (6.8kg)".
     assert.ok(/\d+lb \(\d+(\.\d)?kg\)/.test(line.name), `${line.id} name shows lb and kg`);
   }
   for (const hook of HOOKS) {
     assert.ok(hook.strengthKg > 0 && hook.holdBonus >= 0 && hook.holdBonus < 1, `${hook.id} has strength and hold`);
   }
-  console.log(`PASS: five rods, ${LINES.length} real lines (lb/kg rated), every hook rated`);
+  console.log(`PASS: six rods (incl. fly rod), ${LINES.length} real lines (lb/kg rated), every hook rated`);
 }
 
 {
@@ -131,8 +131,10 @@ import { FISH_SPECIES } from '../src/fish.js';
 {
   // Better reels cast further and fight better; braid casts further than
   // the starter line. This is what makes upgrades feel like upgrades.
-  assert.strictEqual(REELS.length, 3);
-  const sortedReels = [...REELS].sort((a, b) => a.tier - b.tier);
+  // (Fly reels only hold line -- they're checked with the fly gear below.)
+  const castingReels = REELS.filter((r) => !r.fly);
+  assert.ok(castingReels.length >= 3);
+  const sortedReels = [...castingReels].sort((a, b) => a.tier - b.tier);
   for (let i = 1; i < sortedReels.length; i++) {
     assert.ok(sortedReels[i].cost > sortedReels[i - 1].cost, 'reel cost should increase with tier');
     assert.ok(sortedReels[i].castMultiplier > sortedReels[i - 1].castMultiplier, 'better reels should cast further');
@@ -146,3 +148,62 @@ import { FISH_SPECIES } from '../src/fish.js';
 }
 
 console.log('All gear tests passed.');
+
+// Fly gear: bought with credits, and it only works properly together.
+{
+  const { rigCheck } = await import('../src/gear.js');
+  const g = (list, id) => getGearById(list, id);
+  const flyLines = LINES.filter((l) => l.type === 'fly');
+  const flyReels = REELS.filter((r) => r.fly);
+  assert.ok(flyLines.length >= 2 && flyLines.some((l) => l.sinking) && flyLines.some((l) => !l.sinking), 'floating and sinking fly lines');
+  assert.ok(flyReels.length >= 1, 'a fly reel');
+  for (const item of [...flyLines, ...flyReels]) assert.ok(item.cost > 0, `${item.id} costs credits`);
+
+  const flyRig = { rod: g(RODS, 'rod-fly'), reel: g(REELS, 'reel-fly'), line: g(LINES, 'line-fly-float'), lure: g(LURES, 'fly-nymph') };
+  const full = rigCheck(flyRig);
+  assert.ok(full.ok && full.flyRig && full.castFactor === 1, 'a matched fly rig casts fully');
+  // A fly on a spinning rod barely goes anywhere.
+  const flyOnSpinning = rigCheck({ rod: g(RODS, 'rod-spinning'), reel: g(REELS, 'reel-spinning'), line: g(LINES, 'line-mono-12'), lure: g(LURES, 'fly-nymph') });
+  assert.ok(!flyOnSpinning.ok && flyOnSpinning.castFactor < 0.5, 'flies need the fly rod and fly line');
+  // A fly line on a carp rod, a mieliebom on a fly rod, a fly rod with mono.
+  assert.ok(rigCheck({ ...flyRig, rod: g(RODS, 'rod-carp') }).castFactor < 0.5);
+  assert.ok(rigCheck({ ...flyRig, lure: g(LURES, 'mieliebom') }).castFactor < 0.5);
+  assert.ok(rigCheck({ ...flyRig, line: g(LINES, 'line-starter') }).castFactor < 1);
+  // Ordinary rigs are untouched.
+  const carp = rigCheck({ rod: g(RODS, 'rod-carp'), reel: g(REELS, 'reel-bigpit'), line: g(LINES, 'line-carp-15'), lure: g(LURES, 'mieliebom') });
+  assert.ok(carp.ok && carp.castFactor === 1 && carp.biteFactor === 1 && !carp.flyRig);
+  // Streamers want the sinking line; a sinking line drowns a dry fly.
+  const sink = g(LINES, 'line-fly-sink');
+  assert.ok(rigCheck({ ...flyRig, line: sink, lure: g(LURES, 'fly-streamer') }).biteFactor > rigCheck({ ...flyRig, lure: g(LURES, 'fly-streamer') }).biteFactor);
+  assert.ok(rigCheck({ ...flyRig, line: sink, lure: g(LURES, 'fly-dry') }).biteFactor < 1);
+  console.log('PASS: fly lines, fly reels and rig pairing rules');
+}
+
+// Tackle box sections: every item has a real home, and every kind of
+// fishing has its own rod, line and bait to buy.
+{
+  const { TACKLE_SECTIONS, sectionsFor } = await import('../src/gear.js');
+  const ids = new Set(TACKLE_SECTIONS.map((x) => x.id));
+  const all = [...RODS, ...REELS, ...LINES, ...HOOKS, ...LURES];
+  for (const item of all) {
+    assert.ok(sectionsFor(item).every((sec) => ids.has(sec)), `${item.id} sits in a known section`);
+  }
+  for (const sec of ids) {
+    for (const [name, list] of [['rod', RODS], ['line', LINES], ['bait', LURES], ['reel', REELS]]) {
+      assert.ok(list.some((i) => sectionsFor(i).includes(sec)), `${sec} has a ${name}`);
+    }
+  }
+  assert.ok(sectionsFor(getGearById(LURES, 'mieliebom')).includes('carp'));
+  assert.ok(sectionsFor(getGearById(RODS, 'rod-fly')).includes('fly'));
+  assert.ok(sectionsFor(getGearById(HOOKS, 'hook-wire-trace')).includes('predator'));
+  console.log(`PASS: ${all.length} items sorted into ${ids.size} tackle box sections`);
+}
+
+// Every bait and lure in the shop is something at least one fish eats.
+{
+  const { FISH_SPECIES: SPECIES } = await import('../src/fish.js');
+  for (const lure of LURES) {
+    assert.ok(SPECIES.some((s) => s.preferredLureIds.includes(lure.id)), `no fish takes ${lure.id}`);
+  }
+  console.log(`PASS: all ${LURES.length} baits and lures catch something`);
+}

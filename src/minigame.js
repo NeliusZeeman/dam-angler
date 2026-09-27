@@ -93,7 +93,8 @@ export function createMinigame() {
     const load = style.load * weightLoad * gearRelief;
     const snapMax = SNAP_AT;
     // Mono stretches and cushions a lunge; braid has none, so runs hit hard.
-    const stretch = { mono: 0.85, fluoro: 0.95, braid: 1.3 }[line.type] ?? 1;
+    // A fly line plus nylon tippet (and the soft fly rod) cushions most.
+    const stretch = { mono: 0.85, fluoro: 0.95, braid: 1.3, fly: 0.8 }[line.type] ?? 1;
     const hold = (hook && hook.holdBonus) || 0;
 
     // Roughly how many kg the fish is hauling against you.

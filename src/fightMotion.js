@@ -36,6 +36,13 @@ export const FIGHT_STYLES = {
   'smallmouth-yellowfish': { runSpeed: 3.0, runEvery: [1.5, 3.0], swing: 1.3, jumpRate: 0.005, jumpHeight: 0.4, depth: 0.8, stamina: 1.5 },
   'largescale-yellowfish': { runSpeed: 3.2, runEvery: [1.5, 3.0], swing: 1.3, jumpRate: 0.01, jumpHeight: 0.5, depth: 0.9, stamina: 1.6 },
   mudfish: { runSpeed: 1.3, runEvery: [2.0, 4.0], swing: 1.2, jumpRate: 0, jumpHeight: 0, depth: 1.0, stamina: 1.3 },
+  // Rainbows cartwheel out of the water when hooked; browns bore deep and
+  // shake their heads; largemouth yellows make long, powerful runs.
+  'rainbow-trout': { runSpeed: 3.0, runEvery: [1.0, 2.2], swing: 1.6, jumpRate: 0.08, jumpHeight: 0.8, depth: 0.6, stamina: 1.4 },
+  'brown-trout': { runSpeed: 2.4, runEvery: [2.0, 4.0], swing: 1.2, jumpRate: 0.01, jumpHeight: 0.5, depth: 1.0, stamina: 1.7 },
+  'largemouth-yellowfish': { runSpeed: 3.4, runEvery: [1.5, 3.0], swing: 1.4, jumpRate: 0.01, jumpHeight: 0.5, depth: 1.0, stamina: 2.0 },
+  'clanwilliam-yellowfish': { runSpeed: 3.0, runEvery: [1.5, 3.0], swing: 1.3, jumpRate: 0.005, jumpHeight: 0.4, depth: 0.8, stamina: 1.8 },
+  bluegill: { runSpeed: 1.3, runEvery: [0.8, 1.6], swing: 1.8, jumpRate: 0, jumpHeight: 0, depth: 0.4, stamina: 0.8 },
 };
 const DEFAULT_STYLE = { runSpeed: 1.8, runEvery: [1.5, 3.0], swing: 1.4, jumpRate: 0, jumpHeight: 0, depth: 0.8, stamina: 1.3 };
 

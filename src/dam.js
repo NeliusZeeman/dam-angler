@@ -18,7 +18,7 @@ export const DECK_Y = 0.45; // stand deck height above the water
 export function createDam(spec = {}, seed = 1) {
   const {
     shore = {}, structure = [], farShore = null, maxDepth = 12, depthSlope = 30,
-    bankSteepness = 1, beachWidth = 3, hills = 4, stands = [],
+    bankSteepness = 1, beachWidth = 3, hills = 4, stands = [], flow = 0,
   } = spec;
   const wobble = shore.wobble ?? 3;
   const features = shore.features ?? [];
@@ -127,6 +127,7 @@ export function createDam(spec = {}, seed = 1) {
   return {
     shoreZ, farShoreZ, waterDist, isWater, depthAt, depthFactorAt, zoneAt,
     groundHeight, floorHeight, isWalkable, standAt, stands: standBoxes, spawn,
-    spec: { maxDepth, depthSlope, farShore, beachWidth, bankSteepness, hills, structure },
+    // flow: river current in m/s along +x (0 for still water).
+    spec: { maxDepth, depthSlope, farShore, beachWidth, bankSteepness, hills, structure, flow },
   };
 }

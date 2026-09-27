@@ -19,7 +19,10 @@ export const TIME_OF_DAY_PHASES = [
 ];
 export const DAY_CYCLE_SECONDS = PHASE_LENGTH_SECONDS * TIME_OF_DAY_PHASES.length;
 
-export function createEnvironment({ startTimeOfDay = null } = {}) {
+// `tempOffset`: how much warmer (+) or colder (-) this water runs than a
+// typical Highveld dam -- a Drakensberg trout stream is ~9°C colder, a
+// Lowveld dam a few degrees warmer. Trout only bite in cold water.
+export function createEnvironment({ startTimeOfDay = null, tempOffset = 0 } = {}) {
   let seasonIndex = 0;
   let seasonElapsed = 0;
   const wind = createWindModel();
@@ -51,7 +54,7 @@ export function createEnvironment({ startTimeOfDay = null } = {}) {
   }
 
   function getState() {
-    const base = SEASON_BASE_TEMP_C[currentSeason()];
+    const base = Math.max(2, SEASON_BASE_TEMP_C[currentSeason()] + tempOffset);
     const tod = timeOfDayInfo();
     return {
       season: currentSeason(),

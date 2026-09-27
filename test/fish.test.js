@@ -13,14 +13,15 @@ import { FISH_SPECIES, rollForBite, randomWeightFor, getHabitatMultiplier, estim
 }
 
 {
-  assert.strictEqual(FISH_SPECIES.length, 11);
+  assert.strictEqual(FISH_SPECIES.length, 16);
   const ids = FISH_SPECIES.map(f => f.id).sort();
   assert.deepStrictEqual(ids, [
-    'banded-tilapia', 'catfish', 'common-carp', 'largemouth-bass',
-    'largescale-yellowfish', 'mirror-carp', 'mozambique-tilapia', 'mudfish', 'smallmouth-bass',
+    'banded-tilapia', 'bluegill', 'brown-trout', 'catfish', 'clanwilliam-yellowfish', 'common-carp',
+    'largemouth-bass', 'largemouth-yellowfish', 'largescale-yellowfish', 'mirror-carp',
+    'mozambique-tilapia', 'mudfish', 'rainbow-trout', 'smallmouth-bass',
     'smallmouth-yellowfish', 'tigerfish',
   ]);
-  console.log('PASS: exactly 11 species defined, including real SA sub-species');
+  console.log('PASS: exactly 16 species defined, including real SA sub-species');
 }
 
 {

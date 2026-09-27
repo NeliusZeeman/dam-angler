@@ -1,4 +1,4 @@
-import { RODS, LINES, REELS, HOOKS, LURES } from './gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, getGearById, rigCheck, TACKLE_SECTIONS, sectionsFor } from './gear.js';
 
 export function createTackleBox({ container, save, onSaveChanged }) {
   const panel = document.createElement('div');
@@ -13,10 +13,10 @@ export function createTackleBox({ container, save, onSaveChanged }) {
       const disabled = (!owned && save.credits < item.cost) || equipped;
       // Rods: action and power. Lines: type and breaking strain. Hooks: how
       // big a fish they'll hold. Plus each item's own short note.
-      const lineSpec = item.breakKg ? `${{ mono: 'Mono', braid: 'Braid', fluoro: 'Fluorocarbon' }[item.type] || ''} · breaks at ${item.breakKg} kg` : '';
+      const lineSpec = item.breakKg ? `${{ mono: 'Mono', braid: 'Braid', fluoro: 'Fluorocarbon', fly: item.sinking ? 'Sinking fly line' : 'Floating fly line' }[item.type] || ''} · breaks at ${item.breakKg} kg` : '';
       const hookSpec = item.strengthKg ? `Holds fish to ~${item.strengthKg} kg` : '';
       const specText = [lineSpec || hookSpec, item.note].filter(Boolean).join(' · ');
-      const spec = item.action ? `<small class="shop-spec">${item.action} action · ${item.power} power</small>`
+      const spec = item.action ? `<small class="shop-spec">${item.action} action · ${item.power} power${item.note ? `<span class="shop-note"> · ${item.note}</span>` : ''}</small>`
         : specText ? `<small class="shop-spec shop-note">${specText}</small>` : '';
       return `<div class="shop-row">
         <span>${item.name}${spec}</span>
@@ -26,9 +26,10 @@ export function createTackleBox({ container, save, onSaveChanged }) {
     return `<h3>${title}</h3>${rows}`;
   }
 
-  // One section at a time, picked from tabs along the top -- the full list
-  // is taller than most screens and the bait section used to sit out of
-  // sight below the fold. Opens on Bait, the thing you change most.
+  // Two rows of tabs: the kind of fishing (General, Carp, Bass, Fly & Trout,
+  // Barbel & Tiger), then the part of the rig (Bait, Rods, Reels, Line,
+  // Hooks). One short list at a time, so nothing hides below the fold on a
+  // phone. Opens on Bait, the thing you change most.
   const TABS = [
     { kind: 'lure', label: 'Bait', title: 'Bait & Lures', items: () => LURES, owned: () => save.ownedLureIds, equipped: () => save.equippedLureId },
     { kind: 'rod', label: 'Rods', title: 'Rods', items: () => RODS, owned: () => save.ownedRodIds, equipped: () => save.equippedRodId },
@@ -37,18 +38,48 @@ export function createTackleBox({ container, save, onSaveChanged }) {
     { kind: 'hook', label: 'Hooks', title: 'Hooks & Rigs', items: () => HOOKS, owned: () => save.ownedHookIds, equipped: () => save.equippedHookId },
   ];
   let activeTab = 'lure';
+  let activeSection = 'general';
+  const inSection = (item) => sectionsFor(item).includes(activeSection);
+
+  // What's rigged up right now, and whether it belongs together.
+  function rigHtml() {
+    const rig = rigCheck({
+      rod: getGearById(RODS, save.equippedRodId), reel: getGearById(REELS, save.equippedReelId),
+      line: getGearById(LINES, save.equippedLineId), lure: getGearById(LURES, save.equippedLureId),
+    });
+    if (rig.ok) return `<div class="rig-check ok">${rig.flyRig ? 'Fly rig ready — rod, reel, line and fly all match' : 'Rig ready'}</div>`;
+    const pct = Math.round(rig.castFactor * 100);
+    return `<div class="rig-check warn"><b>Rig doesn't match${pct < 100 ? ` — casts only ~${pct}% as far` : ''}</b>${rig.issues.map((i) => `<span>${i}</span>`).join('')}</div>`;
+  }
 
   function refresh() {
-    const tab = TABS.find((t) => t.kind === activeTab) || TABS[0];
+    const section = TACKLE_SECTIONS.find((x) => x.id === activeSection) || TACKLE_SECTIONS[0];
+    // Only the parts this kind of fishing has (flies come tied on their own
+    // hooks, so Fly & Trout has no Hooks tab).
+    const kinds = TABS.filter((t) => t.items().some(inSection));
+    const tab = kinds.find((t) => t.kind === activeTab) || kinds[0];
+    activeTab = tab.kind;
+    const rigged = TABS.map((t) => getGearById(t.items(), t.equipped())?.name.split(' (')[0]).filter(Boolean).join(' · ');
     panel.innerHTML = `
       <button class="panel-close" id="shop-close">Close</button>
       <div class="tackle-credits">Credits: ${save.credits}</div>
-      <div class="tackle-tabs" role="tablist">
-        ${TABS.map((t) => `<button type="button" role="tab" class="tackle-tab ${t.kind === tab.kind ? 'on' : ''}" aria-selected="${t.kind === tab.kind}" data-tab="${t.kind}">${t.label}</button>`).join('')}
+      <div class="tackle-rigged"><b>Rigged:</b> ${rigged}</div>
+      ${rigHtml()}
+      <div class="tackle-tabs tackle-sections" role="tablist" aria-label="Kind of fishing">
+        ${TACKLE_SECTIONS.map((x) => `<button type="button" role="tab" class="tackle-tab section-tab ${x.id === section.id ? 'on' : ''}" aria-selected="${x.id === section.id}" data-section="${x.id}">${x.label}</button>`).join('')}
       </div>
-      ${renderSection(tab.title, tab.items(), tab.owned(), tab.equipped(), tab.kind)}
+      <p class="tackle-blurb">${section.blurb}</p>
+      <div class="tackle-tabs" role="tablist" aria-label="Part of the rig">
+        ${kinds.map((t) => `<button type="button" role="tab" class="tackle-tab ${t.kind === tab.kind ? 'on' : ''}" aria-selected="${t.kind === tab.kind}" data-tab="${t.kind}">${t.label}</button>`).join('')}
+      </div>
+      ${renderSection(`${section.label} — ${tab.title}`, tab.items().filter(inSection), tab.owned(), tab.equipped(), tab.kind)}
     `;
     panel.querySelector('#shop-close').addEventListener('click', () => panel.classList.add('hidden'));
+    panel.querySelectorAll('[data-section]').forEach((btn) => btn.addEventListener('click', () => {
+      activeSection = btn.dataset.section;
+      refresh();
+      panel.scrollTop = 0;
+    }));
     panel.querySelectorAll('[data-tab]').forEach((btn) => btn.addEventListener('click', () => {
       activeTab = btn.dataset.tab;
       refresh();

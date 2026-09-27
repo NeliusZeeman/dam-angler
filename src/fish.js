@@ -90,7 +90,7 @@ export const FISH_SPECIES = [
     rarity: 'uncommon',
     minWeightKg: 0.5,
     maxWeightKg: 4.5,
-    tempRangeC: [10, 24],
+    tempRangeC: [10, 31], // thrives in warm SA summers; sluggish below ~10°C
     preferredLureIds: ['spinner', 'soft-plastic', 'spoon-lure'],
     baseValuePerKg: 22,
     aggressiveness: 0.22,
@@ -108,7 +108,7 @@ export const FISH_SPECIES = [
     rarity: 'rare',
     minWeightKg: 0.3,
     maxWeightKg: 2.2,
-    tempRangeC: [8, 19],
+    tempRangeC: [8, 27], // likes it cooler than largemouth, but feeds through a Cape summer
     preferredLureIds: ['spinner', 'spoon-lure'],
     baseValuePerKg: 26,
     // Less common in SA (mostly cooler Western/Eastern Cape streams and
@@ -218,6 +218,94 @@ export const FISH_SPECIES = [
     // Grazes the silty bottom in the shallows and margins.
     habitat: { shallow: true },
   },
+  {
+    // Introduced 1890s-1900s; the fly-fishing fish of Dullstroom, the KZN
+    // Midlands, Rhodes and the Cape streams. Cold water only (stressed above
+    // ~21°C), feeds hardest at dawn and dusk, and famously leaps when hooked.
+    id: 'rainbow-trout',
+    name: 'Rainbow Trout',
+    rarity: 'common',
+    minWeightKg: 0.3,
+    maxWeightKg: 3.5,
+    tempRangeC: [2, 21], // winter trout fishing is prime in SA's cold highlands
+    preferredLureIds: ['fly-nymph', 'fly-dry', 'fly-streamer', 'spinner', 'worm'],
+    lureAffinity: { spinner: 0.6, worm: 0.4 },
+    baseValuePerKg: 22,
+    aggressiveness: 0.5,
+    activity: [1, 0.8, 0.4, 0.7, 1, 0.6, 0.15],
+    bite: { speed: 'fast', style: 'aggressive', label: 'The line zips tight — a trout' },
+    habitat: {},
+  },
+  {
+    // Wild browns of the Mooi, Bushmans and Witte rivers: wary, hold under
+    // banks and structure, feed from dusk into the night, dogged fighters.
+    id: 'brown-trout',
+    name: 'Brown Trout',
+    rarity: 'uncommon',
+    minWeightKg: 0.3,
+    maxWeightKg: 4,
+    tempRangeC: [2, 19],
+    preferredLureIds: ['fly-nymph', 'fly-streamer', 'fly-dry', 'spinner', 'worm'],
+    lureAffinity: { 'fly-dry': 0.7, spinner: 0.5, worm: 0.4 },
+    baseValuePerKg: 26,
+    aggressiveness: 0.35,
+    activity: [0.9, 0.6, 0.25, 0.5, 1, 0.9, 0.6],
+    bite: { speed: 'medium', style: 'heavy', label: 'A heavy, head-shaking take' },
+    habitat: { structure: true },
+  },
+  {
+    // Labeobarbus kimberleyensis of the Orange-Vaal: the country's top
+    // freshwater predator on fly (Vanderkloof, Vaal at Parys, Orange at
+    // Upington), up to ~9kg on the Vaal. Streamers and spinners.
+    id: 'largemouth-yellowfish',
+    name: 'Largemouth Yellowfish',
+    rarity: 'rare',
+    minWeightKg: 1,
+    maxWeightKg: 9,
+    tempRangeC: [12, 30],
+    preferredLureIds: ['fly-streamer', 'spinner', 'spoon-lure', 'worm'],
+    lureAffinity: { worm: 0.3 },
+    baseValuePerKg: 24,
+    aggressiveness: 0.25,
+    activity: [1, 0.8, 0.5, 0.8, 1, 0.5, 0.2],
+    bite: { speed: 'fast', style: 'aggressive', label: 'A savage hit — a largemouth yellow' },
+    habitat: { structure: true },
+  },
+  {
+    // Labeobarbus capensis of the Cederberg Olifants and Doring rivers:
+    // endangered, catch-and-release only, spooky sight-fishing on light
+    // tippet with nymphs.
+    id: 'clanwilliam-yellowfish',
+    name: 'Clanwilliam Yellowfish',
+    rarity: 'rare',
+    minWeightKg: 0.5,
+    maxWeightKg: 5,
+    tempRangeC: [12, 28],
+    preferredLureIds: ['fly-nymph', 'fly-dry', 'fly-streamer', 'worm'],
+    lureAffinity: { 'fly-dry': 0.7, 'fly-streamer': 0.6, worm: 0.3 },
+    baseValuePerKg: 20,
+    aggressiveness: 0.3,
+    activity: [0.8, 1, 0.8, 1, 0.8, 0.3, 0.1],
+    bite: { speed: 'medium', style: 'steady', label: 'A careful, deliberate take' },
+    habitat: {},
+  },
+  {
+    // Bluegill sunfish: common in Western Cape dams (Clanwilliam,
+    // Theewaterskloof). Little, bold, bites all day on worms and small flies.
+    id: 'bluegill',
+    name: 'Bluegill',
+    rarity: 'common',
+    minWeightKg: 0.08,
+    maxWeightKg: 0.6,
+    tempRangeC: [12, 32],
+    preferredLureIds: ['worm', 'bread-bait', 'fly-dry', 'fly-nymph', 'spinner'],
+    lureAffinity: { spinner: 0.4 },
+    baseValuePerKg: 10,
+    aggressiveness: 0.6,
+    activity: [0.7, 1, 0.9, 1, 0.7, 0.2, 0.05],
+    bite: { speed: 'fast', style: 'nibble', label: 'Quick little pecks' },
+    habitat: { shallow: true },
+  },
 ];
 
 // The times a fish counts as "on the feed" (used by tips and the HUD).
@@ -233,6 +321,21 @@ const CHUM_AFFINITY = {
   'common-carp': 1, 'mirror-carp': 0.9, 'mozambique-tilapia': 1, 'banded-tilapia': 1,
   mudfish: 1, 'smallmouth-yellowfish': 0.8, 'largescale-yellowfish': 0.7,
   catfish: 0.5, 'largemouth-bass': 0.25, 'smallmouth-bass': 0.25, tigerfish: 0.3,
+  'rainbow-trout': 0.2, 'brown-trout': 0.15, 'largemouth-yellowfish': 0.3,
+  'clanwilliam-yellowfish': 0.5, bluegill: 0.9,
+};
+// Flies (fly-fishing): trout and yellowfish are the classic fly fish in SA;
+// bass, tigers, carp and bluegill take them too. Species already listing a
+// fly keep their own rating; these add flies to the rest.
+const FLY_AFFINITY = {
+  'smallmouth-yellowfish': { 'fly-nymph': 1.1, 'fly-dry': 0.6, 'fly-streamer': 0.5 },
+  'largescale-yellowfish': { 'fly-nymph': 1.0, 'fly-streamer': 0.9 },
+  'largemouth-bass': { 'fly-streamer': 0.8 },
+  'smallmouth-bass': { 'fly-streamer': 0.8, 'fly-nymph': 0.4 },
+  tigerfish: { 'fly-streamer': 0.9 },
+  'common-carp': { 'fly-nymph': 0.4 },
+  mudfish: { 'fly-nymph': 0.5 },
+  'mozambique-tilapia': { 'fly-nymph': 0.3 },
 };
 // Mieliebom (a groundbait feeder packed with mielie-meal) is a classic SA
 // carp method; yellowfish and mudfish love it too, kurper pick at it.
@@ -240,11 +343,42 @@ const MIELIEBOM_AFFINITY = {
   'common-carp': 1.3, 'mirror-carp': 1.3, 'smallmouth-yellowfish': 1.1, 'largescale-yellowfish': 0.9,
   mudfish: 1.1, 'mozambique-tilapia': 0.6, 'banded-tilapia': 0.6,
 };
+// The wider tackle box: carp baits, bass lures, SA fly patterns and
+// barbel/tiger baits. How much each fish wants them (1 = as much as its
+// favourite everyday bait).
+const TACKLE_AFFINITY = {
+  'common-carp': { boilies: 1.4, 'pop-up': 1.3, 'method-feeder': 1.3, 'dough-bait': 0.9 },
+  'mirror-carp': { boilies: 1.45, 'pop-up': 1.35, 'method-feeder': 1.3, 'dough-bait': 0.9 },
+  'mozambique-tilapia': { 'dough-bait': 1.1, 'method-feeder': 0.5 },
+  'banded-tilapia': { 'dough-bait': 1.0 },
+  mudfish: { 'dough-bait': 0.8, 'method-feeder': 1.0 },
+  bluegill: { 'dough-bait': 0.8, 'method-feeder': 0.5, 'fly-damsel': 0.8 },
+  'largemouth-bass': { crankbait: 1.1, 'topwater-frog': 1.3, 'bass-jig': 1.2, 'rapala-minnow': 0.9, 'fly-damsel': 0.5, 'fly-walkers-killer': 0.6 },
+  'smallmouth-bass': { crankbait: 1.2, 'bass-jig': 1.2, 'rapala-minnow': 0.9 },
+  tigerfish: { crankbait: 0.8, 'rapala-minnow': 1.2, sardine: 0.9 },
+  catfish: { sardine: 1.3, boilies: 0.3, 'topwater-frog': 0.3 },
+  'rainbow-trout': { 'fly-damsel': 1.2, 'fly-walkers-killer': 1.1, 'fly-zak': 1.0 },
+  'brown-trout': { 'fly-damsel': 0.9, 'fly-walkers-killer': 1.1, 'fly-zak': 0.9, 'rapala-minnow': 0.6 },
+  'smallmouth-yellowfish': { 'fly-zak': 1.2, 'fly-damsel': 0.7, 'method-feeder': 1.0 },
+  'largescale-yellowfish': { 'fly-zak': 0.9, 'method-feeder': 0.8 },
+  'largemouth-yellowfish': { 'fly-walkers-killer': 0.8, crankbait: 0.8, 'rapala-minnow': 1.0 },
+  'clanwilliam-yellowfish': { 'fly-zak': 1.1 },
+};
 for (const species of FISH_SPECIES) {
   species.chumAffinity = CHUM_AFFINITY[species.id] ?? 0.5;
   if (MIELIEBOM_AFFINITY[species.id]) {
     species.preferredLureIds.push('mieliebom');
     species.lureAffinity = { ...(species.lureAffinity || {}), mieliebom: MIELIEBOM_AFFINITY[species.id] };
+  }
+  for (const [id, affinity] of Object.entries(TACKLE_AFFINITY[species.id] || {})) {
+    if (species.preferredLureIds.includes(id)) continue;
+    species.preferredLureIds.push(id);
+    species.lureAffinity = { ...(species.lureAffinity || {}), [id]: affinity };
+  }
+  for (const [fly, affinity] of Object.entries(FLY_AFFINITY[species.id] || {})) {
+    if (species.preferredLureIds.includes(fly)) continue;
+    species.preferredLureIds.push(fly);
+    species.lureAffinity = { ...(species.lureAffinity || {}), [fly]: affinity };
   }
 }
 
@@ -287,6 +421,8 @@ const CONDITION_FACTOR = {
   'largemouth-bass': 0.017, 'smallmouth-bass': 0.016,
   catfish: 0.006, tigerfish: 0.013,
   'smallmouth-yellowfish': 0.014, 'largescale-yellowfish': 0.015, mudfish: 0.013,
+  'rainbow-trout': 0.012, 'brown-trout': 0.012, 'largemouth-yellowfish': 0.013,
+  'clanwilliam-yellowfish': 0.014, bluegill: 0.025,
 };
 export function estimateLengthCm(species, weightKg) {
   const a = CONDITION_FACTOR[species.id] ?? 0.015;

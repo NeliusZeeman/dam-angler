@@ -95,13 +95,20 @@ export function createProps(scene, { dam, terrain, location }) {
     buildJetty(jetty, frame, rng, { fromOff: -3, toOff: st.length, width: st.width, deckY: st.deckY, postBottom: bedAt });
     return frame;
   });
-  const main = frames[0];
-  const mainLen = dam.stands[0].length;
-  const mainHalfW = dam.stands[0].width / 2;
-  const jettyMesh = new THREE.Mesh(jetty.build(), woodMat);
-  jettyMesh.castShadow = true;
-  jettyMesh.receiveShadow = true;
-  scene.add(jettyMesh);
+  // No stand (a river bank, a mountain stream): the kit sits on the ground
+  // at the water's edge where the angler starts.
+  const onBank = frames.length === 0;
+  const main = onBank ? jettyFrame(dam.spawn.x, dam.shoreZ(dam.spawn.x)) : frames[0];
+  const mainLen = onBank ? 0 : dam.stands[0].length;
+  const mainHalfW = onBank ? 1.3 : dam.stands[0].width / 2;
+  if (!onBank) {
+    const jettyMesh = new THREE.Mesh(jetty.build(), woodMat);
+    jettyMesh.castShadow = true;
+    jettyMesh.receiveShadow = true;
+    scene.add(jettyMesh);
+  }
+  // Height to set kit on: the deck, or the ground under that spot.
+  const baseY = (off, lat) => (onBank ? terrain.heightAt(main.point(off, lat, 0).x, main.point(off, lat, 0).z) : DECK_Y);
 
   // ─── Kit on the jetty ─────────────────────────────────────────────────────
   const kit = new THREE.Group();
@@ -123,7 +130,7 @@ export function createProps(scene, { dam, terrain, location }) {
   const handle = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.012, 6, 16, Math.PI), plastic(0x222222));
   handle.position.y = 0.4;
   cooler.add(body, lid, handle);
-  place(cooler, mainLen - 2.6, mainHalfW - 0.4, DECK_Y + 0.022, 0.25);
+  place(cooler, mainLen - 2.6, mainHalfW - 0.4, baseY(mainLen - 2.6, mainHalfW - 0.4) + 0.022, 0.25);
 
   // Bait bucket, with a dark layer of soil and worms showing inside.
   const bucket = new THREE.Group();
@@ -136,11 +143,11 @@ export function createProps(scene, { dam, terrain, location }) {
   bail.position.y = 0.28;
   bail.rotation.y = 0.6;
   bucket.add(shell, soil, bail);
-  place(bucket, mainLen - 3.4, -(mainHalfW - 0.35), DECK_Y + 0.022);
+  place(bucket, mainLen - 3.4, -(mainHalfW - 0.35), baseY(mainLen - 3.4, -(mainHalfW - 0.35)) + 0.022);
 
   // Tackle box.
   const tackle = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.22), plastic(0x3d6b3c));
-  place(tackle, mainLen - 3.2, mainHalfW - 0.45, DECK_Y + 0.11, -0.4);
+  place(tackle, mainLen - 3.2, mainHalfW - 0.45, baseY(mainLen - 3.2, mainHalfW - 0.45) + 0.11, -0.4);
 
   // ─── Lantern ──────────────────────────────────────────────────────────────
   const lanternGroup = new THREE.Group();
@@ -152,9 +159,10 @@ export function createProps(scene, { dam, terrain, location }) {
   const cap = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.07, 10), plastic(0x2a2a2a, 0.4));
   cap.position.set(0, 0.215, -0.3);
   lanternGroup.add(arm, glass, cap);
-  place(lanternGroup, mainLen - 0.15, mainHalfW + 0.02, DECK_Y + 0.12);
+  const lanternOff = onBank ? -1.2 : mainLen - 0.15;
+  place(lanternGroup, lanternOff, mainHalfW + 0.02, baseY(lanternOff, mainHalfW + 0.02) + 0.12);
   const lanternLight = new THREE.PointLight(0xffa850, 0, 16, 2);
-  lanternLight.position.copy(main.point(mainLen - 0.15, mainHalfW + 0.02, DECK_Y + 0.22)).addScaledVector(main.rh, -0.3);
+  lanternLight.position.copy(main.point(lanternOff, mainHalfW + 0.02, baseY(lanternOff, mainHalfW + 0.02) + 0.22)).addScaledVector(main.rh, -0.3);
   scene.add(lanternLight);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffa850, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   halo.position.copy(lanternLight.position);

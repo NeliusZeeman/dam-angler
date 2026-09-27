@@ -1,12 +1,12 @@
 import assert from 'node:assert';
 import { LOCATIONS, getLocationById } from '../src/locations.js';
 import { FISH_SPECIES } from '../src/fish.js';
-import { LOCAL_TIPS, liveTip, localTip, randomTip } from '../src/tips.js';
+import { LOCAL_TIPS, liveTip, localTip, randomTip, localTipsFor } from '../src/tips.js';
 import { makeRng } from '../src/gfx/noise.js';
 
 {
   for (const loc of LOCATIONS) {
-    assert.ok((LOCAL_TIPS[loc.id] || []).length >= 5, `${loc.id} needs at least 5 local tips`);
+    assert.ok(localTipsFor(loc).length >= 5, `${loc.id} needs at least 5 local tips`);
   }
   console.log('PASS: every dam has its own local-knowledge tips');
 }
@@ -18,7 +18,8 @@ import { makeRng } from '../src/gfx/noise.js';
   for (const loc of LOCATIONS) {
     for (const timeOfDay of ['morning', 'midday', 'sunset', 'night']) {
       for (let i = 0; i < 40; i++) {
-        const tip = liveTip(loc, { waterTempC: 22, timeOfDay }, { rng });
+        // A summer's day at this water (mountain trout streams run cold).
+        const tip = liveTip(loc, { waterTempC: 22 + (loc.tempOffset || 0), timeOfDay }, { rng });
         assert.ok(tip && tip.text.length > 10, `${loc.id} ${timeOfDay}: expected a tip`);
         assert.ok(loc.speciesIds.includes(tip.speciesId), `${loc.id}: tip names ${tip.speciesId}, not found there`);
         if (tip.lureId) {

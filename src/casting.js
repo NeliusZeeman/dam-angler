@@ -11,7 +11,7 @@ const REEL_HOLD_THRESHOLD = 0.18; // press-and-hold longer than this starts reel
 const REEL_SPEED = 3.2; // units/sec the lure closes toward the rod tip while reeling
 const REEL_ARRIVE_DISTANCE = 0.35;
 const WAKE_INTERVAL = 0.18; // seconds between wake ripples while reeling
-const LINE_SEGMENTS = 28;
+const LINE_SEGMENTS = 48; // enough points to draw a fly line's rolling loop
 const POWER_CHARGE_SECONDS = 1.3; // hold this long for a full-power cast
 
 // Mouse-motion control. Speeds are in screen-widths per second.
@@ -30,11 +30,23 @@ const FLOAT_REST = 0.005; // black band sits right on the waterline
 const FLOAT_K = 110;
 const FLOAT_DAMP = 5;
 
+// Fly casting: the line itself is the weight. Back cast, forward cast,
+// a false cast or two to work line out, then the delivery shoots the rest
+// and the line unrolls and lays down on the water.
+const FLY_STROKE = 0.42; // seconds per back or forward stroke
+const FLY_LAYDOWN = 0.45; // straight line settling onto the water
+const FLY_LOOP_R = 0.6; // radius of the unrolling loop at its widest (m)
+const FLY_BACK_RISE = 0.32; // the back cast goes up and behind
+const FLY_FWD_RISE = -0.03; // the forward cast aims just above the water
+const FLY_LEADER = 0.12; // last share of the line: thin clear leader/tippet
+
 export function createCasting({ scene, camera, domElement, getRod, rodTip, waterMesh, dam, onSplash, onWake, getLureKind = () => 'bait', getCastMultiplier = () => 1, isLookLocked = () => false,
   getCastDrag = () => null, onLanded = null,
   // During a fight: {progress 0..1, holding} from the fight minigame, and a
   // callback when the hooked fish leaps clear of the water.
-  getFightInput = () => ({ progress: 0, holding: false }), onFishJump = null }) {
+  getFightInput = () => ({ progress: 0, holding: false }), onFishJump = null,
+  // Fly rig: cast with false casts, and draw the thick coloured fly line.
+  isFlyCast = () => false, getLineLook = () => null, onFlyStroke = null }) {
   const bobber = createFloatMesh();
   bobber.visible = false;
   scene.add(bobber);
@@ -72,7 +84,12 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   function buildLineRibbon() {
     const pos = lineGeo.getAttribute('position');
     const col = lineGeo.getAttribute('color');
+    // A fly line is thick and brightly coloured; the leader at its end is
+    // thin clear nylon like any other line.
+    const look = getLineLook();
+    const leaderFrom = look ? Math.floor(LINE_SEGMENTS * (1 - FLY_LEADER)) : LINE_POINTS;
     for (let i = 0; i < LINE_POINTS; i++) {
+      const flyPart = i < leaderFrom;
       const p = linePts[i];
       ribbonTangent.subVectors(linePts[Math.min(LINE_POINTS - 1, i + 1)], linePts[Math.max(0, i - 1)]);
       ribbonView.subVectors(camera.position, p);
@@ -80,14 +97,20 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       ribbonSide.crossVectors(ribbonTangent, ribbonView);
       if (ribbonSide.lengthSq() < 1e-12) ribbonSide.set(1, 0, 0);
       // ~2px wide wherever it is: world width grows with distance.
-      const half = Math.max(0.0008, dist * 0.0011);
+      const half = Math.max(0.0008, dist * 0.0011) * (flyPart ? look.width : 1);
       ribbonSide.normalize().multiplyScalar(half);
       pos.setXYZ(i * 2, p.x - ribbonSide.x, p.y - ribbonSide.y, p.z - ribbonSide.z);
       pos.setXYZ(i * 2 + 1, p.x + ribbonSide.x, p.y + ribbonSide.y, p.z + ribbonSide.z);
       const under = lineUnder[i];
       const alpha = under ? 0.3 : 0.9;
       const shade = under ? 0.7 : 0.95;
-      for (let k = 0; k < 2; k++) col.setXYZW(i * 2 + k, shade, shade, shade * 0.95, alpha);
+      if (flyPart) {
+        const [r, g, b] = look.color;
+        const dim = under ? 0.6 : 1;
+        for (let k = 0; k < 2; k++) col.setXYZW(i * 2 + k, r * dim, g * dim, b * dim, under ? 0.4 : 1);
+      } else {
+        for (let k = 0; k < 2; k++) col.setXYZW(i * 2 + k, shade, shade, shade * 0.95, alpha);
+      }
     }
     pos.needsUpdate = true;
     col.needsUpdate = true;
@@ -129,6 +152,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   // How long the bobber has been fishable (waiting/reeling, actually in the
   // water) since the current cast landed -- drives the guaranteed-bite timer.
   let waitTimer = 0;
+  let drifted = 0; // metres the current has carried the float since it landed
+  const MAX_DRIFT = 30;
 
   let pressing = false;
   let pressTimer = 0;
@@ -242,6 +267,20 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     airDuration = Math.max(0.2, flight.time);
     launchFrom.copy(rodTipWorld);
     launchTarget.set(flight.landing.x, flight.landing.y, flight.landing.z);
+    flyCast = null;
+    if (isFlyCast()) {
+      // More power: more false casts to work more line out.
+      const reach = Math.max(2, Math.hypot(launchTarget.x - launchFrom.x, launchTarget.z - launchFrom.z));
+      const pairs = 1 + Math.round(power * 2);
+      flyCast = {
+        pairs, reach, stroke: -1, state: null,
+        dirX: (launchTarget.x - launchFrom.x) / reach, dirZ: (launchTarget.z - launchFrom.z) / reach,
+      };
+      // The line starts out lying in front, down toward the water.
+      flyDir.set(flyCast.dirX, -0.35, flyCast.dirZ).normalize();
+      flyPrevDir.copy(flyDir);
+      airDuration = pairs * 2 * FLY_STROKE + FLY_LAYDOWN;
+    }
     phase = 'inAir';
     airTime = 0;
     power = 0;
@@ -287,6 +326,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
   function resetToIdle() {
     phase = 'idle';
+    flyCast = null;
     bobber.rotation.set(0, 0, 0);
     floatVy = 0;
     bobber.visible = false;
@@ -299,6 +339,128 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     pressTimer = 0;
     power = 0;
     waitTimer = 0;
+  }
+
+  // --- Fly casting -------------------------------------------------------
+  let flyCast = null;
+  const flyDir = new THREE.Vector3();
+  const flyPrevDir = new THREE.Vector3();
+  const flyBackDir = new THREE.Vector3();
+  const flyN = new THREE.Vector3();
+  const flyLoop = new THREE.Vector3();
+  const flyPull = new THREE.Vector3();
+  const flyA = new THREE.Vector3();
+  const flyB = new THREE.Vector3();
+  const easeStroke = (x) => x * x * (3 - 2 * x);
+
+  // Line aloft on each pair of strokes: it lengthens as line is worked out,
+  // and the delivery shoots the rest.
+  function flyLineLength(pair) {
+    return flyCast.reach * (0.45 + 0.4 * (pair + 1) / flyCast.pairs);
+  }
+
+  // The unrolling loop. The rod leg runs from the tip along the stroke
+  // direction; at the loop it turns over and the fly leg trails back the
+  // way the last stroke threw it. As the stroke goes on the rod leg grows,
+  // the fly leg shortens, and at the end the line lies straight out.
+  function shapeFlyLoop(sign, rise, L, s) {
+    flyDir.set(flyCast.dirX * sign, rise, flyCast.dirZ * sign).normalize();
+    flyN.set(0, 1, 0).addScaledVector(flyDir, -flyDir.y).normalize();
+    flyBackDir.copy(flyPrevDir).lerp(flyA.copy(flyDir).negate(), s).normalize();
+    const r = FLY_LOOP_R * 4 * s * (1 - s);
+    const loopLen = Math.PI * r;
+    const a = s * Math.max(0, L - loopLen);
+    flyLoop.copy(rodTipWorld).addScaledVector(flyDir, a);
+    const now = performance.now() / 1000;
+    for (let i = 0; i <= LINE_SEGMENTS; i++) {
+      const l = (L * i) / LINE_SEGMENTS;
+      const p = linePts[i];
+      if (l <= a) p.copy(rodTipWorld).addScaledVector(flyDir, l);
+      else if (l <= a + loopLen && r > 1e-4) {
+        const th = (l - a) / r;
+        p.copy(flyLoop).addScaledVector(flyDir, r * Math.sin(th)).addScaledVector(flyN, r * (1 - Math.cos(th)));
+      } else {
+        const back = l - a - loopLen;
+        p.copy(flyLoop).addScaledVector(flyN, 2 * r).addScaledVector(flyBackDir, back);
+        // The trailing leg sags a little while it waits to turn over.
+        p.y -= 0.01 * back * back * (1 - s) / Math.max(1, L * 0.1);
+      }
+      lineUnder[i] = 0;
+      const floor = surfaceAt(p, now) + 0.03;
+      if (p.y < floor) p.y = floor;
+    }
+    bobber.position.copy(linePts[LINE_SEGMENTS]);
+    // The trailing line loads the rod toward it.
+    flyPull.copy(rodTipWorld).addScaledVector(flyBackDir, 4);
+    buildLineRibbon();
+  }
+
+  // Returns true once the line has laid down on the water.
+  function updateFlyCast(dt) {
+    airTime += dt;
+    const fc = flyCast;
+    const strokes = fc.pairs * 2;
+    const k = Math.floor(airTime / FLY_STROKE);
+    if (k < strokes) {
+      const forward = k % 2 === 1;
+      const pair = Math.floor(k / 2);
+      const delivery = forward && pair === fc.pairs - 1;
+      if (k !== fc.stroke) {
+        // Each new stroke starts where the last one left the line.
+        flyPrevDir.copy(flyDir);
+        fc.stroke = k;
+        if (onFlyStroke) onFlyStroke(forward, (pair + 1) / fc.pairs);
+      }
+      const s = easeStroke(Math.min(1, (airTime - k * FLY_STROKE) / FLY_STROKE));
+      const L0 = flyLineLength(pair);
+      const L = delivery ? L0 + (fc.reach - L0) * s : L0;
+      shapeFlyLoop(forward ? 1 : -1, forward ? FLY_FWD_RISE : FLY_BACK_RISE, L, s);
+      fc.state = { forward, delivery, s, pull: flyPull };
+      return false;
+    }
+    // Lay-down: the straight line drops onto the water, near end first and
+    // the fly last.
+    const s = Math.min(1, (airTime - strokes * FLY_STROKE) / FLY_LAYDOWN);
+    const now = performance.now() / 1000;
+    flyDir.set(fc.dirX, FLY_FWD_RISE, fc.dirZ).normalize();
+    const L = fc.reach / Math.max(0.2, Math.hypot(flyDir.x, flyDir.z));
+    for (let i = 0; i <= LINE_SEGMENTS; i++) {
+      const t = i / LINE_SEGMENTS;
+      flyA.copy(rodTipWorld).addScaledVector(flyDir, L * t);
+      flyB.lerpVectors(rodTipWorld, launchTarget, t);
+      const surf = surfaceAt(flyB, now) + 0.014;
+      if (isPointInWater(flyB) && flyB.y < surf) flyB.y = surf;
+      const f = Math.min(1, Math.max(0, (s - 0.4 * t) / 0.6));
+      const p = linePts[i].lerpVectors(flyA, flyB, f * f);
+      lineUnder[i] = 0;
+      const floor = surfaceAt(p, now) + 0.014;
+      if (isPointInWater(p) && p.y < floor) p.y = floor;
+    }
+    bobber.position.copy(linePts[LINE_SEGMENTS]);
+    flyPull.copy(rodTipWorld).addScaledVector(flyDir, 4);
+    fc.state = { forward: true, delivery: true, s: 1, pull: flyPull };
+    buildLineRibbon();
+    return s >= 1;
+  }
+
+  // The rig comes down: start fishing where it landed.
+  function landRig(gentle = false) {
+    phase = 'waiting';
+    bobber.position.y = 0;
+    restPosition.copy(bobber.position);
+    twitchOffset.set(0, 0, 0);
+    waitTimer = 0;
+    drifted = 0;
+    const landedInWater = isPointInWater(bobber.position);
+    if (landedInWater) {
+      // Plops in: dives under, then bobs back up and settles. A fly laid
+      // down off a fly line just kisses the surface.
+      floatY = 0;
+      floatVy = gentle ? -0.25 : -1.0 - Math.min(0.8, launchFrom.distanceTo(launchTarget) * 0.02);
+      if (onSplash && !gentle) onSplash(bobber.position, 0.65);
+      if (gentle && onWake) onWake(bobber.position, 0.5);
+    }
+    if (onLanded) onLanded(bobber.position.clone(), landedInWater);
   }
 
   function surfaceAt(p, now) {
@@ -423,7 +585,14 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       reticleRing.material.opacity = phase === 'aiming' ? 0.95 : 0.75;
     }
 
-    if (phase === 'inAir') {
+    if (phase === 'inAir' && flyCast) {
+      bobber.rotation.set(0, 0, 0);
+      if (updateFlyCast(deltaSeconds)) {
+        flyCast = null;
+        bobber.position.copy(launchTarget);
+        landRig(true);
+      }
+    } else if (phase === 'inAir') {
       // Ballistic arc: shoots out fast and slows under air drag, rising to
       // its apex and dropping onto the water, drifting with the wind.
       airTime += deltaSeconds;
@@ -437,24 +606,21 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       bobber.position.copy(target);
       bobber.rotation.set(t * 7, 0, t * 2);
       updateLineCurve(0.1 * t);
-      if (t >= 1) {
-        phase = 'waiting';
-        bobber.position.y = 0;
-        restPosition.copy(bobber.position);
-        twitchOffset.set(0, 0, 0);
-        waitTimer = 0;
-        const landedInWater = isPointInWater(bobber.position);
-        if (landedInWater) {
-          // Plops in: dives under, then bobs back up and settles.
-          floatY = 0;
-          floatVy = -1.0 - Math.min(0.8, launchFrom.distanceTo(launchTarget) * 0.02);
-          if (onSplash) onSplash(bobber.position, 0.65);
-        }
-        if (onLanded) onLanded(bobber.position.clone(), landedInWater);
-      }
+      if (t >= 1) landRig();
     }
 
     if (phase === 'waiting') {
+      // In a river the current carries the float (or fly) downstream --
+      // "trotting" -- until the line swings it round below you (~30m).
+      const flow = dam.spec.flow || 0;
+      if (flow > 0 && drifted < MAX_DRIFT && isPointInWater(restPosition)) {
+        const step = flow * deltaSeconds * (1 - drifted / MAX_DRIFT * 0.7);
+        const nx = restPosition.x + step;
+        if (dam.isWater(nx, restPosition.z) && dam.waterDist(nx, restPosition.z) > 0.5) {
+          restPosition.x = nx;
+          drifted += step;
+        }
+      }
       const lureKind = getLureKind();
       const working = lureKind === 'lure' && motionSpeed > MOTION_REEL_THRESHOLD;
 
@@ -758,6 +924,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     return {
       phase, power, motionSpeed, waitElapsed: waitTimer,
       working: phase === 'waiting' && getLureKind() === 'lure' && motionSpeed > MOTION_REEL_THRESHOLD,
+      // Mid fly cast: which stroke, how far through, where the line pulls.
+      flyStroke: phase === 'inAir' && flyCast ? flyCast.state : null,
     };
   }
 

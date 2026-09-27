@@ -60,6 +60,32 @@ const SPECIES_LOOK = {
     skin: { back: [92, 92, 58], belly: [222, 212, 156], scales: 12, scaleContrast: 0.45, seed: 11 },
     barbels: 2,
   },
+  // Silver flanks with a pink-red band and fine black spots.
+  'rainbow-trout': {
+    scale: 1.0, shape: [1.1, 0.88, 0.5], fin: 0x7a7a70, metal: 0.4, fins: 'carp', tail: 'notched',
+    skin: { back: [70, 92, 80], belly: [236, 232, 226], scales: 40, scaleContrast: 0.08, spots: 0.35, band: { color: [214, 110, 120], at: 0.0, width: 0.3, strength: 0.7 }, seed: 12 },
+  },
+  // Golden-brown with dark and red spots, buttery belly.
+  'brown-trout': {
+    scale: 1.05, shape: [1.1, 0.92, 0.52], fin: 0x8a6a3a, metal: 0.2, fins: 'carp', tail: 'notched',
+    skin: { back: [96, 72, 40], belly: [232, 206, 140], scales: 40, scaleContrast: 0.08, spots: 0.55, seed: 13 },
+  },
+  // Big-headed, long-bodied predatory yellowfish; olive-bronze to gold.
+  'largemouth-yellowfish': {
+    scale: 1.35, shape: [1.18, 0.92, 0.52], fin: 0x7a6a3c, metal: 0.35, fins: 'carp', tail: 'forked',
+    skin: { back: [86, 88, 50], belly: [218, 200, 132], scales: 15, scaleContrast: 0.4, seed: 14 },
+  },
+  // Bright gold-olive with large scales.
+  'clanwilliam-yellowfish': {
+    scale: 1.1, shape: [1.1, 0.95, 0.52], fin: 0xa08040, metal: 0.4, fins: 'carp', tail: 'forked',
+    skin: { back: [110, 104, 46], belly: [238, 214, 120], scales: 14, scaleContrast: 0.4, seed: 15 },
+    barbels: 2,
+  },
+  // Small, deep and round; olive with dark bars and an orange breast.
+  bluegill: {
+    scale: 0.55, shape: [0.85, 1.25, 0.45], fin: 0x4a5a48, metal: 0.15, spiky: true, fins: 'perch', tail: 'notched',
+    skin: { back: [60, 80, 70], belly: [226, 170, 90], scales: 28, scaleContrast: 0.2, bars: { count: 8, strength: 0.35 }, band: { color: [220, 140, 60], at: -0.7, width: 0.35, strength: 0.6 }, seed: 16 },
+  },
   // Long, round-bellied grey-olive labeo with a fleshy sucker mouth.
   mudfish: {
     scale: 1.0, shape: [1.15, 0.82, 0.56], fin: 0x5c6258, metal: 0.12, fins: 'carp', tail: 'forked',
@@ -403,9 +429,12 @@ export function createFishSwarm(scene, speciesIds, count, dam) {
     const mesh = createFishMesh(speciesId, { detail: false });
     // Each fish patrols a lazy circle somewhere in the water off the bank,
     // within sight of the stands, never close enough to swim onto the sand.
-    const radius = 2 + Math.random() * 7;
     const cx = dam.spawn.x + (Math.random() - 0.5) * 90;
-    const cz = dam.shoreZ(cx) + radius + 3 + Math.pow(Math.random(), 1.4) * 60;
+    // In a river the far bank is close: keep each fish's circle inside it.
+    const width = Math.min(200, dam.farShoreZ(cx) - dam.shoreZ(cx));
+    const radius = Math.min(2 + Math.random() * 7, Math.max(1, width / 4));
+    const room = Math.max(0, Math.min(60, width - 2 * radius - 5));
+    const cz = dam.shoreZ(cx) + radius + 2.5 + Math.pow(Math.random(), 1.4) * room;
     const angle = Math.random() * Math.PI * 2;
     mesh.userData.speciesId = speciesId;
     mesh.userData.homeCenter = { x: cx, z: cz };

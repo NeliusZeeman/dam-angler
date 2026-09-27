@@ -477,6 +477,12 @@ export function fishSkinTexture(p) {
       const k = 1 - spot * p.spots * smoothstep(-0.3, 0.4, top);
       r *= k; g *= k; b *= k;
     }
+    // A coloured band along the flank (the rainbow trout's pink stripe, a
+    // bluegill's orange breast): blends toward `color` around height `at`.
+    if (p.band) {
+      const t = (1 - smoothstep(0, p.band.width, Math.abs(top - p.band.at + (mottle - 0.5) * 0.15))) * p.band.strength;
+      r = lerp(r, p.band.color[0], t); g = lerp(g, p.band.color[1], t); b = lerp(b, p.band.color[2], t);
+    }
     const k = (0.9 + mottle * 0.2) * (0.94 + hash2i(x, y, p.seed) * 0.12);
     out[0] = Math.min(255, r * k);
     out[1] = Math.min(255, g * k);

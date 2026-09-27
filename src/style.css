@@ -39,6 +39,10 @@ body.touch { -webkit-user-select: none; user-select: none; -webkit-tap-highlight
 .shop-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; gap: 8px; }
 .shop-spec { display: block; font-size: 11px; opacity: 0.65; text-transform: capitalize; }
 .shop-note { text-transform: none; }
+.rig-check { margin: 8px 0 4px; padding: 7px 10px; border-radius: 6px; font-size: 12px; line-height: 1.35; display: flex; flex-direction: column; gap: 2px; }
+.rig-check.ok { background: rgba(90, 170, 90, 0.18); color: #bfe6b0; }
+.rig-check.warn { background: rgba(220, 150, 40, 0.18); color: #ffd79a; }
+.rig-check.warn span::before { content: '• '; }
 .shop-row button { background: #2f6b3a; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
 .shop-row button:disabled { background: #555; cursor: not-allowed; opacity: 0.6; }
 .panel-close { background: #6b2f2f; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; float: right; }
@@ -329,6 +333,13 @@ body.touch .hud-tension-wrap, body.touch .hud-power-wrap { bottom: calc(40px + e
 .tackle-tab.on { background: #ffcf7a; color: #1a1024; border-color: #ffcf7a; }
 .tackle-tab:focus-visible { outline: 2px solid #ffcf7a; outline-offset: 2px; }
 body.touch .tackle-tab { min-height: 36px; }
+/* Five kinds of fishing in two even rows: three over two. */
+.tackle-sections { display: grid; grid-template-columns: repeat(6, 1fr); }
+.tackle-sections .section-tab { font-weight: 700; grid-column: span 2; }
+.tackle-sections .section-tab:nth-child(n+4) { grid-column: span 3; }
+.tackle-sections .section-tab.on { background: #7fc7a0; border-color: #7fc7a0; color: #0b1f14; }
+.tackle-blurb { margin: 2px 0 6px; font-size: 12px; line-height: 1.35; opacity: 0.75; }
+.tackle-rigged { font-size: 11.5px; line-height: 1.35; opacity: 0.8; }
 
 /* Distance counter, bottom centre above the power / tension bars. */
 .hud-distance {
@@ -361,3 +372,32 @@ body.touch .update-banner { top: calc(100px + env(safe-area-inset-top)); }
 /* Trophy catch: the big one. */
 .catch-badge.trophy { background: linear-gradient(90deg, #ffe07a, #ff5c5c); color: #1a0a10; font-size: 13px; box-shadow: 0 0 18px rgba(255, 200, 90, 0.7); }
 .catch-card:has(.catch-badge.trophy) { border-color: #ffcf7a; box-shadow: 0 0 40px rgba(255, 190, 80, 0.45), 0 24px 70px rgba(0,0,0,0.55); }
+
+/* New Game: provinces, spot filters, tags and the sticky start bar. */
+.province-card h3 { font-size: 20px; }
+.spot-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.spot-tag { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: rgba(143, 208, 255, 0.18); color: #bfe4ff; }
+.spot-tag.fly { background: rgba(255, 207, 122, 0.2); color: #ffcf7a; }
+.spot-facts { font-size: 12px; opacity: 0.8; }
+.start-filters { margin: 0 0 14px; }
+.start-footer {
+  position: sticky; bottom: -40px; margin: 24px -20px -40px; padding: 14px 20px 20px;
+  background: linear-gradient(180deg, rgba(12, 34, 44, 0.85), #10302a 40%); backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(255,255,255,0.12);
+}
+.start-footer h2 { margin: 0 0 10px; }
+.start-footer .start-go { margin-top: 14px; }
+.start-go:disabled { opacity: 0.45; cursor: not-allowed; }
+@media (max-width: 900px), (max-height: 500px) {
+  .start-footer { margin: 18px -16px -20px; padding: 10px 16px 14px; bottom: -20px; }
+  .start-footer h2 { font-size: 14px; }
+  .start-loc-card p { font-size: 12px; }
+}
+/* Short screens (landscape phones): the start bar becomes one slim row. */
+@media (max-height: 500px) {
+  .start-footer { display: flex; align-items: center; gap: 8px; padding: 6px 12px 8px; }
+  .start-footer h2 { display: none; }
+  .start-footer .start-times { flex: 1; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .start-footer .start-time-btn { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+  .start-footer .start-go { margin: 0; width: auto; padding: 10px 16px; font-size: 14px; white-space: nowrap; flex-shrink: 0; }
+}

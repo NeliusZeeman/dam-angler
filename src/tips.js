@@ -15,11 +15,17 @@ const BANK_NAMES = {
   'largemouth-bass': 'bass', 'smallmouth-bass': 'smallmouth bass',
   catfish: 'barbel', tigerfish: 'tigers',
   'smallmouth-yellowfish': 'smallmouth yellows', 'largescale-yellowfish': 'largescale yellows',
-  mudfish: 'mudfish',
+  mudfish: 'mudfish', 'rainbow-trout': 'rainbows', 'brown-trout': 'browns',
+  'largemouth-yellowfish': 'largemouth yellows', 'clanwilliam-yellowfish': 'Clanwilliam yellows', bluegill: 'bluegill',
 };
 const BAIT_PHRASE = {
   'bread-bait': 'bread', worm: 'worms', mielies: 'mielies', 'chicken-liver': 'chicken liver',
   'frog-bait': 'a platanna', mieliebom: 'a mieliebom', spinner: 'a spinnerbait', 'soft-plastic': 'a soft plastic', 'spoon-lure': 'a spoon',
+  'fly-nymph': 'a nymph', 'fly-dry': 'a dry fly', 'fly-streamer': 'a streamer',
+  'fly-damsel': 'a red-eyed damsel', 'fly-walkers-killer': 'a Walker\'s Killer', 'fly-zak': 'a Zak nymph',
+  boilies: 'boilies', 'pop-up': 'a pop-up', 'method-feeder': 'a method feeder', 'dough-bait': 'pap dough',
+  crankbait: 'a crankbait', 'topwater-frog': 'a topwater frog', 'bass-jig': 'a jig', sardine: 'sardine',
+  'rapala-minnow': 'a Rapala',
 };
 const TIME_PHRASE = {
   morning: 'first light', midMorning: 'mid-morning', midday: 'midday', afternoon: 'the afternoon',
@@ -81,6 +87,46 @@ export const LOCAL_TIPS = {
     'Early mornings and late afternoons, carp and barbel come right in to the bank.',
     'The northern shore is the angling side — bass, carp and kurper.',
     'After the first heavy summer rains the fishing really switches on.',
+  ],
+};
+
+// Province-wide knowledge, added to every spot's own tips.
+export const PROVINCE_TIPS = {
+  gauteng: [
+    'Gauteng dams get busy on weekends — weekday dawns are when the big carp feed undisturbed.',
+    'Highveld afternoons often bring summer thunderstorms: fish hard before them, get off the water when the lightning comes.',
+  ],
+  'free-state': [
+    'Free State yellowfish are indigenous — handle them wet and release them quickly.',
+    'Summer is yellowfish season; in winter the Highveld water turns cold and slow.',
+  ],
+  'north-west': [
+    'Bushveld heat in summer — dawn and dusk are the bite windows.',
+    'Carp and barbel are the North West staples; mielies and liver cover most of it.',
+  ],
+  mpumalanga: [
+    'Up on the escarpment it\'s trout country; down in the Lowveld it\'s bass, barbel and tigers.',
+    'Mist on the escarpment means trout weather — fish through it.',
+  ],
+  limpopo: [
+    'Limpopo waters are warm all year — bass and barbel feed even in winter.',
+    'Crocs and hippos live in many Limpopo rivers — fish from high, dry ground.',
+  ],
+  'kwazulu-natal': [
+    'KZN has everything: tigers in the north, bass in the Midlands, wild browns in the Berg.',
+    'Drakensberg trout season is best in autumn — April and May.',
+  ],
+  'eastern-cape': [
+    'The Highlands around Rhodes are some of SA\'s best trout and yellowfish fly water.',
+    'Karoo dams bake in summer — dawn and dusk only.',
+  ],
+  'western-cape': [
+    'Cape trout streams are fly-only, catch-and-release, open 1 September to 31 May.',
+    'Most Cape river water is tea-coloured from the fynbos — natural, not dirty.',
+  ],
+  'northern-cape': [
+    'The Orange and lower Vaal hold SA\'s best largemouth yellowfish — a trophy predator on streamers.',
+    'Northern Cape summers are brutally hot; winter mornings can freeze.',
   ],
 };
 
@@ -153,8 +199,13 @@ export function liveTip(location, { waterTempC, timeOfDay }, { rng = Math.random
   return { kind: 'live', speciesId: chosen.species.id, lureId: chosen.lure.id, text };
 }
 
+// Everything known locally about a spot: its own tips, then the province's.
+export function localTipsFor(location) {
+  return [...(LOCAL_TIPS[location.id] || []), ...(location.tips || []), ...(PROVINCE_TIPS[location.province] || [])];
+}
+
 export function localTip(location, rng = Math.random) {
-  const list = LOCAL_TIPS[location.id];
+  const list = localTipsFor(location);
   return list?.length ? { kind: 'local', text: pick(list, rng) } : null;
 }
 

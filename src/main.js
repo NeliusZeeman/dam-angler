@@ -5,7 +5,7 @@ import { createPostPipeline } from './gfx/post.js';
 import { windUniforms } from './gfx/wind.js';
 import { createEnvironment, TIME_OF_DAY_PHASES } from './environment.js';
 import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm, rollTrophy, trophyWeightFor } from './fish.js';
-import { RODS, LINES, REELS, HOOKS, LURES, getGearById } from './gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, getGearById, rigCheck } from './gear.js';
 import { calculatePayout } from './economy.js';
 import { loadSave, saveSave } from './save.js';
 import { createCasting } from './casting.js';
@@ -79,7 +79,7 @@ function openMainMenu() {
       save.startTimeOfDay = timeOfDay;
       saveSave(save);
       startGame(locationId, timeOfDay);
-    }, { onBack: openMainMenu }),
+    }, { onBack: openMainMenu, initialLocationId: save.locationId }),
   });
 }
 
@@ -123,7 +123,9 @@ function startGame(locationId, startTimeOfDay) {
     algae: waterLook.algae ?? 0,
   });
   const { waterMesh, setWaterTemperature } = water;
-  const environment = createEnvironment({ startTimeOfDay });
+  // Each water has its own climate: mountain trout streams run cold,
+  // Lowveld and Karoo water warm.
+  const environment = createEnvironment({ startTimeOfDay, tempOffset: location.tempOffset ?? 0 });
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   let pixelRatio = Math.min(window.devicePixelRatio || 1, quality === 'low' ? 1 : 1.5);
@@ -160,6 +162,12 @@ function startGame(locationId, startTimeOfDay) {
   let activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
   let activeLureId = save.equippedLureId || LURES[0].id;
   function currentLure() { return getGearById(LURES, activeLureId) || LURES[0]; }
+  // Whether the rod, reel, line and bait belong together (see gear.js).
+  let rig = null;
+  function refreshRig() {
+    rig = rigCheck({ rod: activeRod, reel: activeReel, line: activeLine, lure: currentLure() });
+  }
+  refreshRig();
 
   const casting = createCasting({
     scene, camera, domElement: renderer.domElement,
@@ -178,8 +186,15 @@ function startGame(locationId, startTimeOfDay) {
     // A heavy feeder on a light rod can't be thrown at full speed -- the
     // blank folds under the weight instead of flicking it out.
     getCastMultiplier: () => (activeReel.castMultiplier || 1) * (activeLine.castMultiplier || 1)
-      * (currentLure().heavy && activeRod.power === 'light' ? 0.72 : 1),
+      * (currentLure().heavy && activeRod.power === 'light' ? 0.72 : 1) * rig.castFactor,
     getCastDrag: () => currentLure().castDrag ?? null,
+    // A full fly rig casts the fly-fishing way: false casts that whip the
+    // line back and forth overhead before it unrolls onto the water.
+    isFlyCast: () => rig.flyRig,
+    getLineLook: () => (activeLine.type === 'fly'
+      ? { color: activeLine.sinking ? [0.45, 0.55, 0.36] : [0.8, 1.0, 0.25], width: 3.2 }
+      : null),
+    onFlyStroke: (forward, strength) => audio.cast(0.35 + strength * 0.4 * (forward ? 1 : 0.7)),
     // A mieliebom breaks down where it lands: a feeding spot round the hook.
     onLanded: (point, inWater) => {
       if (inWater) audio.plop((currentLure().heavy ? 1.4 : 0.8) * hearingFalloff(point, 120));
@@ -209,6 +224,7 @@ function startGame(locationId, startTimeOfDay) {
     activeReel = getGearById(REELS, save.equippedReelId) || REELS[0];
     activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
     activeLureId = save.equippedLureId || LURES[0].id;
+    refreshRig();
     playerRod.setRod(activeRod);
   }
   playerRod.setRod(activeRod);
@@ -279,7 +295,7 @@ function startGame(locationId, startTimeOfDay) {
   function updateSound(delta) {
     const cs = casting.getState();
     if (cs.phase === 'aiming') soundPower = cs.power;
-    if (soundPhase === 'aiming' && cs.phase === 'inAir') audio.cast(soundPower);
+    if (soundPhase === 'aiming' && cs.phase === 'inAir' && !cs.flyStroke) audio.cast(soundPower);
     soundPhase = cs.phase;
     const mg = minigame.getState();
     const fish = casting.getFightFish();
@@ -608,7 +624,8 @@ function startGame(locationId, startTimeOfDay) {
     const conditions = {
       waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay, habitat, lureKind, chumBoost,
       // The right hook and line for the fish get more bites.
-      gearBite: (s) => (activeHook.biteBonus?.[s.id] ?? 1) * (activeLine.biteBonus?.[s.id] ?? 1),
+      gearBite: (s) => (activeHook.biteBonus?.[s.id] ?? 1) * (activeLine.biteBonus?.[s.id] ?? 1)
+        * (activeRod.biteBonus?.[s.id] ?? 1) * rig.biteFactor,
     };
     const bite = rollDamBite(localSpecies, location.catchShare, { ...conditions, deltaSeconds: delta, biteChanceMultiplier });
     if (bite) {
@@ -626,6 +643,7 @@ function startGame(locationId, startTimeOfDay) {
   let lastSeason = null;
   let lastCastPhase = 'idle';
   let castSnap = 0;
+  let rigToastCooldown = 0;
   let lastCanChum = null;
   const rodAimScratch = new THREE.Vector3();
   const rodFishScratch = new THREE.Vector3();
@@ -704,7 +722,15 @@ function startGame(locationId, startTimeOfDay) {
       // punched forward toward the water on release, flicked up on a twitch,
       // held high against a fighting fish. The blank's flex is simulated in
       // rod.js from the swing and from how hard the line is pulling.
-      if (lastCastPhase === 'aiming' && castState.phase === 'inAir') castSnap = 1;
+      if (lastCastPhase === 'aiming' && castState.phase === 'inAir') {
+        if (!castState.flyStroke) castSnap = 1;
+        // A rig that doesn't belong together says why the cast fell short.
+        if (!rig.ok && rigToastCooldown <= 0) {
+          hud.showToast(`${rig.issues[0]} (Tackle Box)`);
+          rigToastCooldown = 25;
+        }
+      }
+      rigToastCooldown = Math.max(0, rigToastCooldown - delta);
       lastCastPhase = castState.phase;
       castSnap = Math.max(0, castSnap - delta * 2.2);
       twitchBoostTimer = Math.max(0, twitchBoostTimer - delta);
@@ -736,6 +762,14 @@ function startGame(locationId, startTimeOfDay) {
         const toFish = rodFishScratch.subVectors(casting.bobberPosition, camera.position);
         const side = rodAimScratch.x * toFish.z - rodAimScratch.z * toFish.x;
         rodYaw += THREE.MathUtils.clamp(side / Math.max(1, toFish.length()), -0.4, 0.4) * 0.5;
+      } else if (castState.flyStroke) {
+        // Fly casting: the rod stops high behind on the back cast (about one
+        // o'clock) and punches forward to ten o'clock, the line loading the
+        // blank toward wherever the loop is pulling it.
+        const fs = castState.flyStroke;
+        rodPitch = playerRod.restTilt + (fs.forward ? (fs.delivery ? -0.35 : -0.15) : 1.05);
+        pullTarget = fs.pull;
+        linePull = 0.05 + 0.12 * Math.sin(Math.PI * Math.min(1, fs.s * 1.6));
       } else if (castState.phase === 'reeling') linePull = 0.06;
       else if (castState.phase === 'waiting') linePull = castState.working ? 0.07 : 0.015;
       else if (castState.phase === 'inAir') linePull = 0.02;

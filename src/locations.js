@@ -5,7 +5,13 @@
 // shelves off, how far the far bank is, and the angling stands built out
 // over the water. Bass-heavy dams get more and denser structure, per the
 // forum reports of jetties, timber and lily pads being where the bass are.
-export const LOCATIONS = [
+//
+// These six are hand-tuned; the rest of the country's spots (45 more, in
+// all nine provinces) are built from compact definitions in spots.js.
+import { SPOT_DEFS } from './spots.js';
+import { buildSpot } from './regions.js';
+
+const ORIGINAL_DAMS = [
   {
     id: 'hartbeespoort',
     name: 'Hartbeespoort Dam',
@@ -260,6 +266,21 @@ export const LOCATIONS = [
     },
   },
 ];
+
+// Which province each original dam is in (Vaal Dam's main shore is Free
+// State; Hartbeespoort is North West).
+const ORIGINAL_PROVINCE = {
+  hartbeespoort: 'north-west', vaal: 'free-state', jozini: 'kwazulu-natal',
+  bronkhorstspruit: 'gauteng', loskop: 'mpumalanga', roodeplaat: 'gauteng',
+};
+for (const loc of ORIGINAL_DAMS) {
+  loc.province = ORIGINAL_PROVINCE[loc.id];
+  loc.kind = 'dam';
+  loc.fly = false;
+  loc.tempOffset = loc.id === 'jozini' ? 2 : 0;
+}
+
+export const LOCATIONS = [...ORIGINAL_DAMS, ...SPOT_DEFS.map(buildSpot)];
 
 export function getLocationById(id) {
   return LOCATIONS.find((loc) => loc.id === id) || LOCATIONS[0];

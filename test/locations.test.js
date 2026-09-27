@@ -2,10 +2,22 @@ import assert from 'node:assert';
 import { LOCATIONS, getLocationById } from '../src/locations.js';
 import { FISH_SPECIES, pickGuaranteedBite, rollDamBite } from '../src/fish.js';
 import { createDam } from '../src/dam.js';
+import { PROVINCES } from '../src/regions.js';
 
 {
-  assert.strictEqual(LOCATIONS.length, 6);
-  console.log('PASS: six locations defined');
+  // At least 5 fishing spots in every one of South Africa's nine provinces,
+  // with rivers and fly-fishing water among them.
+  assert.strictEqual(PROVINCES.length, 9);
+  for (const p of PROVINCES) {
+    const spots = LOCATIONS.filter((l) => l.province === p.id);
+    assert.ok(spots.length >= 5, `${p.name} has only ${spots.length} spots`);
+  }
+  assert.ok(LOCATIONS.every((l) => PROVINCES.some((p) => p.id === l.province)), 'every spot belongs to a province');
+  const rivers = LOCATIONS.filter((l) => l.kind === 'river' || l.kind === 'stream');
+  const fly = LOCATIONS.filter((l) => l.fly);
+  assert.ok(rivers.length >= 12, `rivers and streams count too (${rivers.length})`);
+  assert.ok(fly.length >= 10, `fly-fishing waters (${fly.length})`);
+  console.log(`PASS: ${LOCATIONS.length} spots in all 9 provinces (${rivers.length} rivers/streams, ${fly.length} fly-fishing waters)`);
 }
 
 {
@@ -20,24 +32,33 @@ import { createDam } from '../src/dam.js';
 }
 
 {
-  // No two locations should offer an identical species mix -- that would
-  // defeat the point of picking a place to fish.
+  // No two spots should fish exactly alike (same fish in the same mix).
+  const key = (l) => JSON.stringify(Object.entries(l.catchShare).sort());
   for (let i = 0; i < LOCATIONS.length; i++) {
     for (let j = i + 1; j < LOCATIONS.length; j++) {
-      const a = new Set(LOCATIONS[i].speciesIds);
-      const b = new Set(LOCATIONS[j].speciesIds);
-      const same = a.size === b.size && [...a].every((id) => b.has(id));
-      assert.ok(!same, `${LOCATIONS[i].id} and ${LOCATIONS[j].id} should not have identical species mixes`);
+      assert.ok(key(LOCATIONS[i]) !== key(LOCATIONS[j]), `${LOCATIONS[i].id} and ${LOCATIONS[j].id} fish identically`);
     }
   }
-  console.log('PASS: every location has a distinct species mix');
+  console.log('PASS: every spot has its own catch mix');
 }
 
 {
-  // Tigerfish (the signature Jozini fish) should only be available there.
-  const withTigerfish = LOCATIONS.filter((loc) => loc.speciesIds.includes('tigerfish'));
-  assert.deepStrictEqual(withTigerfish.map((l) => l.id), ['jozini']);
-  console.log('PASS: tigerfish is exclusive to Jozini, matching its real range');
+  // Fish only where they really live:
+  const where = (id) => LOCATIONS.filter((l) => l.speciesIds.includes(id));
+  // tigerfish: Jozini, the Pongola below it, and the Lowveld Crocodile River.
+  assert.deepStrictEqual(where('tigerfish').map((l) => l.id).sort(), ['crocodile-river', 'jozini', 'pongola-river']);
+  // Orange-Vaal yellowfish never in the Limpopo/Olifants/Pongola systems or the Cape.
+  for (const l of where('smallmouth-yellowfish')) assert.ok(!['limpopo', 'mpumalanga', 'kwazulu-natal', 'western-cape'].includes(l.province), `smallmouth yellows at ${l.id}?`);
+  for (const l of where('largemouth-yellowfish')) assert.ok(['free-state', 'northern-cape', 'north-west', 'gauteng', 'eastern-cape'].includes(l.province), `largemouth yellows at ${l.id}?`);
+  // Largescale yellowfish: Limpopo/Olifants/Crocodile/Pongola systems, never with the smallmouth.
+  for (const l of where('largescale-yellowfish')) {
+    assert.ok(['gauteng', 'mpumalanga', 'limpopo', 'kwazulu-natal'].includes(l.province), `largescale yellows at ${l.id}?`);
+    assert.ok(!l.speciesIds.includes('smallmouth-yellowfish'), `${l.id} mixes largescale and smallmouth yellows`);
+  }
+  // Clanwilliam yellowfish: Western Cape only. Trout: only in cold water.
+  assert.ok(where('clanwilliam-yellowfish').every((l) => l.province === 'western-cape'));
+  for (const l of [...where('rainbow-trout'), ...where('brown-trout')]) assert.ok(l.tempOffset <= -3, `trout in warm water at ${l.id}`);
+  console.log('PASS: every fish only where it really lives (tigers in the Lowveld, trout in cold water, ...)');
 }
 
 {
@@ -47,18 +68,21 @@ import { createDam } from '../src/dam.js';
 }
 
 {
-  // Every location describes a stretch of dam that builds, with at least one
-  // stand to fish from, and the angler starts somewhere they can stand --
-  // out over the water on the first stand.
+  // Every spot builds, and the angler starts somewhere they can stand: out
+  // on a stand over the water, or on the bank a few steps from it.
   for (const loc of LOCATIONS) {
-    assert.ok(loc.dam, `${loc.id} must declare a dam`);
+    assert.ok(loc.dam, `${loc.id} must declare its water`);
     const dam = createDam(loc.dam, 7);
-    assert.ok(dam.stands.length >= 1, `${loc.id} needs at least one angling stand`);
     assert.ok(dam.isWalkable(dam.spawn.x, dam.spawn.z), `${loc.id} spawn must be walkable`);
-    assert.ok(dam.isWater(dam.spawn.x, dam.spawn.z), `${loc.id} spawn is out over the water on the stand`);
-    assert.ok(dam.isWater(0, 60) && !dam.isWater(0, -40), `${loc.id}: water to the north, land to the south`);
+    if (dam.stands.length) assert.ok(dam.isWater(dam.spawn.x, dam.spawn.z), `${loc.id} spawn is out on the stand`);
+    else assert.ok(dam.waterDist(dam.spawn.x, dam.spawn.z) > -8, `${loc.id} spawn is on the bank near the water`);
+    assert.ok(dam.isWater(0, dam.shoreZ(0) + 3) && !dam.isWater(0, -40), `${loc.id}: water to the north, land to the south`);
+    if (loc.kind === 'river' || loc.kind === 'stream') {
+      assert.ok(dam.spec.flow > 0, `${loc.id} flows`);
+      assert.ok(dam.farShoreZ(0) - dam.shoreZ(0) < 130, `${loc.id}: a river has a near far bank`);
+    }
   }
-  console.log('PASS: every location declares a buildable dam with a walkable stand');
+  console.log('PASS: every spot builds; rivers flow and have a far bank');
 }
 
 {
@@ -116,12 +140,6 @@ import { createDam } from '../src/dam.js';
   assert.ok(vaalMielies.slice(0, 2).includes('smallmouth-yellowfish') && vaalMielies.slice(0, 2).includes('common-carp'),
     `Vaal mielie session should be led by yellowfish and carp, got ${vaalMielies.slice(0, 3)}`);
   assert.ok(vaalMielies.includes('mudfish'), 'mudfish turn up on the Vaal');
-  // Smallmouth yellowfish is a Vaal-Orange fish: nowhere else on our map.
-  assert.deepStrictEqual(LOCATIONS.filter((l) => l.speciesIds.includes('smallmouth-yellowfish')).map((l) => l.id), ['vaal']);
-  // Largescale yellowfish: Olifants (Loskop, Bronkhorstspruit) and Pongola
-  // (Jozini) systems only -- never alongside the smallmouth.
-  assert.deepStrictEqual(LOCATIONS.filter((l) => l.speciesIds.includes('largescale-yellowfish')).map((l) => l.id).sort(),
-    ['bronkhorstspruit', 'jozini', 'loskop']);
   assert.strictEqual(tally('loskop', 'spinner', 'lure', 'structure')[0], 'largemouth-bass', 'Loskop spinner in timber: bass');
   assert.ok(tally('jozini', 'spinner', 'lure', 'structure', 'sunset')[0] === 'tigerfish', 'Jozini spinner at dusk: tigerfish');
   console.log('PASS: simulated catches match what anglers report at each dam');
@@ -144,6 +162,34 @@ import { createDam } from '../src/dam.js';
   }
   assert.ok(counts['common-carp'] > counts['mozambique-tilapia'] * 2, `carp ${counts['common-carp']} vs tilapia ${counts['mozambique-tilapia']}`);
   console.log('PASS: one fair roll per frame -- carp outnumber tilapia at Harties on mielies');
+}
+
+{
+  // Each kind of water fishes the way the research says, with the right
+  // bait at a summer water temperature (winter at 10°C for the trout).
+  const top = (id, lure, kind, timeOfDay, zone = 'open', season = 26) => {
+    const loc = getLocationById(id);
+    const list = FISH_SPECIES.filter((s) => loc.speciesIds.includes(s.id));
+    const counts = {};
+    for (let i = 0; i < 3000; i++) {
+      const s = pickGuaranteedBite(list, {
+        waterTempC: Math.max(2, season + (loc.tempOffset || 0)), equippedLureId: lure, timeOfDay, lureKind: kind,
+        habitat: { zone, depthFactor: 0.5 },
+      }, loc.catchShare);
+      if (s) counts[s.id] = (counts[s.id] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  };
+  assert.strictEqual(top('dullstroom', 'fly-streamer', 'lure', 'morning'), 'rainbow-trout', 'Dullstroom: trout on a streamer');
+  assert.strictEqual(top('dullstroom', 'fly-streamer', 'lure', 'sunset', 'open', 10), 'rainbow-trout', 'Dullstroom trout still bite in winter');
+  assert.strictEqual(top('vaal-parys', 'fly-nymph', 'lure', 'midMorning'), 'smallmouth-yellowfish', 'Parys: yellows on nymphs');
+  assert.strictEqual(top('vanderkloof', 'fly-streamer', 'lure', 'morning', 'structure'), 'largemouth-yellowfish', 'Vanderkloof: largemouth yellows on streamers');
+  assert.strictEqual(top('pongola-river', 'spinner', 'lure', 'morning', 'structure'), 'tigerfish', 'Pongola: tigers on spinners');
+  assert.strictEqual(top('cederberg-olifants', 'fly-nymph', 'lure', 'midMorning'), 'clanwilliam-yellowfish', 'Cederberg: Clanwilliam yellows');
+  assert.strictEqual(top('albert-falls', 'soft-plastic', 'lure', 'morning', 'structure'), 'largemouth-bass', 'Albert Falls: bass in summer');
+  assert.strictEqual(top('stettynskloof', 'spinner', 'lure', 'morning', 'structure'), 'smallmouth-bass', 'Stettynskloof: smallmouth bass');
+  assert.strictEqual(top('darlington', 'chicken-liver', 'bait', 'night'), 'catfish', 'Karoo dam at night: barbel');
+  console.log('PASS: every kind of water fishes true to the research with the right bait');
 }
 
 console.log('All location tests passed.');

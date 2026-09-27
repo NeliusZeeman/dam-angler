@@ -85,3 +85,33 @@ Create a photorealistic side-view image of a single largescale yellowfish (Labeo
 ```text
 Create a photorealistic side-view image of a single Orange River mudfish (Labeo capensis, "moddervis") from the Vaal Dam, South Africa. Full body in frame from snout to tail tip, head facing RIGHT, fins spread naturally, fish level and centred. Long, round-bellied body; dull grey-olive to silvery-grey back and sides fading to an off-white belly, with fine even scales; blunt rounded snout with thick fleshy sucker-like lips on an underslung mouth and one pair of tiny barbels; tall dorsal fin with a concave (inward-curving) top edge; forked tail; greyish fins; a plain bottom-feeding labeo, not flashy. Transparent background, no hands, no water, no text, no watermark. Soft natural daylight from above, crisp scale detail, wet glossy skin. Landscape 3:2, 1536x1024, PNG.
 ```
+
+### 12. Rainbow Trout — save as `rainbow-trout.png`
+
+```text
+Create a photorealistic side-view image of a single rainbow trout (Oncorhynchus mykiss) from a cold mountain stream in the South African Drakensberg. Full body in frame from snout to tail tip, head facing RIGHT, fins spread naturally, fish level and centred. Streamlined silver body with a broad pink-red band along the flank and gill cover, olive-green back, fine black spots over the back, dorsal fin and tail, white belly; small adipose fin; slightly forked tail. Transparent background, no hands, no water, no text, no watermark. Soft natural daylight from above, crisp detail, wet glossy skin. Landscape 3:2, 1536x1024, PNG.
+```
+
+### 13. Brown Trout — save as `brown-trout.png`
+
+```text
+Create a photorealistic side-view image of a single wild brown trout (Salmo trutta) from the Mooi River, KwaZulu-Natal Midlands. Full body in frame from snout to tail tip, head facing RIGHT, fins spread naturally, fish level and centred. Golden-brown to buttery-yellow flanks, darker olive-brown back, bold black spots and scattered red spots with pale halos along the sides, creamy yellow belly; square tail; small adipose fin with an orange edge; strong jaw. Transparent background, no hands, no water, no text, no watermark. Soft natural daylight from above, crisp detail, wet glossy skin. Landscape 3:2, 1536x1024, PNG.
+```
+
+### 14. Largemouth Yellowfish — save as `largemouth-yellowfish.png`
+
+```text
+Create a photorealistic side-view image of a single largemouth yellowfish (Labeobarbus kimberleyensis) from the Orange River at Vanderkloof Dam, South Africa. Full body in frame from snout to tail tip, head facing RIGHT, fins spread naturally, fish level and centred. Long, powerful, predatory body with large bold scales; olive-bronze back shading to golden flanks and a pale belly; big head with a large, upturned mouth reaching back under the eye and short barbels; single dorsal fin with a strong leading spine; deeply forked tail. Transparent background, no hands, no water, no text, no watermark. Soft natural daylight from above, crisp scale detail, wet glossy skin. Landscape 3:2, 1536x1024, PNG.
+```
+
+### 15. Clanwilliam Yellowfish — save as `clanwilliam-yellowfish.png`
+
+```text
+Create a photorealistic side-view image of a single Clanwilliam yellowfish (Labeobarbus capensis) from the Olifants River in the Cederberg, Western Cape. Full body in frame from snout to tail tip, head facing RIGHT, fins spread naturally, fish level and centred. Robust body with large, clearly outlined scales; bright golden-olive to rich yellow flanks, darker olive back, cream belly; rubbery lips with two pairs of barbels; tall dorsal fin; forked tail with an olive-amber tint. Transparent background, no hands, no water, no text, no watermark. Soft natural daylight from above, crisp scale detail, wet glossy skin. Landscape 3:2, 1536x1024, PNG.
+```
+
+### 16. Bluegill — save as `bluegill.png`
+
+```text
+Create a photorealistic side-view image of a single bluegill sunfish (Lepomis macrochirus) from a Western Cape dam, South Africa. Full body in frame from snout to tail tip, head facing RIGHT, fins spread naturally, fish level and centred. Small, deep, almost round, flat-sided body; olive-green back with faint dark vertical bars, bluish sheen on the cheek, a dark black ear-flap on the gill cover, orange-yellow breast; spiny dorsal fin joined to a soft rear dorsal; small mouth; slightly forked tail. Transparent background, no hands, no water, no text, no watermark. Soft natural daylight from above, crisp scale detail, wet glossy skin. Landscape 3:2, 1536x1024, PNG.
+```
