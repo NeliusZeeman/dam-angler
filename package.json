@@ -1,0 +1,22 @@
+{
+  "name": "dam-angler",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dam Angler v2: the game plus its accounts, cloud saves and dam stats server",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node --env-file-if-exists=server/.env server/index.js",
+    "dev": "node server/dev.js",
+    "migrate": "node --env-file-if-exists=server/.env server/migrate.js",
+    "test": "node --test \"server/test/*.test.js\" && node test/run-all.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "express": "^5.1.0",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.7"
+  }
+}

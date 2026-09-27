@@ -2,3 +2,4 @@ node_modules/
 *.log
 backups/
 .playwright-mcp/
+server/.env
