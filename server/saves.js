@@ -9,7 +9,8 @@
 // ignored -- a save only carries what's rigged, the drag, the spot and the
 // settings.
 import { GEAR, GEAR_FIELDS, STARTER, HttpError, cleanSave, cleanCatch, cleanCatchLog, isKnownGear, speciesById } from './validate.js';
-import { catchPayout, CHUM_COST } from '../src/economy.js';
+import { catchPayout } from '../src/economy.js';
+import { ENGINE } from '../src/tuning/engine.js';
 
 const inTx = (db, fn) => (db.transaction ? db.transaction(fn) : fn(db));
 const gearItem = (kind, id) => GEAR[kind]?.find((i) => i.id === id);
@@ -17,6 +18,7 @@ const gearItem = (kind, id) => GEAR[kind]?.find((i) => i.id === id);
 // A guest who signs up brings their progress along, but it was earned where
 // the server couldn't see it -- so at most this much (credits plus the price
 // of the gear bought) comes across.
+// The built-in limit (live value: ENGINE.money.guestImportLimit).
 export const GUEST_IMPORT_LIMIT = 10_000;
 
 // A brand-new player: starter gear, no credits.
@@ -157,9 +159,9 @@ export async function buyItem(db, userId, kind, itemId) {
 }
 
 // Spends credits on something used up in the game (breadcrumbs).
-const SPEND = { chum: CHUM_COST };
+const SPEND = { chum: () => ENGINE.money.chumCost };
 export async function spendCredits(db, userId, what) {
-  const cost = SPEND[what];
+  const cost = SPEND[what]?.();
   if (!cost) throw new HttpError(400, 'Nothing to buy by that name.');
   return inTx(db, async (tx) => {
     const credits = await changeCredits(tx, userId, -cost, what, null);
@@ -176,7 +178,7 @@ export async function importGuest(db, userId, { guestSave, guestCatches } = {}) 
     let s = null;
     try { s = cleanSave(guestSave); } catch { /* a broken guest save: keep the fresh starter one */ }
     if (s) {
-      let budget = GUEST_IMPORT_LIMIT;
+      let budget = ENGINE.money.guestImportLimit;
       const wanted = [];
       for (const [kind, ids] of Object.entries(s.gear)) for (const id of ids) if (id !== STARTER[kind]) wanted.push({ kind, id, cost: gearItem(kind, id).cost });
       wanted.sort((a, b) => a.cost - b.cost);

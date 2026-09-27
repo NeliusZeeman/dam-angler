@@ -1,3 +1,4 @@
+import { ENGINE } from './tuning/engine.js';
 // The fight: hold to reel. Reeling gains progress but loads the line; ease
 // off when the tension bar runs red or it snaps. Give too much slack for too
 // long and the fish throws the hook. Fish "runs" spike the tension on their
@@ -11,26 +12,17 @@ export function createMinigame() {
   let runTimer = 0;
   let context = null;
 
-  const REEL_TENSION_RATE = 0.42; // tension added per second while reeling
-  const SLACK_RATE = 0.55; // tension shed per second while not reeling
-  const PROGRESS_RATE = 0.22; // progress gained per second while reeling
-  const PROGRESS_LOSS_RATE = 0.05; // fish takes a little line back while you rest
-  const SLACK_LIMIT_SECONDS = 4; // this long with a loose line = the hook drops out
-  const SLACK_THRESHOLD = 0.06;
-  const SNAP_AT = 0.9; // share of the line's breaking strain where it goes
 
   // The reel's drag: the spool slips and gives line once the pull passes
   // the setting, so a lunge can't reach the line's breaking strain. Set as
   // a share of the line's breaking strain -- the angler's rule of thumb is
   // a third. Too tight and a lunge snaps the line before it slips; too
   // loose and the fish takes line at will and tires slowly.
-  const DEFAULT_DRAG = 0.33;
   const MIN_DRAG = 0.05;
   const MAX_DRAG = 0.9;
   // Where on the tension bar the drag starts to slip.
   const slipPoint = (d) => 0.25 + 0.95 * d;
   // Winding hard against a slipping drag still overloads the line a bit.
-  const HAUL_OVER = 0.35;
 
   const STYLE = {
     aggressive: { load: 1.45, runEvery: 1.6, runSize: 0.22, progressMul: 0.85 },
@@ -43,7 +35,7 @@ export function createMinigame() {
   // catch on its own -- the fish has to be brought in to the bank or stand.
   let landingBlocked = false;
   let hookStrain = 0; // seconds of hauling in the red
-  let drag = DEFAULT_DRAG;
+  let drag = ENGINE.fight.defaultDrag;
   // What the rod, reel, line and hook are going through right now -- for the
   // fight gauges and for saying what went wrong when a fish is lost.
   let slipping = false;
@@ -99,8 +91,6 @@ export function createMinigame() {
   // stays tight even if you're not reeling, so that isn't slack. Only when
   // it turns toward you (or stops) and you don't reel does the line go loose.
   let fishPulling = false;
-  const DRAG_TENSION = 0.28; // how tight the line sits while a fish runs against the drag
-  const DRAG_TIRE = 0.45; // how fast a run against the drag tires it, vs. reeling
   function setFishPulling(value) {
     fishPulling = value;
   }
@@ -111,8 +101,6 @@ export function createMinigame() {
   // chance it throws the hook when it lands.
   let airborne = 0;
   let strainedInAir = 0;
-  const JUMP_STRAIN = 0.25; // extra tension per second if you reel through a jump
-  const THROW_CHANCE_PER_SECOND_HELD = 0.8;
   function jump(durationSeconds = 1) {
     if (!active) return;
     airborne = durationSeconds;
@@ -135,7 +123,7 @@ export function createMinigame() {
     const gearRelief = lineRelief / (0.75 + (rod.tensionTolerance + hookTensionBonus + reelDragBonus) * 0.25);
     const weightLoad = 0.8 + Math.min(1.2, weightKg / 8) * 0.5;
     const load = style.load * weightLoad * gearRelief;
-    const snapMax = SNAP_AT;
+    const snapMax = ENGINE.fight.snapAt;
     // Mono stretches and cushions a lunge; braid has none, so runs hit hard.
     // A fly line plus nylon tippet (and the soft fly rod) cushions most.
     const stretch = { mono: 0.85, fluoro: 0.95, braid: 1.3, fly: 0.8 }[line.type] ?? 1;
@@ -162,25 +150,25 @@ export function createMinigame() {
       // (a light drag on a big fish is a long fight), and the line only
       // loads a bit past the setting.
       slipping = wantTarget > slipAt;
-      const holdTarget = Math.min(wantTarget, slipAt + HAUL_OVER);
+      const holdTarget = Math.min(wantTarget, slipAt + ENGINE.fight.haulOver);
       const gain = slipping ? 0.45 + 0.55 * Math.min(1, (slipAt - 0.25) / (wantTarget - 0.25)) : 1;
-      const rate = REEL_TENSION_RATE * 3 * style.load;
+      const rate = ENGINE.fight.reelTensionRate * 3 * style.load;
       tension += (holdTarget - tension) * Math.min(1, rate * deltaSeconds);
-      progress += (PROGRESS_RATE * style.progressMul * gain / context.stamina) * deltaSeconds;
+      progress += (ENGINE.fight.progressRate * style.progressMul * gain / context.stamina) * deltaSeconds;
     } else if (fishPulling) {
       // Line peeling off against the drag: tight, but not climbing.
       // A tighter drag makes it work harder for every metre.
-      const runTension = Math.min(slipAt, DRAG_TENSION * lineRelief * (0.6 + drag * 1.2));
+      const runTension = Math.min(slipAt, ENGINE.fight.dragTension * lineRelief * (0.6 + drag * 1.2));
       tension += (runTension - tension) * Math.min(1, deltaSeconds * 2);
       slipping = true;
       // Every run against the drag wears it down -- how a big fish that
       // would break the line if you hauled on it is landed with patience.
-      progress += (PROGRESS_RATE * DRAG_TIRE * (0.4 + drag * 1.8) * style.progressMul / context.stamina) * deltaSeconds;
+      progress += (ENGINE.fight.progressRate * ENGINE.fight.dragTire * (0.4 + drag * 1.8) * style.progressMul / context.stamina) * deltaSeconds;
     } else {
-      tension -= SLACK_RATE * deltaSeconds;
+      tension -= ENGINE.fight.slackRate * deltaSeconds;
       // It recovers while you rest -- at the same stamina-scaled pace, so a
       // strong fish's fight stretches out evenly instead of stalling.
-      progress = Math.max(0, progress - (PROGRESS_LOSS_RATE / context.stamina) * deltaSeconds);
+      progress = Math.max(0, progress - (ENGINE.fight.progressLossRate / context.stamina) * deltaSeconds);
     }
 
     // The fish runs: a sudden pull regardless of what you're doing.
@@ -194,8 +182,8 @@ export function createMinigame() {
       tension += style.runSize * weightLoad * gearRelief * cushion * stretch;
       // The drag gives line before the lunge can go further -- after a jerky
       // drag's moment of sticking.
-      const cap = slipAt + (holding ? HAUL_OVER : 0) + sticky;
-      stuckDrag = tension > slipAt + (holding ? HAUL_OVER : 0) && sticky > 0.05;
+      const cap = slipAt + (holding ? ENGINE.fight.haulOver : 0) + sticky;
+      stuckDrag = tension > slipAt + (holding ? ENGINE.fight.haulOver : 0) && sticky > 0.05;
       if (tension > cap) tension = cap;
       if (tension > slipAt) slipping = true;
       lastSpike = 0;
@@ -228,12 +216,12 @@ export function createMinigame() {
     if (airborne > 0) {
       airborne -= deltaSeconds;
       if (holding) {
-        tension += JUMP_STRAIN * weightLoad * gearRelief * deltaSeconds;
+        tension += ENGINE.fight.jumpStrain * weightLoad * gearRelief * deltaSeconds;
         strainedInAir += deltaSeconds;
       }
       if (airborne <= 0 && strainedInAir > 0) {
         // A hook set deep in the corner of the mouth rarely shakes loose.
-        const throwChance = Math.min(0.85, strainedInAir * THROW_CHANCE_PER_SECOND_HELD) * (1 - hold);
+        const throwChance = Math.min(0.85, strainedInAir * ENGINE.fight.throwChancePerSecond) * (1 - hold);
         strainedInAir = 0;
         if (Math.random() < throwChance) {
           fail('threw-hook');
@@ -259,9 +247,9 @@ export function createMinigame() {
       return;
     }
 
-    if (tension <= SLACK_THRESHOLD && airborne <= 0) {
+    if (tension <= ENGINE.fight.slackThreshold && airborne <= 0) {
       slackTimer += deltaSeconds;
-      if (slackTimer >= SLACK_LIMIT_SECONDS + hold * 3) {
+      if (slackTimer >= ENGINE.fight.slackLimitSeconds + hold * 3) {
         fail('fish-escaped');
         return;
       }

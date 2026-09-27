@@ -1,4 +1,5 @@
 import { FISH_SPECIES } from './fish.js';
+import { ENGINE } from './tuning/engine.js';
 
 // Where a hooked fish is, second by second, while you fight it -- pure
 // maths, no graphics, so it can be tested. casting.js moves the float and
@@ -71,12 +72,10 @@ export function fightStrength(speciesId, weightKg = 1) {
 }
 
 const MIN_DISTANCE = 1.0; // reeled right in to the rod tip (as far as the water allows)
-const RUN_SECONDS = 1.3; // how long a burst lasts
-export const REEL_SPEED = 1.5; // m/s of line the reel winds in while you hold
-export const LINE_ON_SPOOL = 140; // m -- a fish can't run further than this
+// (How fast the reel winds in: ENGINE.motion.reelSpeed.)
 
 // start/rod: {x, z}. isWater(x, z) keeps the fish off the bank.
-export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater = () => true, rng = Math.random, reelSpeed = REEL_SPEED }) {
+export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater = () => true, rng = Math.random, reelSpeed = ENGINE.motion.reelSpeed }) {
   const range = (r) => r[0] + rng() * (r[1] - r[0]);
   let x = start.x, z = start.z;
   let heading = Math.atan2(z - rod.z, x - rod.x); // straight away from the angler
@@ -106,7 +105,7 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     nextRun -= dt;
     if (nextRun <= 0) {
       nextRun = range(style.runEvery);
-      runLeft = RUN_SECONDS * (0.7 + rng() * 0.6);
+      runLeft = ENGINE.motion.runSeconds * (0.7 + rng() * 0.6);
       const away = Math.atan2(z - rod.z, x - rod.x);
       heading = holding ? away + (rng() * 2 - 1) * style.swing : rng() * Math.PI * 2;
     }
@@ -140,7 +139,7 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     // against a slipping drag barely gains any: the spool just turns.
     const reelGain = slipping ? 0.35 : 1;
     if (holding) newDist = Math.max(MIN_DISTANCE, newDist - (reelSpeed * reelGain / (0.55 + 0.45 * strength)) * dt);
-    newDist = Math.min(newDist, LINE_ON_SPOOL);
+    newDist = Math.min(newDist, ENGINE.motion.lineOnSpool);
     if (newDist !== dist) {
       const cx = rod.x + (dx / dist) * newDist, cz = rod.z + (dz / dist) * newDist;
       if (isWater(cx, cz)) { nx = cx; nz = cz; }

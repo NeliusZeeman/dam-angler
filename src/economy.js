@@ -2,8 +2,11 @@
 // the server -- when you're logged in the server does the sums itself, so
 // both sides must get exactly the same answer.
 
-// Breadcrumbs (chum), per throw.
+import { ENGINE } from './tuning/engine.js';
+
+// Breadcrumbs (chum), per throw: the built-in price (live: chumCost()).
 export const CHUM_COST = 15;
+export const chumCost = () => ENGINE.money.chumCost;
 
 // A number 0..1 that's always the same for the same id (FNV-1a hash). Used
 // for a catch's ±10% "market price" wobble, so the game and the server

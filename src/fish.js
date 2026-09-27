@@ -1,4 +1,5 @@
 import { TIME_OF_DAY_PHASES } from './environment.js';
+import { ENGINE } from './tuning/engine.js';
 
 // Species, timing, rarity and bite-feel are grounded in real South African
 // freshwater angling and fish-behaviour studies. Each fish's `activity` is
@@ -309,9 +310,8 @@ export const FISH_SPECIES = [
 ];
 
 // The times a fish counts as "on the feed" (used by tips and the HUD).
-const ACTIVE_THRESHOLD = 0.75;
 for (const species of FISH_SPECIES) {
-  species.activeTimes = TIME_OF_DAY_PHASES.filter((_, i) => species.activity[i] >= ACTIVE_THRESHOLD);
+  species.activeTimes = TIME_OF_DAY_PHASES.filter((_, i) => species.activity[i] >= ENGINE.bites.activeThreshold);
 }
 
 // How strongly loose feed (breadcrumbs, groundbait) pulls each fish in, 0..1.
@@ -399,9 +399,10 @@ export function randomWeightFor(species) {
 // The one that almost got away: about 1 bite in 300 is a trophy -- a fish
 // far bigger than the species normally runs (1.5-2.1x its usual maximum),
 // strong enough to break even the best line if you haul on it.
+// The built-in trophy chance (live value: ENGINE.bites.trophyChance).
 export const TROPHY_CHANCE = 1 / 300;
 export function rollTrophy(rng = Math.random) {
-  return rng() < TROPHY_CHANCE;
+  return rng() < ENGINE.bites.trophyChance;
 }
 export function trophyWeightFor(species, rng = Math.random) {
   return species.maxWeightKg * (1.5 + rng() * 0.6);
@@ -513,6 +514,7 @@ function weightedPick(list, weights) {
 }
 
 // Bites per second with bait, time and spot all in the fish's favour.
+// The built-in bite rate (live value: ENGINE.bites.rate).
 export const DAM_BITE_RATE = 0.035;
 
 // One roll per frame for the whole dam: does anything bite, and if so which
@@ -526,7 +528,7 @@ export function rollDamBite(speciesList, catchShare, { deltaSeconds, biteChanceM
     : speciesList.reduce((sum, s) => sum + s.aggressiveness, 0);
   if (shareTotal <= 0) return null;
   const suited = weights.reduce((sum, w) => sum + w, 0) / shareTotal;
-  const perSecond = Math.min(0.95, DAM_BITE_RATE * suited * biteChanceMultiplier);
+  const perSecond = Math.min(0.95, ENGINE.bites.rate * suited * biteChanceMultiplier);
   const chance = 1 - Math.pow(1 - perSecond, deltaSeconds);
   if (Math.random() >= chance) return null;
   return weightedPick(speciesList, weights);

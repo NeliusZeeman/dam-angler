@@ -25,7 +25,8 @@ import { showStartMenu } from './startMenu.js';
 import { showMainMenu } from './mainMenu.js';
 import { createDam } from './dam.js';
 import { seedFromString } from './gfx/noise.js';
-import { createChumSystem, CHUM_COST } from './chum.js';
+import { createChumSystem } from './chum.js';
+import { ENGINE } from './tuning/engine.js';
 import { createPauseMenu } from './pauseMenu.js';
 import { startVersionWatch, reloadToLatest, assetTag } from './versionCheck.js';
 import { createAudio } from './audio.js';
@@ -378,8 +379,8 @@ function startGame(locationId, startTimeOfDay) {
   function throwChum() {
     const phase = casting.getState().phase;
     if (phase === 'inAir' || phase === 'biting' || phase === 'reeling') return;
-    if (save.credits < CHUM_COST) {
-      hud.showToast(`Not enough credits for breadcrumbs (${CHUM_COST})`);
+    if (save.credits < ENGINE.money.chumCost) {
+      hud.showToast(`Not enough credits for breadcrumbs (${ENGINE.money.chumCost})`);
       return;
     }
     // Breadcrumbs go where the line is, or get flung by hand ~9m toward the
@@ -396,7 +397,7 @@ function startGame(locationId, startTimeOfDay) {
       hud.showToast("Can't chum dry land — aim at the water first");
       return;
     }
-    save.credits -= CHUM_COST;
+    save.credits -= ENGINE.money.chumCost;
     saveSave(save);
     cloud.queueSpend('chum');
     chumSystem.spawn(target);
@@ -408,14 +409,14 @@ function startGame(locationId, startTimeOfDay) {
   const actionBar = createActionBar(appEl, [
     { id: 'tackle', label: 'Tackle box', key: 'B', onClick: () => { if (!paused) tackleBox.toggle(); } },
     { id: 'log', label: 'Catch log', key: 'C', onClick: () => { if (!paused) toggleCatchLog(); } },
-    { id: 'chum', label: `Breadcrumbs · ${CHUM_COST} cr`, key: 'F', onClick: () => { if (!paused) throwChum(); } },
+    { id: 'chum', label: `Breadcrumbs · ${ENGINE.money.chumCost} cr`, key: 'F', onClick: () => { if (!paused) throwChum(); } },
     { id: 'tip', label: "What's biting?", key: 'T', onClick: () => { if (!paused) showTip(); } },
     { id: 'menu', label: 'Menu', key: 'Esc', onClick: () => setPaused(!paused) },
   ]);
 
   // Phones: short labels so the buttons fit one row under the top bar.
   if (touchMode) {
-    [['tackle', 'Tackle'], ['log', 'Log'], ['chum', `Chum ${CHUM_COST}cr`], ['tip', 'Tips'], ['menu', 'Menu']]
+    [['tackle', 'Tackle'], ['log', 'Log'], ['chum', `Chum ${ENGINE.money.chumCost}cr`], ['tip', 'Tips'], ['menu', 'Menu']]
       .forEach(([id, label]) => actionBar.setLabel(id, label));
   }
 
@@ -504,7 +505,7 @@ function startGame(locationId, startTimeOfDay) {
       canLand: () => {
         const f = casting.getFightFish();
         const me = playerController.getPosition();
-        return !!f && !f.jumping && Math.hypot(f.position.x - me.x, f.position.z - me.z) <= LAND_REACH;
+        return !!f && !f.jumping && Math.hypot(f.position.x - me.x, f.position.z - me.z) <= ENGINE.fight.landReach;
       },
       onSuccess: () => {
         audio.landed();
@@ -598,7 +599,7 @@ function startGame(locationId, startTimeOfDay) {
   }
 
   // How close (metres, flat) the fish must come to you to be landed.
-  const LAND_REACH = 4.2;
+
   let landHintTimer = 0;
   function tickLandingHint(delta) {
     landHintTimer -= delta;
@@ -652,7 +653,7 @@ function startGame(locationId, startTimeOfDay) {
   // A cast that's sat this long is guaranteed a bite -- the exact moment
   // stays random (the escalating urgency below front-loads the odds, this
   // is just the backstop for a run of bad luck).
-  const BITE_GUARANTEE_SECONDS = 90;
+
 
   // Bait off the hook: nothing bites a bare hook. Reeling in re-baits.
   let bareHook = false;
@@ -682,7 +683,7 @@ function startGame(locationId, startTimeOfDay) {
     // Ramps from 1x up to a steep 41x as the wait nears the guarantee, so a
     // bite becomes very likely well before the deadline without landing at a
     // predictable moment every time.
-    const urgency = 1 + Math.pow(Math.min(1, waitElapsed / BITE_GUARANTEE_SECONDS), 4) * 40;
+    const urgency = 1 + Math.pow(Math.min(1, waitElapsed / ENGINE.bites.guaranteeSeconds), 4) * 40;
     const biteChanceMultiplier = (twitchBoostTimer > 0 ? 1.8 : 1) * urgency;
     const conditions = {
       waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay, habitat, lureKind, chumBoost,
@@ -696,7 +697,7 @@ function startGame(locationId, startTimeOfDay) {
       return;
     }
 
-    if (waitElapsed >= BITE_GUARANTEE_SECONDS) {
+    if (waitElapsed >= ENGINE.bites.guaranteeSeconds) {
       const forced = pickGuaranteedBite(localSpecies, conditions, location.catchShare);
       if (forced) startBite(forced);
     }
@@ -847,7 +848,7 @@ function startGame(locationId, startTimeOfDay) {
       if (castState.phase === 'reeling' || castState.working || (mgState.active && mgState.holding)) {
         playerRod.spinReel(delta * 14);
       }
-      const canChum = save.credits >= CHUM_COST;
+      const canChum = save.credits >= ENGINE.money.chumCost;
       if (canChum !== lastCanChum) { actionBar.setEnabled('chum', canChum); lastCanChum = canChum; }
       hud.setFight(mgState.active ? mgState : null);
       hud.update({

@@ -1,11 +1,10 @@
+import { ENGINE } from './tuning/engine.js';
 // Casting as real projectile flight. The rod sets how fast it can launch the
 // lure (a 12ft carp rod throws a heavy lead a long way, a light fibreglass
 // rod doesn't), the power meter sets how much of that you use, and then
 // gravity, air drag and the wind take over. A hard cast flies fast and far;
 // a soft one lobs out short and slow.
 
-export const GRAVITY = 9.81;
-export const LAUNCH_ELEVATION = 0.55; // ~31 degrees: a good distance-casting angle
 
 // Air drag per unit speed. A float-and-bait rig is light and catches the air;
 // a spinner or spoon is dense and cuts through it.
@@ -21,7 +20,7 @@ export function launchSpeed(rod, power, castMultiplier = 1) {
 // flight ends when the lure drops onto it. Returns where it landed, how long
 // it was in the air, and the path (sampled every `dt`) for the animation.
 export function simulateCast({
-  from, dirX, dirZ, speed, elevation = LAUNCH_ELEVATION, drag = DRAG.bait,
+  from, dirX, dirZ, speed, elevation = ENGINE.cast.launchElevation, drag = DRAG.bait,
   wind = { x: 0, z: 0 }, surfaceAt = () => 0, dt = 1 / 60, maxTime = 12,
 }) {
   const len = Math.hypot(dirX, dirZ) || 1;
@@ -38,7 +37,7 @@ export function simulateCast({
     const rx = vx - wind.x, rz = vz - wind.z;
     const sp = Math.hypot(rx, vy, rz);
     vx -= drag * sp * rx * dt;
-    vy -= (GRAVITY + drag * sp * vy) * dt;
+    vy -= (ENGINE.cast.gravity + drag * sp * vy) * dt;
     vz -= drag * sp * rz * dt;
     const px = x, py = y, pz = z;
     x += vx * dt; y += vy * dt; z += vz * dt;
