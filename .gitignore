@@ -3,3 +3,4 @@ node_modules/
 backups/
 .playwright-mcp/
 server/.env
+server/dev-admin.txt

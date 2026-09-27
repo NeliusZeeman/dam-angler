@@ -47,7 +47,7 @@ function securityHeaders(req, res, next) {
 }
 
 export function createApp({
-  db, secureCookies = false, staticDir = null, indexFile = null,
+  db, secureCookies = false, staticDir = null, indexFile = null, adminFile = null,
   limiter = createRateLimiter(),
   // Per-player limits on how fast saves and catches can come in (a real
   // game can't land 40 fish in 5 minutes).
@@ -110,6 +110,21 @@ export function createApp({
       res.type('html').send(template.replace(/<script>/g, `<script nonce="${nonce}">`));
     };
     app.get(['/', '/index.html'], servePage);
+  }
+
+  // The admin page: same strict policy, never indexed by search engines.
+  // (It shows nothing by itself -- all data comes from /api/admin, which
+  // checks the admin role on every request.)
+  if (adminFile) {
+    const adminTemplate = readFileSync(adminFile, 'utf8');
+    app.get('/admin', (req, res) => {
+      const nonce = randomBytes(16).toString('base64');
+      res.setHeader('Content-Security-Policy', contentSecurityPolicy(nonce));
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      res.type('html').send(adminTemplate.replace(/<script /g, `<script nonce="${nonce}" `));
+    });
+    app.get('/admin/', (req, res) => res.redirect(301, '/admin'));
   }
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -222,3 +237,4 @@ export function createApp({
 }
 
 export const DEFAULT_INDEX = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'index.html');
+export const DEFAULT_ADMIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'admin.html');

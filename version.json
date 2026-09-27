@@ -1,8 +1,9 @@
 {
-  "version": "ced009347c",
-  "built": "2026-09-27T17:02:24.736Z",
+  "version": "f0a4eae48f",
+  "built": "2026-09-27T19:53:51.881Z",
   "modules": [
     "src/accountPanel.js",
+    "src/admin/admin.js",
     "src/audio.js",
     "src/baitLoss.js",
     "src/castPhysics.js",
