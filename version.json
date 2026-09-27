@@ -1,9 +1,10 @@
 {
-  "version": "50f12462f4",
-  "built": "2026-09-27T20:14:06.220Z",
+  "version": "46696cc8b6",
+  "built": "2026-09-27T20:19:03.476Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
+    "src/admin/tuning.js",
     "src/audio.js",
     "src/baitLoss.js",
     "src/castPhysics.js",

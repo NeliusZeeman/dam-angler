@@ -15,4 +15,7 @@ const host = process.env.HOST || '127.0.0.1';
 const app = createApp({ db, secureCookies: process.env.SECURE_COOKIES !== 'false', indexFile: DEFAULT_INDEX, adminFile: DEFAULT_ADMIN });
 // Clear out expired logins every hour.
 setInterval(() => deleteExpiredSessions(db).catch((e) => console.error(e)), 60 * 60 * 1000).unref();
-app.listen(port, host, () => console.log(`Dam Angler API on http://${host}:${port}`));
+app.listen(port, host, (err) => {
+  if (err) { console.error(err); process.exit(1); }
+  console.log(`Dam Angler API on http://${host}:${port}`);
+});

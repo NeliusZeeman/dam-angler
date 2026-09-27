@@ -4,6 +4,7 @@
 import { FISH_SPECIES } from '../fish.js';
 import { LOCATIONS } from '../locations.js';
 import { RODS, LINES, REELS, HOOKS, LURES } from '../gear.js';
+import { tuningScreen } from './tuning.js';
 
 const main = document.getElementById('main');
 const whoEl = document.getElementById('who');
@@ -237,6 +238,7 @@ async function route() {
     if (section === 'players') await players(params);
     else if (section === 'player' && id) await player(id);
     else if (section === 'log') await log(params);
+    else if (section === 'tuning') await tuningScreen(params, { h, api, show, toast });
     else await dashboard();
   } catch (err) {
     if (err.status === 401 || err.status === 403) return locked(err.status);

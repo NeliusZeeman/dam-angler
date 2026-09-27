@@ -3,6 +3,24 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Admin area and game tuning (built locally, not live yet)
+
+- **Admin area** at `/admin` (admins only; the role is set on the server
+  with `server/make-admin.js`): dashboard (players, active today / this
+  week, fish landed, credits held, biggest fish, catches per spot); player
+  search and sorting; player page (tackle, catches, credit history); give
+  or take credits with a reason; delete players; admin log of every action.
+- **Tuning tab:** 853 values — every fish (weights, water temperature,
+  credits per kg, feeding through the day, bait liking, fight), every
+  tackle item (price, in the shop or not, performance), every spot's catch
+  mix and water temperature, and 25 game settings (bites, fight, casting,
+  money) — each with a hint, its built-in value and limits.
+- Changes save to a **draft**; **Play with draft** previews it (nothing
+  saved online); **Publish** (with a note) makes it live for everyone and
+  for the server's payouts, prices and checks; every version is kept and
+  can be rolled back; export/import moves tuning between PC and server.
+- `npm run dev` fills a local test database with 50 made-up players.
+
 ## v2 — The server keeps the books (no more cheating credits)
 
 - Logged in, credits only change on the server: a catch pays what the
