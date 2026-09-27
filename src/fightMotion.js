@@ -95,7 +95,9 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     running: true, takingLine: false, distance: Math.hypot(start.x - rod.x, start.z - rod.z),
   };
 
-  function update(dt, { progress = 0, holding = false } = {}) {
+  // `drag` is the reel's drag setting (share of the line's strength, a third
+  // by default) and `slipping` whether the spool is giving line right now.
+  function update(dt, { progress = 0, holding = false, drag = 0.33, slipping = false } = {}) {
     state.jumpStarted = false;
     state.jumpLanded = false;
 
@@ -130,8 +132,14 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     const dx = nx - rod.x, dz = nz - rod.z;
     const dist = Math.hypot(dx, dz) || 1e-6;
     let newDist = dist;
-    // A heavy fish gives up line more slowly against the reel.
-    if (holding) newDist = Math.max(MIN_DISTANCE, dist - (reelSpeed / (0.55 + 0.45 * strength)) * dt);
+    // Swimming away pulls line off the spool against the drag: a loose drag
+    // lets a strong fish run much further, a tight one stops it short.
+    // (At the usual third it's the fish's own pace.)
+    if (dist > before) newDist = before + (dist - before) * Math.max(0.3, Math.min(1.6, 1.6 - 1.8 * drag));
+    // A heavy fish gives up line more slowly against the reel -- and winding
+    // against a slipping drag barely gains any: the spool just turns.
+    const reelGain = slipping ? 0.35 : 1;
+    if (holding) newDist = Math.max(MIN_DISTANCE, newDist - (reelSpeed * reelGain / (0.55 + 0.45 * strength)) * dt);
     newDist = Math.min(newDist, LINE_ON_SPOOL);
     if (newDist !== dist) {
       const cx = rod.x + (dx / dist) * newDist, cz = rod.z + (dz / dist) * newDist;

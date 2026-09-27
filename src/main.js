@@ -7,6 +7,7 @@ import { createEnvironment, TIME_OF_DAY_PHASES } from './environment.js';
 import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm, rollTrophy, trophyWeightFor } from './fish.js';
 import { RODS, LINES, REELS, HOOKS, LURES, getGearById, rigCheck } from './gear.js';
 import { diagnoseLoss } from './fightReport.js';
+import { castLossChance, soakLossChance } from './baitLoss.js';
 import { calculatePayout } from './economy.js';
 import { loadSave, saveSave } from './save.js';
 import { createCasting } from './casting.js';
@@ -198,6 +199,8 @@ function startGame(locationId, startTimeOfDay) {
     onFlyStroke: (forward, strength) => audio.cast(0.35 + strength * 0.4 * (forward ? 1 : 0.7)),
     // A mieliebom breaks down where it lands: a feeding spot round the hook.
     onLanded: (point, inWater) => {
+      // A soft bait like chicken liver can fly off on the cast.
+      if (Math.random() < castLossChance(currentLure(), soundPower)) loseBait('flew off the hook on the cast');
       if (inWater) audio.plop((currentLure().heavy ? 1.4 : 0.8) * hearingFalloff(point, 120));
       if (inWater && currentLure().groundbait) chumSystem.spawn(point, 'groundbait');
       // The distance counter shows how far that cast went for a moment.
@@ -622,11 +625,26 @@ function startGame(locationId, startTimeOfDay) {
   // is just the backstop for a run of bad luck).
   const BITE_GUARANTEE_SECONDS = 90;
 
+  // Bait off the hook: nothing bites a bare hook. Reeling in re-baits.
+  let bareHook = false;
+  function loseBait(how) {
+    if (bareHook) return;
+    bareHook = true;
+    hud.showToast(`Your ${currentLure().name.toLowerCase()} ${how} — reel in and re-bait.`);
+  }
+
   function rollBitesIfWaiting(delta) {
     const castState = casting.getState();
     const phase = castState.phase;
+    if (phase === 'idle' || phase === 'hanging' || phase === 'aiming') bareHook = false;
     if (phase !== 'waiting' && phase !== 'reeling') return;
     if (!casting.isBobberInWater()) return; // nothing bites a lure on the bank
+    if (bareHook) return;
+    // Soft baits wash off or get picked off as they soak.
+    if (Math.random() < soakLossChance(currentLure(), delta, phase === 'reeling' || castState.working)) {
+      loseBait('came off the hook');
+      return;
+    }
     const state = environment.getState();
     const habitat = casting.getBobberHabitat();
     const lureKind = (getGearById(LURES, activeLureId) || LURES[0]).kind;
@@ -816,6 +834,7 @@ function startGame(locationId, startTimeOfDay) {
         reelName: activeReel.name,
         hookName: activeHook.name,
         lureInWater: casting.isBobberInWater(),
+        bareHook,
         lureName: getGearById(LURES, activeLureId)?.name || 'None',
         castingPhase: castState.phase,
         tension: mgState.active ? mgState.tension : null,

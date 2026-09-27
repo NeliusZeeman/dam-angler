@@ -98,3 +98,24 @@ function fight(speciesId, { seconds = 30, holding = () => true, progressRate = 0
 }
 
 console.log('All fight motion tests passed.');
+
+{
+  // Drag decides how far a strong fish runs: set loose, a big barbel strips
+  // line and ends up much further out; screwed down, it's stopped short.
+  const far = (drag, holding = false, slipping = false) => {
+    let total = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const m = createFightMotion({ start: { x: 0, z: 30 }, rod, style: fightStyleFor('catfish'), isWater: water, rng: makeRng(seed) });
+      m.setStrength?.(1.6);
+      for (let t = 0; t < 20; t += 0.05) m.update(0.05, { progress: 0.1, holding, drag, slipping });
+      total += m.state.distance;
+    }
+    return total / 20;
+  };
+  const loose = far(0.1), usual = far(0.33), tight = far(0.7);
+  assert.ok(loose > usual * 1.08 && usual > tight * 1.1, `loose ${loose.toFixed(1)} m > usual ${usual.toFixed(1)} m > tight ${tight.toFixed(1)} m`);
+  // Winding against a slipping drag gains far less line than a holding one.
+  const slip = far(0.1, true, true), grip = far(0.33, true, false);
+  assert.ok(slip > grip + 3, `winding on a slipping drag: ${slip.toFixed(1)} m vs ${grip.toFixed(1)} m`);
+  console.log(`PASS: a loose drag lets a strong fish take line (after 20 s: loose ${loose.toFixed(0)} m, usual ${usual.toFixed(0)} m, tight ${tight.toFixed(0)} m)`);
+}

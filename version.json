@@ -1,8 +1,9 @@
 {
-  "version": "506739bcee",
-  "built": "2026-09-27T07:16:00.409Z",
+  "version": "6acc04db59",
+  "built": "2026-09-27T07:27:39.440Z",
   "modules": [
     "src/audio.js",
+    "src/baitLoss.js",
     "src/castPhysics.js",
     "src/casting.js",
     "src/chum.js",

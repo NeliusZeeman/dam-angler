@@ -132,10 +132,12 @@ export function createHUD(container, { showHints = true, touch = false, onDrag =
     reeling: 'Reeling in',
     hanging: `Line hanging — ${tap} to cast`,
     biting: `FISH ON! Hold ${press} to reel`,
+    bareHook: `Bait's off the hook — hold ${press} to reel in and re-bait`,
   };
 
-  function update({ credits, season, timeOfDay, waterTempC, windSpeed, windDirX = 1, windDirZ = 0, rodName, lineName, reelName, hookName, lureName, castingPhase, tension, power, working = false, lureInWater = true }) {
-    if (working && castingPhase === 'waiting') castingPhase = 'working';
+  function update({ credits, season, timeOfDay, waterTempC, windSpeed, windDirX = 1, windDirZ = 0, rodName, lineName, reelName, hookName, lureName, castingPhase, tension, power, working = false, lureInWater = true, bareHook = false }) {
+    if (bareHook && (castingPhase === 'waiting' || castingPhase === 'reeling')) castingPhase = 'bareHook';
+    else if (working && castingPhase === 'waiting') castingPhase = 'working';
     else if (castingPhase === 'waiting' && !lureInWater) castingPhase = 'onBank';
     document.getElementById('hud-credits').textContent = `Credits: ${credits}`;
     document.getElementById('hud-season').textContent = `${season} — ${waterTempC.toFixed(1)}°C`;

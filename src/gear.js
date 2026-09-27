@@ -269,7 +269,13 @@ export const LURES = [
     note: 'Heavy: casts further · builds a feeding spot · carp love it',
     speciesIds: ['common-carp', 'mirror-carp', 'smallmouth-yellowfish', 'largescale-yellowfish', 'mudfish', 'mozambique-tilapia', 'banded-tilapia'],
   },
-  { id: 'chicken-liver', name: 'Chicken Liver', kind: 'bait', cost: 35, speciesIds: ['catfish'] },
+  // The SA barbel bait -- tigers take it now and then. Soft: it can fly off
+  // on a hard cast and gets washed or picked off the hook (see baitLoss.js).
+  {
+    id: 'chicken-liver', name: 'Chicken Liver', kind: 'bait', cost: 35, soft: { onCast: 0.15, perMinute: 0.2 },
+    note: 'Barbel\'s favourite; the odd tiger. Soft — can come off the hook',
+    speciesIds: ['catfish', 'tigerfish'],
+  },
   // Flies: worked like a lure (a little movement brings them to life).
   // Nymphs for yellowfish and trout under the surface, dry flies for rising
   // fish, streamers for predators -- largemouth yellows, bass, even tigers.

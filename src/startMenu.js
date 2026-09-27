@@ -13,6 +13,13 @@ const FILTERS = [
   { id: 'river', label: 'Rivers & streams', test: (l) => l.kind === 'river' || l.kind === 'stream' },
   { id: 'fly', label: 'Fly fishing', test: (l) => l.fly },
 ];
+// The second step, after the province: what kind of water.
+const WATER_TYPES = [
+  { id: 'dam', title: 'Dams', blurb: 'Big stillwaters from the bank and stands — carp, bass, kurper, barbel.' },
+  { id: 'river', title: 'Rivers & streams', blurb: 'Moving water: the current carries your float — yellowfish, tigers, trout.' },
+  { id: 'fly', title: 'Fly fishing', blurb: 'Trout dams, mountain streams and yellowfish rivers for the fly rod.' },
+  { id: 'all', title: 'All waters', blurb: 'Every spot in the province.' },
+];
 
 const plural = (n, word) => (n ? `${n} ${word}${n === 1 ? '' : 's'}` : '');
 const speciesName = (id) => FISH_SPECIES.find((s) => s.id === id)?.name || id;
@@ -38,10 +45,13 @@ function waterFeel(loc) {
   return 'Temperate water';
 }
 
-// New Game: province -> fishing spot -> time of day.
+// New Game: province -> dams or rivers -> fishing spot -> time of day.
 export function showStartMenu(container, onConfirm, { onBack = null, initialLocationId = null } = {}) {
+  // Always starts at the provinces; the one you last fished is marked.
   const initial = LOCATIONS.find((l) => l.id === initialLocationId);
-  let provinceId = initial?.province || null;
+  const lastProvince = initial?.province || null;
+  let provinceId = null;
+  let step = 'province'; // 'province' | 'type' | 'spots'
   let selectedLocationId = initial?.id || null;
   let selectedTime = 'morning';
   let filter = 'all';
@@ -54,7 +64,8 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
       const spots = LOCATIONS.filter((l) => l.province === p.id);
       const count = (f) => spots.filter(FILTERS.find((x) => x.id === f).test).length;
       return `
-        <button class="start-loc-card province-card" data-province="${p.id}" type="button">
+        <button class="start-loc-card province-card ${p.id === lastProvince ? 'selected' : ''}" data-province="${p.id}" type="button">
+          ${p.id === lastProvince ? '<div class="spot-tags"><span class="spot-tag">Last fished</span></div>' : ''}
           <h3>${p.name}</h3>
           <div class="start-loc-region">${[plural(spots.length, 'spot'), plural(count('dam'), 'dam'), plural(count('river'), 'river'), count('fly') ? `${count('fly')} fly-fishing` : ''].filter(Boolean).join(' · ')}</div>
           <p>${p.blurb}</p>
@@ -65,6 +76,27 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
       ${onBack ? '<button class="start-back" data-back="menu" type="button">&larr; Main Menu</button>' : ''}
       <h1>Where in South Africa?</h1>
       <p class="start-sub">Nine provinces, ${LOCATIONS.length} real dams, rivers and fly-fishing waters — each with its own fish.</p>
+      <div class="start-locations">${cards}</div>`;
+  }
+
+  function typeHtml() {
+    const province = PROVINCES.find((p) => p.id === provinceId);
+    const spots = LOCATIONS.filter((l) => l.province === provinceId);
+    const cards = WATER_TYPES.map((t) => {
+      const list = spots.filter(FILTERS.find((f) => f.id === t.id).test);
+      if (!list.length) return '';
+      return `
+        <button class="start-loc-card type-card" data-type="${t.id}" type="button">
+          <h3>${t.title}</h3>
+          <div class="start-loc-region">${plural(list.length, 'spot')}</div>
+          <p>${t.blurb}</p>
+          <div class="start-loc-species">${list.map((l) => l.name).join(' · ')}</div>
+        </button>`;
+    }).join('');
+    return `
+      <button class="start-back" data-back="provinces" type="button">&larr; All provinces</button>
+      <h1>${province.name}</h1>
+      <p class="start-sub">${province.blurb} Dams or rivers?</p>
       <div class="start-locations">${cards}</div>`;
   }
 
@@ -90,9 +122,8 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
       <button class="start-time-btn ${phase === selectedTime ? 'selected' : ''}" data-time="${phase}" type="button">${TIME_LABELS[phase]}</button>`).join('');
     const chosen = LOCATIONS.find((l) => l.id === selectedLocationId && l.province === provinceId);
     return `
-      <button class="start-back" data-back="provinces" type="button">&larr; All provinces</button>
-      <h1>${province.name}</h1>
-      <p class="start-sub">${province.blurb}</p>
+      <button class="start-back" data-back="type" type="button">&larr; ${province.name}: dams or rivers</button>
+      <h1>${province.name} — ${FILTERS.find((f) => f.id === filter).label.replace('All', 'all waters')}</h1>
       <div class="start-times start-filters">${chips}</div>
       <div class="start-locations">${cards}</div>
       <div class="start-footer">
@@ -103,16 +134,24 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
   }
 
   function render() {
-    overlay.innerHTML = `<div class="start-menu-inner">${provinceId ? spotsHtml() : provinceHtml()}</div>`;
+    const page = step === 'spots' ? spotsHtml() : step === 'type' ? typeHtml() : provinceHtml();
+    overlay.innerHTML = `<div class="start-menu-inner">${page}</div>`;
     overlay.querySelectorAll('[data-province]').forEach((card) => card.addEventListener('click', () => {
       provinceId = card.dataset.province;
-      filter = 'all';
+      step = 'type';
+      render();
+      overlay.scrollTop = 0;
+    }));
+    overlay.querySelectorAll('[data-type]').forEach((card) => card.addEventListener('click', () => {
+      filter = card.dataset.type;
+      step = 'spots';
       render();
       overlay.scrollTop = 0;
     }));
     overlay.querySelectorAll('[data-back]').forEach((btn) => btn.addEventListener('click', () => {
       if (btn.dataset.back === 'menu') { overlay.remove(); onBack(); return; }
-      provinceId = null;
+      step = btn.dataset.back === 'type' ? 'type' : 'province';
+      if (step === 'province') provinceId = null;
       render();
       overlay.scrollTop = 0;
     }));

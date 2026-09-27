@@ -355,7 +355,8 @@ const TACKLE_AFFINITY = {
   bluegill: { 'dough-bait': 0.8, 'method-feeder': 0.5, 'fly-damsel': 0.8 },
   'largemouth-bass': { crankbait: 1.1, 'topwater-frog': 1.3, 'bass-jig': 1.2, 'rapala-minnow': 0.9, 'fly-damsel': 0.5, 'fly-walkers-killer': 0.6 },
   'smallmouth-bass': { crankbait: 1.2, 'bass-jig': 1.2, 'rapala-minnow': 0.9 },
-  tigerfish: { crankbait: 0.8, 'rapala-minnow': 1.2, sardine: 0.9 },
+  // Liver catches the odd tiger (SA forums), but it's a barbel bait.
+  tigerfish: { crankbait: 0.8, 'rapala-minnow': 1.2, sardine: 0.9, 'chicken-liver': 0.12 },
   catfish: { sardine: 1.3, boilies: 0.3, 'topwater-frog': 0.3 },
   'rainbow-trout': { 'fly-damsel': 1.2, 'fly-walkers-killer': 1.1, 'fly-zak': 1.0 },
   'brown-trout': { 'fly-damsel': 0.9, 'fly-walkers-killer': 1.1, 'fly-zak': 0.9, 'rapala-minnow': 0.6 },

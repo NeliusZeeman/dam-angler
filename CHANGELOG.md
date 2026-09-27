@@ -3,6 +3,27 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## 2026-09-27 — Loose drag lets fish run; New Game: province, then dams or rivers
+
+- **Drag and line out:** a loose drag lets a strong fish strip line and run
+  much further (over 20 s a big barbel ends up ~38 m out on a loose drag,
+  ~33 m at a third, ~26 m screwed down). Winding against a slipping drag
+  barely gains line — the spool just turns.
+- **New Game** always starts at the provinces (the one you last fished is
+  marked), then asks Dams / Rivers & streams / Fly fishing / All waters
+  with the spots in each, then the spot list and time of day. Back buttons
+  step back one page at a time.
+
+## 2026-09-27 — Chicken liver, the SA forums' way
+
+- Still the barbel bait, but tigerfish now take it occasionally (by day in
+  tiger water; barbel dominate at night) — from SEALINE and SA angling
+  sites.
+- It's soft: a hard cast can flick it off (~24% at full power) and it
+  washes or gets picked off as it soaks (~20% a minute, faster while
+  reeled). A message says so and the status bar shows "Bait's off the
+  hook"; nothing bites a bare hook. Reel in and it's re-baited.
+
 ## 2026-09-27 — Drag, fight gauges and "what went wrong"
 
 - **Drag setting:** the reel's drag is set as a share of the line's
