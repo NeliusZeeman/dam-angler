@@ -57,11 +57,17 @@ export async function createSession(db, userId, userAgent = '') {
 export async function userForToken(db, token) {
   if (!token) return null;
   const { rows } = await db.query(
-    `SELECT u.id, u.username, u.email FROM sessions s JOIN users u ON u.id = s.user_id
+    `SELECT u.id, u.username, u.email, u.role,
+            (u.last_seen_at IS NULL OR u.last_seen_at < now() - interval '5 minutes') AS stale
+       FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now()`,
     [sha256(token)],
   );
-  return rows[0] || null;
+  const user = rows[0];
+  if (!user) return null;
+  // "Last seen" for the admin dashboard -- written at most every 5 minutes.
+  if (user.stale) await db.query('UPDATE users SET last_seen_at = now() WHERE id = $1', [user.id]);
+  return { id: user.id, username: user.username, email: user.email, role: user.role };
 }
 
 export async function endSession(db, token) {
@@ -103,7 +109,7 @@ export async function checkLogin(db, login, password) {
   const pw = typeof password === 'string' ? password.slice(0, 200) : '';
   const ok = await bcrypt.compare(pw, user ? user.password_hash : DUMMY_HASH) && !!user;
   if (!ok) throw new HttpError(401, 'Wrong email/username or password.');
-  await db.query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
+  await db.query('UPDATE users SET last_login_at = now(), last_seen_at = now() WHERE id = $1', [user.id]);
   return { id: user.id, username: user.username, email: user.email };
 }
 

@@ -14,6 +14,7 @@ import {
 import { HttpError } from './validate.js';
 import { createPlayer, loadSave, writeSave, recordCatch, importGuest, buyItem, spendCredits } from './saves.js';
 import { allDamStats, damStats } from './stats.js';
+import { createAdminRouter } from './admin.js';
 
 // What the game page may load: only its own files. Inline script only with
 // this visit's nonce (the version loader in index.html), no plugins, no
@@ -53,6 +54,7 @@ export function createApp({
   playLimiter = createRateLimiter({ limit: 40, windowMs: 5 * 60 * 1000 }),
   saveLimiter = createRateLimiter({ limit: 150, windowMs: 5 * 60 * 1000 }),
   publicLimiter = createRateLimiter({ limit: 120, windowMs: 60 * 1000 }),
+  adminLimiter = createRateLimiter({ limit: 600, windowMs: 5 * 60 * 1000 }),
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -84,6 +86,16 @@ export function createApp({
   async function requireUser(req, res, next) {
     const user = await userForToken(db, readCookie(req, COOKIE));
     if (!user) throw new HttpError(401, 'Please log in.');
+    req.user = user;
+    next();
+  }
+
+  // The admin area: a logged-in account marked admin (server/make-admin.js).
+  async function requireAdmin(req, res, next) {
+    const user = await userForToken(db, readCookie(req, COOKIE));
+    if (!user) throw new HttpError(401, 'Please log in.');
+    if (user.role !== 'admin') throw new HttpError(403, 'Admins only.');
+    if (!adminLimiter.hit(`a:${user.id}`)) throw slowDown();
     req.user = user;
     next();
   }
@@ -189,6 +201,8 @@ export function createApp({
     const id = String(req.params.locationId).slice(0, 64);
     res.json(await cached(`dam:${id}`, () => damStats(db, id)));
   });
+
+  app.use('/api/admin', requireAdmin, createAdminRouter({ db, statsCache }));
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
   if (staticDir) {
