@@ -1,6 +1,6 @@
 {
-  "version": "b1e2c06778",
-  "built": "2026-09-27T20:09:08.581Z",
+  "version": "81783a3f03",
+  "built": "2026-09-27T20:11:40.512Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
@@ -45,7 +45,9 @@
     "src/tackleBox.js",
     "src/tips.js",
     "src/touchControls.js",
+    "src/tuning/apply.js",
     "src/tuning/engine.js",
+    "src/tuning/registry.js",
     "src/ui.js",
     "src/versionCheck.js",
     "src/water.js",
