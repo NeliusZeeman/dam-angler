@@ -3,6 +3,31 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## 2026-09-27 — Drag, fight gauges and "what went wrong"
+
+- **Drag setting:** the reel's drag is set as a share of the line's
+  breaking strain (the rule of thumb is a third — 33% by default). The
+  spool slips and gives line once the pull passes it. Tight drag tires a
+  fish faster but a lunge can snap the line; loose drag is safe but slow.
+  Change it in the tackle box (slider), or in the game with **[ and ]**
+  (or − / + on the keyboard, − / + buttons on phones). Shown as % and kg.
+- **Jerky vs smooth drags:** a starter reel's drag sticks for a moment on a
+  lunge; big-pit, baitcaster and disc-drag fly reels give line cleanly.
+- **Fight gauges:** Rod (load against its rated lifting power), Reel (pull
+  against the drag, with a marker where it slips, "giving line" / "DRAG
+  STUCK"), Line (share of breaking strain, "EASE OFF" / "SLACK") and Hook
+  ("OPENING", "JUMP — ease off").
+- **Rods are rated** (e.g. kurper rod ~3.5 kg, carp rod ~12 kg, heavy rod
+  ~18 kg). Bent past that it locks up: no more cushion, and the hook takes
+  every jolt.
+- **Lost fish report:** what gave — rod, reel, line or hook, each marked
+  ✓ / ! / ✕ with the reason — and what to change.
+- **Fix:** casting with ordinary (non-fly) line froze the game as soon as
+  the line was drawn — the new fly-line colouring assumed a fly line was
+  on. Broke in `17cd78f`.
+- **Metric only:** line strengths in kg (no more lb), rod lengths in
+  metres, jig weight in grams.
+
 ## 2026-09-27 — More tackle, priced from SA shops
 
 - **General:** Ultralight Kurper Rod (150; sensitive tip, more kurper and

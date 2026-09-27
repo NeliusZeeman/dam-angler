@@ -14,6 +14,7 @@ export const DEFAULT_SAVE = {
   equippedReelId: 'reel-starter',
   equippedHookId: 'hook-small',
   equippedLureId: 'bread-bait',
+  drag: 0.33, // reel drag, share of the line's breaking strain (a third is the rule of thumb)
   catchLog: {},
   settings: {
     quality: 'auto', // 'auto' (low on phones/small tablets) | 'high' | 'low'

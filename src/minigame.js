@@ -19,6 +19,19 @@ export function createMinigame() {
   const SLACK_THRESHOLD = 0.06;
   const SNAP_AT = 0.9; // share of the line's breaking strain where it goes
 
+  // The reel's drag: the spool slips and gives line once the pull passes
+  // the setting, so a lunge can't reach the line's breaking strain. Set as
+  // a share of the line's breaking strain -- the angler's rule of thumb is
+  // a third. Too tight and a lunge snaps the line before it slips; too
+  // loose and the fish takes line at will and tires slowly.
+  const DEFAULT_DRAG = 0.33;
+  const MIN_DRAG = 0.05;
+  const MAX_DRAG = 0.9;
+  // Where on the tension bar the drag starts to slip.
+  const slipPoint = (d) => 0.25 + 0.95 * d;
+  // Winding hard against a slipping drag still overloads the line a bit.
+  const HAUL_OVER = 0.35;
+
   const STYLE = {
     aggressive: { load: 1.45, runEvery: 1.6, runSize: 0.22, progressMul: 0.85 },
     heavy: { load: 1.3, runEvery: 3.2, runSize: 0.14, progressMul: 0.75 },
@@ -30,10 +43,28 @@ export function createMinigame() {
   // catch on its own -- the fish has to be brought in to the bank or stand.
   let landingBlocked = false;
   let hookStrain = 0; // seconds of hauling in the red
+  let drag = DEFAULT_DRAG;
+  // What the rod, reel, line and hook are going through right now -- for the
+  // fight gauges and for saying what went wrong when a fish is lost.
+  let slipping = false;
+  let lastSpike = 0; // seconds since a lunge jolted the line
+  let stuckDrag = false; // that lunge caught a jerky drag before it slipped
+  let rodLoad = 0; // share of the rod's rated lifting power
+  let hookLoad = 0; // share of what the hook holds before opening
+  let lineLoad = 0; // share of the line's breaking strain
+  let rodOverloaded = 0; // seconds bent past its rating
   // `stamina` stretches the fight: 1 = a quick kurper, ~2-3 = a big carp or
   // barbel that takes a long time to tire (see fightMotion.fightStamina).
-  function start({ species, weightKg, rod, line, hook = null, reel = null, onSuccess, onFailure, canLand = () => true, stamina = 1 }) {
+  function start({ species, weightKg, rod, line, hook = null, reel = null, onSuccess, onFailure, canLand = () => true, stamina = 1, drag: startDrag = null }) {
     landingBlocked = false;
+    if (startDrag !== null) setDrag(startDrag);
+    slipping = false;
+    lastSpike = 99;
+    stuckDrag = false;
+    rodLoad = 0;
+    hookLoad = 0;
+    lineLoad = 0;
+    rodOverloaded = 0;
     active = true;
     tension = 0.35;
     progress = 0;
@@ -45,6 +76,19 @@ export function createMinigame() {
     hookStrain = 0;
     fishPulling = false;
     context = { species, weightKg, rod, line, hook, reel, onSuccess, onFailure, canLand, stamina: Math.max(0.5, stamina) };
+  }
+
+  function setDrag(value) {
+    drag = Math.max(MIN_DRAG, Math.min(MAX_DRAG, value));
+  }
+
+  // Loses the fish and reports the state everything was in at that moment.
+  function fail(reason) {
+    active = false;
+    context.onFailure(reason, {
+      holding, slipping, drag, airborne: airborne > 0, jolt: lastSpike < 0.35, stuckDrag,
+      rodLoad, hookLoad, lineLoad, rodOverloaded: rodOverloaded > 0.3,
+    });
   }
 
   function setHolding(value) {
@@ -77,7 +121,7 @@ export function createMinigame() {
 
   function update(deltaSeconds) {
     if (!active) return;
-    const { rod, line, hook, reel, species, weightKg, onSuccess, onFailure } = context;
+    const { rod, line, hook, reel, species, weightKg, onSuccess } = context;
     const style = STYLE[(species.bite && species.bite.style) || 'steady'] || STYLE.steady;
     const hookTensionBonus = (hook && hook.tensionBonus) || 0;
     const reelDragBonus = (reel && reel.dragBonus) || 0;
@@ -99,22 +143,39 @@ export function createMinigame() {
 
     // Roughly how many kg the fish is hauling against you.
     const pullKg = weightKg * style.load * 0.8;
+    const slipAt = slipPoint(drag);
+    // A cheap drag is jerky: it sticks for a moment before it gives, so a
+    // lunge overshoots the setting. A smooth carbon/disc drag barely does.
+    const sticky = Math.max(0, 0.2 - reelDragBonus * 0.55);
+    // A rod bent past its rating locks up and stops cushioning anything.
+    const rodLocked = rodLoad > 1;
+    slipping = false;
+    lastSpike += deltaSeconds;
     if (holding) {
       // Winding against a fish, the line settles at the fish's pull as a
       // share of the line's breaking strain (softened by a good rod, reel
       // drag and hook). Strong line on a small fish: wind all day. Light
       // line on a big one: that share passes the snap point -- ease off.
       const rodRelief = 1 / (0.75 + (rod.tensionTolerance + hookTensionBonus + reelDragBonus) * 0.25);
-      const holdTarget = 0.25 + 1.1 * (pullKg / lineKg) * rodRelief;
+      const wantTarget = 0.25 + 1.1 * (pullKg / lineKg) * rodRelief;
+      // Past the drag setting the spool slips: winding then gains little
+      // (a light drag on a big fish is a long fight), and the line only
+      // loads a bit past the setting.
+      slipping = wantTarget > slipAt;
+      const holdTarget = Math.min(wantTarget, slipAt + HAUL_OVER);
+      const gain = slipping ? 0.45 + 0.55 * Math.min(1, (slipAt - 0.25) / (wantTarget - 0.25)) : 1;
       const rate = REEL_TENSION_RATE * 3 * style.load;
       tension += (holdTarget - tension) * Math.min(1, rate * deltaSeconds);
-      progress += (PROGRESS_RATE * style.progressMul / context.stamina) * deltaSeconds;
+      progress += (PROGRESS_RATE * style.progressMul * gain / context.stamina) * deltaSeconds;
     } else if (fishPulling) {
       // Line peeling off against the drag: tight, but not climbing.
-      tension += (DRAG_TENSION * lineRelief - tension) * Math.min(1, deltaSeconds * 2);
+      // A tighter drag makes it work harder for every metre.
+      const runTension = Math.min(slipAt, DRAG_TENSION * lineRelief * (0.6 + drag * 1.2));
+      tension += (runTension - tension) * Math.min(1, deltaSeconds * 2);
+      slipping = true;
       // Every run against the drag wears it down -- how a big fish that
       // would break the line if you hauled on it is landed with patience.
-      progress += (PROGRESS_RATE * DRAG_TIRE * style.progressMul / context.stamina) * deltaSeconds;
+      progress += (PROGRESS_RATE * DRAG_TIRE * (0.4 + drag * 1.8) * style.progressMul / context.stamina) * deltaSeconds;
     } else {
       tension -= SLACK_RATE * deltaSeconds;
       // It recovers while you rest -- at the same stamina-scaled pace, so a
@@ -129,8 +190,15 @@ export function createMinigame() {
       // A good rig soaks up a run, not just steady strain -- and a soft,
       // moderate/through-action blank cushions the lunge before it ever
       // reaches the line.
-      const cushion = 1 - Math.min(0.6, rod.shockAbsorb || 0);
+      const cushion = rodLocked ? 1 : 1 - Math.min(0.6, rod.shockAbsorb || 0);
       tension += style.runSize * weightLoad * gearRelief * cushion * stretch;
+      // The drag gives line before the lunge can go further -- after a jerky
+      // drag's moment of sticking.
+      const cap = slipAt + (holding ? HAUL_OVER : 0) + sticky;
+      stuckDrag = tension > slipAt + (holding ? HAUL_OVER : 0) && sticky > 0.05;
+      if (tension > cap) tension = cap;
+      if (tension > slipAt) slipping = true;
+      lastSpike = 0;
     }
 
     // The hook: a fine-wire hook opens up (or tears out) when a heavy fish
@@ -143,12 +211,14 @@ export function createMinigame() {
     // A fish doesn't haul its whole weight on the hook: about half of it.
     const hookLoadKg = weightKg * style.load * 0.5;
     // It takes sustained hauling in the red, not a brief touch of it.
-    hookStrain = holding && tension > 0.72 ? hookStrain + deltaSeconds : 0;
+    // A locked-up rod passes every jolt straight to the hook, so it opens
+    // sooner.
+    hookStrain = holding && tension > 0.72 ? hookStrain + deltaSeconds * (rodLocked ? 1.6 : 1) : 0;
+    hookLoad = holding ? hookLoadKg / hookKg : hookLoadKg / hookKg * 0.4;
     if (hookStrain > 0.45 && hookLoadKg > hookKg) {
       const straightenPerSecond = Math.min(0.9, 0.5 * (hookLoadKg / hookKg - 0.8));
       if (Math.random() < straightenPerSecond * deltaSeconds) {
-        active = false;
-        onFailure('hook-straightened');
+        fail('hook-straightened');
         return;
       }
     }
@@ -166,8 +236,7 @@ export function createMinigame() {
         const throwChance = Math.min(0.85, strainedInAir * THROW_CHANCE_PER_SECOND_HELD) * (1 - hold);
         strainedInAir = 0;
         if (Math.random() < throwChance) {
-          active = false;
-          onFailure('threw-hook');
+          fail('threw-hook');
           return;
         }
       }
@@ -176,17 +245,24 @@ export function createMinigame() {
 
     tension = Math.max(0, Math.min(1.2, tension));
 
+    // Gauges: the line against its breaking strain; the rod against what
+    // it's rated to lift (the pull really reaching it, never more than the
+    // line is carrying).
+    lineLoad = tension / snapMax;
+    const lineKgNow = lineLoad * lineKg;
+    const rodKg = Math.min(pullKg * (holding ? 1.15 : fishPulling ? 1 : 0.3), lineKgNow);
+    rodLoad = rodKg / (rod.maxKg || 6);
+    rodOverloaded = rodLoad > 1 ? rodOverloaded + deltaSeconds : 0;
+
     if (tension >= snapMax) {
-      active = false;
-      onFailure('line-snapped');
+      fail('line-snapped');
       return;
     }
 
     if (tension <= SLACK_THRESHOLD && airborne <= 0) {
       slackTimer += deltaSeconds;
       if (slackTimer >= SLACK_LIMIT_SECONDS + hold * 3) {
-        active = false;
-        onFailure('fish-escaped');
+        fail('fish-escaped');
         return;
       }
     } else {
@@ -211,12 +287,15 @@ export function createMinigame() {
   }
 
   function getState() {
-    return { tension: Math.min(1, tension), active, progress, holding, airborne: airborne > 0, landingBlocked, slack: slackTimer > 0.6 };
+    return {
+      tension: Math.min(1, tension), active, progress, holding, airborne: airborne > 0, landingBlocked, slack: slackTimer > 0.6,
+      drag, slipping, rodLoad, hookLoad, lineLoad, jolt: lastSpike < 0.35, stuckDrag: stuckDrag && lastSpike < 0.5,
+    };
   }
 
   function isActive() {
     return active;
   }
 
-  return { start, update, getState, isActive, setHolding, setFishPulling, jump };
+  return { start, update, getState, isActive, setHolding, setFishPulling, jump, setDrag, getDrag: () => drag };
 }

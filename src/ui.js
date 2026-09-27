@@ -2,7 +2,7 @@ import { FISH_SPECIES } from './fish.js';
 import { windFromLabel } from './weather.js';
 import { assetTag } from './versionCheck.js';
 
-export function createHUD(container, { showHints = true, touch = false } = {}) {
+export function createHUD(container, { showHints = true, touch = false, onDrag = null } = {}) {
   // Touch screens use the on-screen rod button instead of the mouse.
   const press = touch ? 'the rod button' : 'click';
   const tap = touch ? 'hold the rod button' : 'click';
@@ -23,6 +23,62 @@ export function createHUD(container, { showHints = true, touch = false } = {}) {
   tensionWrap.className = 'hud-tension-wrap';
   tensionWrap.innerHTML = `<div id="hud-tension-bar" class="hud-tension-bar"></div>`;
   container.appendChild(tensionWrap);
+
+  // Fight gauges: how hard the rod, reel, line and hook are working, so you
+  // can see which one is about to give.
+  const gauges = document.createElement('div');
+  gauges.className = 'fight-gauges hidden';
+  gauges.innerHTML = ['rod', 'reel', 'line', 'hook'].map((part) => `
+    <div class="gauge" data-part="${part}">
+      <span class="gauge-label">${part[0].toUpperCase() + part.slice(1)}</span>
+      <span class="gauge-track"><span class="gauge-fill"></span>${part === 'reel' ? '<span class="gauge-mark"></span>' : ''}</span>
+      <span class="gauge-state"></span>
+    </div>`).join('');
+  container.appendChild(gauges);
+  const gaugeEls = Object.fromEntries([...gauges.querySelectorAll('.gauge')].map((g) => [g.dataset.part, {
+    row: g, fill: g.querySelector('.gauge-fill'), state: g.querySelector('.gauge-state'), mark: g.querySelector('.gauge-mark'),
+  }]));
+  function setGauge(part, value, text, level) {
+    const g = gaugeEls[part];
+    g.fill.style.width = `${Math.min(100, Math.max(0, value * 100))}%`;
+    g.state.textContent = text;
+    g.row.dataset.level = level;
+  }
+  // `s` is the fight state from minigame.getState(), or null when no fish is on.
+  function setFight(s) {
+    gauges.classList.toggle('hidden', !s);
+    if (!s) return;
+    const level = (v, warn, bad) => (v >= bad ? 'bad' : v >= warn ? 'warn' : 'ok');
+    setGauge('rod', s.rodLoad, s.rodLoad > 1 ? 'OVERLOADED' : `${Math.round(s.rodLoad * 100)}%`, level(s.rodLoad, 0.75, 1));
+    // The reel bar is the pull against the drag: the marker is where it slips.
+    const slipShare = Math.min(1, (0.25 + 0.95 * s.drag) / 0.9);
+    gaugeEls.reel.mark.style.left = `${slipShare * 100}%`;
+    setGauge('reel', s.lineLoad, s.stuckDrag ? 'DRAG STUCK' : s.slipping ? 'giving line' : `drag ${Math.round(s.drag * 100)}%`,
+      s.stuckDrag ? 'bad' : s.slipping ? 'warn' : 'ok');
+    setGauge('line', s.lineLoad, s.lineLoad > 0.8 ? 'EASE OFF' : s.slack ? 'SLACK' : `${Math.round(s.lineLoad * 100)}%`,
+      s.slack ? 'warn' : level(s.lineLoad, 0.62, 0.8));
+    setGauge('hook', Math.min(1, s.hookLoad), s.airborne ? 'JUMP — ease off' : s.hookLoad > 1 && s.holding ? 'OPENING' : 'holding',
+      s.airborne ? 'warn' : s.hookLoad > 1 && s.holding ? 'bad' : level(s.hookLoad, 0.7, 1));
+  }
+
+  // Drag, always to hand: the setting as a share of the line's breaking
+  // strain and in kg. Keys [ and ] on a keyboard, - and + buttons on touch.
+  const dragEl = document.createElement('div');
+  dragEl.className = 'hud-drag';
+  dragEl.innerHTML = `
+    <button type="button" class="drag-btn" data-step="-1" aria-label="Loosen drag">−</button>
+    <span class="drag-read"><b>Drag</b> <span class="drag-val"></span></span>
+    <button type="button" class="drag-btn" data-step="1" aria-label="Tighten drag">+</button>
+    ${touch ? '' : '<span class="drag-keys">[ ]</span>'}`;
+  container.appendChild(dragEl);
+  dragEl.querySelectorAll('.drag-btn').forEach((b) => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (onDrag) onDrag(Number(b.dataset.step));
+  }));
+  function setDrag(drag, lineKg) {
+    dragEl.querySelector('.drag-val').textContent = `${Math.round(drag * 100)}% · ${(drag * lineKg).toFixed(1)} kg`;
+    dragEl.dataset.level = drag >= 0.5 ? 'bad' : drag <= 0.15 ? 'warn' : 'ok';
+  }
 
   const powerWrap = document.createElement('div');
   powerWrap.className = 'hud-power-wrap';
@@ -102,7 +158,28 @@ export function createHUD(container, { showHints = true, touch = false } = {}) {
     }
   }
 
-  return { update, showToast, setDistance };
+  return { update, showToast, setDistance, setFight, setDrag };
+}
+
+// After a lost fish: which part gave, and what to do about it. Sits under
+// the top bar for a while; tap or click it away.
+let lossCard = null;
+export function showLossReport(container, report, seconds = 9) {
+  if (lossCard) lossCard.remove();
+  const card = document.createElement('div');
+  card.className = 'loss-report';
+  const NAMES = { rod: 'Rod', reel: 'Reel', line: 'Line', hook: 'Hook' };
+  const ICON = { ok: '✓', warn: '!', fail: '✕' };
+  card.innerHTML = `
+    <div class="loss-title">Fish lost — ${report.title}</div>
+    ${Object.entries(report.parts).map(([k, p]) => `
+      <div class="loss-part" data-status="${p.status}"><span class="loss-icon">${ICON[p.status]}</span><b>${NAMES[k]}</b><span>${p.text}</span></div>`).join('')}
+    ${report.tip ? `<div class="loss-tip">${report.tip}</div>` : ''}
+    <div class="loss-close">tap to close</div>`;
+  card.addEventListener('pointerdown', (e) => { e.stopPropagation(); card.remove(); });
+  container.appendChild(card);
+  lossCard = card;
+  setTimeout(() => { if (lossCard === card) card.remove(); }, seconds * 1000);
 }
 
 export function renderCatchLog(container, catchLog, { species = FISH_SPECIES, locationName = null } = {}) {

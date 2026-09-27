@@ -89,7 +89,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     const look = getLineLook();
     const leaderFrom = look ? Math.floor(LINE_SEGMENTS * (1 - FLY_LEADER)) : LINE_POINTS;
     for (let i = 0; i < LINE_POINTS; i++) {
-      const flyPart = i < leaderFrom;
+      const flyPart = !!look && i < leaderFrom;
       const p = linePts[i];
       ribbonTangent.subVectors(linePts[Math.min(LINE_POINTS - 1, i + 1)], linePts[Math.max(0, i - 1)]);
       ribbonView.subVectors(camera.position, p);

@@ -6,11 +6,12 @@ import { windUniforms } from './gfx/wind.js';
 import { createEnvironment, TIME_OF_DAY_PHASES } from './environment.js';
 import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm, rollTrophy, trophyWeightFor } from './fish.js';
 import { RODS, LINES, REELS, HOOKS, LURES, getGearById, rigCheck } from './gear.js';
+import { diagnoseLoss } from './fightReport.js';
 import { calculatePayout } from './economy.js';
 import { loadSave, saveSave } from './save.js';
 import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
-import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble } from './ui.js';
+import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble, showLossReport } from './ui.js';
 import { randomTip } from './tips.js';
 import { fightStamina, fightStrength } from './fightMotion.js';
 import { createTouchControls, isTouchDevice, isSmallOrMobileScreen } from './touchControls.js';
@@ -215,7 +216,18 @@ function startGame(locationId, startTimeOfDay) {
     ? createTouchControls({ container: appEl, domElement: renderer.domElement, player: playerController, casting })
     : null;
   const minigame = createMinigame();
-  const hud = createHUD(appEl, { showHints: save.settings.showHints, touch: touchMode });
+  // Drag: a share of the line's breaking strain, kept in the save. One step
+  // is 5%. The rule of thumb is about a third.
+  if (typeof save.drag !== 'number') save.drag = 0.33;
+  function changeDrag(step) {
+    save.drag = Math.round(Math.max(0.05, Math.min(0.9, save.drag + step * 0.05)) * 100) / 100;
+    minigame.setDrag(save.drag);
+    hud.setDrag(save.drag, activeLine.breakKg);
+    saveSave(save);
+  }
+  const hud = createHUD(appEl, { showHints: save.settings.showHints, touch: touchMode, onDrag: changeDrag });
+  hud.setDrag(save.drag, activeLine.breakKg);
+  minigame.setDrag(save.drag);
 
   function onSaveChanged() {
     saveSave(save);
@@ -226,6 +238,10 @@ function startGame(locationId, startTimeOfDay) {
     activeLureId = save.equippedLureId || LURES[0].id;
     refreshRig();
     playerRod.setRod(activeRod);
+    if (typeof save.drag === 'number') {
+      minigame.setDrag(save.drag);
+      hud.setDrag(save.drag, activeLine.breakKg);
+    }
   }
   playerRod.setRod(activeRod);
 
@@ -411,6 +427,8 @@ function startGame(locationId, startTimeOfDay) {
     if (e.code === 'KeyL') { changeFishingSpot(); }
     if (e.code === 'KeyF') { throwChum(); }
     if (e.code === 'KeyT') { showTip(); }
+    if (e.code === 'BracketLeft' || e.code === 'Minus' || e.code === 'NumpadSubtract') changeDrag(-1);
+    if (e.code === 'BracketRight' || e.code === 'Equal' || e.code === 'NumpadAdd') changeDrag(1);
     if (e.code === 'KeyM') {
       // Quick mute: M toggles sound off and back to the last volume.
       const on = (save.settings.volume ?? 0.7) > 0;
@@ -460,6 +478,7 @@ function startGame(locationId, startTimeOfDay) {
     minigame.start({
       species, weightKg, rod: activeRod, line: activeLine, hook: activeHook, reel: activeReel,
       stamina: fightStamina(species.id, weightKg), // big fish (and trophies) fight long
+      drag: save.drag,
       // It's only a catch once it's at your feet: at the bank, or beside
       // the stand -- never while it's still out in open water.
       canLand: () => {
@@ -500,15 +519,12 @@ function startGame(locationId, startTimeOfDay) {
         casting.resetToIdle();
         bitingSpecies = null;
       },
-      onFailure: (reason) => {
+      onFailure: (reason, info) => {
         saveSave(save);
         hideFightFish();
         if (reason === 'line-snapped' || reason === 'hook-straightened') audio.snap();
-        hud.showToast({
-          'threw-hook': 'It jumped and threw the hook! Ease off when a fish jumps.',
-          'hook-straightened': `The hook straightened out — ${activeHook.name} is too light for a ${weightKg.toFixed(1)} kg fish. Try a stronger hook.`,
-          'line-snapped': `Line snapped! ${activeLine.name} couldn't take the strain.`,
-        }[reason] || 'The fish got away.');
+        // What gave -- rod, reel, line or hook -- and what to change.
+        showLossReport(appEl, diagnoseLoss(reason, info, { rod: activeRod, reel: activeReel, line: activeLine, hook: activeHook, weightKg }));
         casting.resetToIdle();
         bitingSpecies = null;
       },
@@ -786,6 +802,7 @@ function startGame(locationId, startTimeOfDay) {
       }
       const canChum = save.credits >= CHUM_COST;
       if (canChum !== lastCanChum) { actionBar.setEnabled('chum', canChum); lastCanChum = canChum; }
+      hud.setFight(mgState.active ? mgState : null);
       hud.update({
         credits: save.credits,
         season: envState.season,

@@ -121,7 +121,7 @@ export const SPOT_DEFS = [
     blurb: 'A bushveld dam among red koppies near Brits — barbel, bass and carp.',
     tips: [
       'Bass around the timber and pads early morning.',
-      'Barbel are strong here — go heavy, a circle hook and 20lb.',
+      'Barbel are strong here — go heavy, a circle hook and 9kg line.',
       'Carp on mielies along the gentler banks.',
     ],
   },
@@ -344,7 +344,7 @@ export const SPOT_DEFS = [
     id: 'little-fish-river', name: 'Little Fish River', province: 'eastern-cape', town: 'Somerset East',
     kind: 'river', fly: true, land: 'karoo', temp: -4, tint: 'clear', clarity: 0.6, far: 22, structure: ['reeds'], // cool Boschberg mountain water
     fish: { 'smallmouth-yellowfish': 40, 'largemouth-bass': 20, mudfish: 15, catfish: 10, 'rainbow-trout': 15 },
-    blurb: 'A Karoo river near Somerset East with a river trout record over 14lb (2013): smallmouth yellowfish, bass, mudfish and barbel on fly.',
+    blurb: 'A Karoo river near Somerset East with a river trout record over 6kg (2013): smallmouth yellowfish, bass, mudfish and barbel on fly.',
     tips: [
       'Smallmouth yellows on nymphs — indigenous fish, handle with care.',
       'The odd big trout in the cooler pools.',
@@ -425,7 +425,7 @@ export const SPOT_DEFS = [
     blurb: '"The most popular trout river in the Western Cape": wild rainbows in a tea-coloured fynbos stream under the Du Toit\'s Kloof peaks. Catch-and-release, fly only.',
     tips: [
       'Wild rainbows — they breed here, no stocking for years.',
-      'A dry fly on the pocket water; trophy fish of 3lb every year.',
+      'A dry fly on the pocket water; trophy fish of 1.5kg every year.',
       'Season runs 1 September to 31 May — catch and release only.',
     ],
   },
@@ -436,7 +436,7 @@ export const SPOT_DEFS = [
     blurb: 'Sight-fishing for the endangered Clanwilliam yellowfish in a clear, rocky Cederberg river under orange sandstone. Protected: catch and release.',
     tips: [
       'Clanwilliams are spooky — once they\'ve seen you they ignore everything.',
-      'Long, light leader and a small nymph; 8-10lb fluoro tippet.',
+      'Long, light leader and a small nymph; 3.5-4.5kg fluoro tippet.',
       'Bass harm the yellowfish here — don\'t release bass in the upper river.',
     ],
   },

@@ -52,6 +52,20 @@ export function createTackleBox({ container, save, onSaveChanged }) {
     return `<div class="rig-check warn"><b>Rig doesn't match${pct < 100 ? ` — casts only ~${pct}% as far` : ''}</b>${rig.issues.map((i) => `<span>${i}</span>`).join('')}</div>`;
   }
 
+  // The reel's drag, as a share of the line's breaking strain.
+  function dragHtml() {
+    const drag = typeof save.drag === 'number' ? save.drag : 0.33;
+    const lineKg = getGearById(LINES, save.equippedLineId)?.breakKg ?? 4.5;
+    const verdict = drag >= 0.5 ? 'Tight — a lunge can snap the line'
+      : drag <= 0.15 ? 'Loose — safe, but fish take line at will and tire slowly'
+      : 'About right';
+    return `<div class="tackle-drag">
+      <label for="drag-slider"><b>Drag</b> <span id="drag-read">${Math.round(drag * 100)}% · ${(drag * lineKg).toFixed(1)} kg</span></label>
+      <input id="drag-slider" type="range" min="5" max="90" step="5" value="${Math.round(drag * 100)}">
+      <small id="drag-verdict">${verdict}. Rule of thumb: about a third of the line's strength. In the game: [ and ] keys, or − / +.</small>
+    </div>`;
+  }
+
   function refresh() {
     const section = TACKLE_SECTIONS.find((x) => x.id === activeSection) || TACKLE_SECTIONS[0];
     // Only the parts this kind of fishing has (flies come tied on their own
@@ -65,6 +79,7 @@ export function createTackleBox({ container, save, onSaveChanged }) {
       <div class="tackle-credits">Credits: ${save.credits}</div>
       <div class="tackle-rigged"><b>Rigged:</b> ${rigged}</div>
       ${rigHtml()}
+      ${dragHtml()}
       <div class="tackle-tabs tackle-sections" role="tablist" aria-label="Kind of fishing">
         ${TACKLE_SECTIONS.map((x) => `<button type="button" role="tab" class="tackle-tab section-tab ${x.id === section.id ? 'on' : ''}" aria-selected="${x.id === section.id}" data-section="${x.id}">${x.label}</button>`).join('')}
       </div>
@@ -75,6 +90,13 @@ export function createTackleBox({ container, save, onSaveChanged }) {
       ${renderSection(`${section.label} — ${tab.title}`, tab.items().filter(inSection), tab.owned(), tab.equipped(), tab.kind)}
     `;
     panel.querySelector('#shop-close').addEventListener('click', () => panel.classList.add('hidden'));
+    const slider = panel.querySelector('#drag-slider');
+    slider.addEventListener('input', () => {
+      save.drag = Number(slider.value) / 100;
+      const lineKg = getGearById(LINES, save.equippedLineId)?.breakKg ?? 4.5;
+      panel.querySelector('#drag-read').textContent = `${slider.value}% · ${(save.drag * lineKg).toFixed(1)} kg`;
+    });
+    slider.addEventListener('change', () => { onSaveChanged(); refresh(); });
     panel.querySelectorAll('[data-section]').forEach((btn) => btn.addEventListener('click', () => {
       activeSection = btn.dataset.section;
       refresh();

@@ -1,6 +1,6 @@
 {
-  "version": "c78c2abb24",
-  "built": "2026-09-27T06:58:58.508Z",
+  "version": "506739bcee",
+  "built": "2026-09-27T07:16:00.409Z",
   "modules": [
     "src/audio.js",
     "src/castPhysics.js",
@@ -11,6 +11,7 @@
     "src/environment.js",
     "src/feed.js",
     "src/fightMotion.js",
+    "src/fightReport.js",
     "src/fish.js",
     "src/fish3d.js",
     "src/gear.js",

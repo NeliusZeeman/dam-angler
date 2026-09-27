@@ -7,13 +7,14 @@ import { FISH_SPECIES } from '../src/fish.js';
   assert.ok(LINES.length >= 6, 'a real range of lines');
   for (const line of LINES) {
     assert.ok(line.breakKg > 0 && ['mono', 'braid', 'fluoro', 'fly'].includes(line.type), `${line.id} has a breaking strain and a line type`);
-    // Names carry the real rating, e.g. "15lb (6.8kg)".
-    assert.ok(/\d+lb \(\d+(\.\d)?kg\)/.test(line.name), `${line.id} name shows lb and kg`);
+    // Names carry the real rating in kg, e.g. "Carp Mono 6.8kg".
+    // South Africa: line strength in kilograms, never pounds.
+    assert.ok(/\d+(\.\d)?kg$/.test(line.name) && !/lb/.test(line.name), `${line.id} name shows its strength in kg`);
   }
   for (const hook of HOOKS) {
     assert.ok(hook.strengthKg > 0 && hook.holdBonus >= 0 && hook.holdBonus < 1, `${hook.id} has strength and hold`);
   }
-  console.log(`PASS: six rods (incl. fly rod), ${LINES.length} real lines (lb/kg rated), every hook rated`);
+  console.log(`PASS: six rods (incl. fly rod), ${LINES.length} real lines (kg rated), every hook rated`);
 }
 
 {

@@ -10,13 +10,16 @@
 //   power  -- HOW HARD it is to bend (light .. heavy).
 // flex.length is how much of the 1.45m flexing blank takes the bend (short
 // = fast action), flex.softness scales how far it bows under the same load.
+// maxKg is roughly the pull the blank is built to lift (its line class):
+// bend it past that and it locks up -- no more cushion, and the hook takes
+// every jolt.
 // shockAbsorb is how much of a fish's sudden run the blank soaks up before
 // it reaches the line: moderate/through rods cushion lunges (why bass
 // crankbait rods are moderate action, and why carp rods fight "like a
 // bungee"), stiff fast rods pass the shock straight on.
 export const RODS = [
   {
-    id: 'rod-starter', name: 'Starter Rod (Fibreglass)', tier: 1, cost: 0, castSpeed: 17, spread: 4, tensionTolerance: 1.0,
+    id: 'rod-starter', maxKg: 5, name: 'Starter Rod (Fibreglass)', tier: 1, cost: 0, castSpeed: 17, spread: 4, tensionTolerance: 1.0,
     action: 'moderate', power: 'light', flex: { length: 1.0, softness: 1.45 }, shockAbsorb: 0.15,
     look: { blank: 0x3a2a1c, wrap: 0x9a2a22 },
   },
@@ -24,14 +27,14 @@ export const RODS = [
   // nibble, so small-mouthed kurper and bluegill get hooked more often.
   // SA shops sell kurper combos from ~R450 (Okuma Fin Chaser).
   {
-    id: 'rod-kurper', name: 'Ultralight Kurper Rod (1.8m)', tier: 1, cost: 150, castSpeed: 18, spread: 2.2, tensionTolerance: 1.1,
+    id: 'rod-kurper', maxKg: 3.5, name: 'Ultralight Kurper Rod (1.8m)', tier: 1, cost: 150, castSpeed: 18, spread: 2.2, tensionTolerance: 1.1,
     action: 'moderate', power: 'light', flex: { length: 0.9, softness: 1.6 }, shockAbsorb: 0.25,
     biteBonus: { 'mozambique-tilapia': 1.2, 'banded-tilapia': 1.25, bluegill: 1.2 },
     note: 'Sensitive tip — kurper nibbles turn into hook-ups',
     look: { blank: 0x6a4a2a, wrap: 0xe0c040 },
   },
   {
-    id: 'rod-spinning', name: 'Spinning Rod', tier: 2, cost: 250, castSpeed: 23, spread: 2.5, tensionTolerance: 1.4,
+    id: 'rod-spinning', maxKg: 7, name: 'Spinning Rod', tier: 2, cost: 250, castSpeed: 23, spread: 2.5, tensionTolerance: 1.4,
     action: 'fast', power: 'medium', flex: { length: 0.55, softness: 1.0 }, shockAbsorb: 0.05,
     look: { blank: 0x5d6670, wrap: 0x1f4f9a },
   },
@@ -39,14 +42,14 @@ export const RODS = [
   // accurate casts to ~25m (the line, not a weight, carries the fly), a soft
   // full-length bend that protects light tippet.
   {
-    id: 'rod-fly', name: 'Fly Rod (9ft 5-weight)', tier: 2, cost: 350, castSpeed: 17.5, spread: 1.3, tensionTolerance: 1.45, fly: true,
+    id: 'rod-fly', maxKg: 4.5, name: 'Fly Rod (2.7m 5-weight)', tier: 2, cost: 350, castSpeed: 17.5, spread: 1.3, tensionTolerance: 1.45, fly: true,
     action: 'moderate', power: 'light', flex: { length: 1.4, softness: 1.7 }, shockAbsorb: 0.45,
     look: { blank: 0x3e4a2a, wrap: 0xb08a3a },
   },
   // A short 7ft 3-weight for small mountain streams: delicate presentation
   // under overhanging trees, and a small fish feels like a big one.
   {
-    id: 'rod-fly-3wt', name: 'Stream Fly Rod (7ft 3-weight)', tier: 2, cost: 390, castSpeed: 17, spread: 1.25, tensionTolerance: 1.5, fly: true,
+    id: 'rod-fly-3wt', maxKg: 3, name: 'Stream Fly Rod (2.1m 3-weight)', tier: 2, cost: 390, castSpeed: 17, spread: 1.25, tensionTolerance: 1.5, fly: true,
     action: 'moderate', power: 'light', flex: { length: 1.3, softness: 1.9 }, shockAbsorb: 0.5,
     biteBonus: { 'rainbow-trout': 1.15, 'brown-trout': 1.2, 'clanwilliam-yellowfish': 1.15, bluegill: 1.1 },
     note: 'Mountain streams: soft landing, spooks fewer trout',
@@ -55,14 +58,14 @@ export const RODS = [
   // Moderate action so a bass can properly eat a crankbait and the flex keeps
   // the trebles pinned when it lunges and jumps.
   {
-    id: 'rod-bass', name: 'Bass Crankbait Rod', tier: 2, cost: 420, castSpeed: 21.5, spread: 1.2, tensionTolerance: 1.6,
+    id: 'rod-bass', maxKg: 8, name: 'Bass Crankbait Rod', tier: 2, cost: 420, castSpeed: 21.5, spread: 1.2, tensionTolerance: 1.6,
     action: 'moderate', power: 'medium', flex: { length: 0.95, softness: 1.3 }, shockAbsorb: 0.32,
     look: { blank: 0x1d3a26, wrap: 0xd8d8d8 },
   },
   // A 7ft medium-heavy casting rod for a baitcaster: the SA bass standard
   // for frogs, jigs and crankbaits in heavy cover.
   {
-    id: 'rod-baitcast', name: 'Baitcasting Rod (7ft MH)', tier: 3, cost: 560, castSpeed: 24, spread: 1.2, tensionTolerance: 1.75,
+    id: 'rod-baitcast', maxKg: 11, name: 'Baitcasting Rod (2.1m MH)', tier: 3, cost: 560, castSpeed: 24, spread: 1.2, tensionTolerance: 1.75,
     action: 'fast', power: 'medium-heavy', flex: { length: 0.7, softness: 0.9 }, shockAbsorb: 0.15,
     biteBonus: { 'largemouth-bass': 1.1 },
     note: 'Pinpoint casts into cover, backbone to drag bass out',
@@ -71,14 +74,14 @@ export const RODS = [
   // 12ft, 2.75lb test curve, through action: casts a heavy lead a long way
   // and bends right down into the handle under a big carp.
   {
-    id: 'rod-carp', name: 'Carp Rod (2.75lb TC)', tier: 3, cost: 650, castSpeed: 35, spread: 3, tensionTolerance: 1.9,
+    id: 'rod-carp', maxKg: 12, name: 'Carp Rod (3.6m, 1.25kg TC)', tier: 3, cost: 650, castSpeed: 35, spread: 3, tensionTolerance: 1.9,
     action: 'through', power: 'medium-heavy', flex: { length: 1.45, softness: 1.15 }, shockAbsorb: 0.45,
     look: { blank: 0x2b2b30, wrap: 0x6b8f3a },
   },
   // Real SA barbel/tigerfish rigs call for a rod "with backbone and pulling
   // power" and a big reel -- fast action, heavy power: it hardly budges.
   {
-    id: 'rod-heavy', name: 'Heavy-Duty Rod', tier: 3, cost: 900, castSpeed: 31, spread: 2.5, tensionTolerance: 2.2,
+    id: 'rod-heavy', maxKg: 18, name: 'Heavy-Duty Rod', tier: 3, cost: 900, castSpeed: 31, spread: 2.5, tensionTolerance: 2.2,
     action: 'fast', power: 'heavy', flex: { length: 0.6, softness: 0.6 }, shockAbsorb: 0.1,
     look: { blank: 0x121216, wrap: 0xc9a13a },
   },
@@ -103,43 +106,43 @@ export const RODS = [
 const LINE_SHY = { 'largemouth-bass': 1.25, 'smallmouth-bass': 1.25, tigerfish: 1.2, 'smallmouth-yellowfish': 1.2, 'largescale-yellowfish': 1.2 };
 export const LINES = [
   {
-    id: 'line-starter', name: 'Starter Mono 10lb (4.5kg)', tier: 1, cost: 0,
+    id: 'line-starter', name: 'Starter Mono 4.5kg', tier: 1, cost: 0,
     breakKg: 4.5, type: 'mono', castMultiplier: 1.0, note: 'Fine for kurper; big fish will snap it',
   },
   {
-    id: 'line-mono-12', name: 'Berkley Trilene XL 12lb (5.4kg)', tier: 1, cost: 60,
+    id: 'line-mono-12', name: 'Berkley Trilene XL 5.4kg', tier: 1, cost: 60,
     breakKg: 5.4, type: 'mono', castMultiplier: 1.02, note: 'Supple all-rounder — bait and float fishing',
   },
   {
-    id: 'line-carp-15', name: 'Carp Mono 15lb (6.8kg)', tier: 2, cost: 120,
+    id: 'line-carp-15', name: 'Carp Mono 6.8kg', tier: 2, cost: 120,
     breakKg: 6.8, type: 'mono', castMultiplier: 1.0, note: 'The SA carp standard — minimum for casting a mielie-bom',
   },
   {
-    id: 'line-fluoro', name: 'Berkley Vanish Fluorocarbon 15lb (6.8kg)', tier: 2, cost: 260,
+    id: 'line-fluoro', name: 'Berkley Vanish Fluorocarbon 6.8kg', tier: 2, cost: 260,
     breakKg: 6.8, type: 'fluoro', castMultiplier: 1.0, biteBonus: LINE_SHY,
     note: 'Near-invisible: bass, tigers and yellowfish bite more',
   },
   {
-    id: 'line-mono-20', name: 'Trilene Big Game 20lb (9.1kg)', tier: 2, cost: 200,
+    id: 'line-mono-20', name: 'Trilene Big Game 9.1kg', tier: 2, cost: 200,
     breakKg: 9.1, type: 'mono', castMultiplier: 0.95, note: 'Thick and tough — barbel and big carp',
   },
   {
-    id: 'line-fluoro-10', name: 'Seaguar Fluorocarbon 10lb (4.5kg)', tier: 1, cost: 180,
+    id: 'line-fluoro-10', name: 'Seaguar Fluorocarbon 4.5kg', tier: 1, cost: 180,
     breakKg: 4.5, type: 'fluoro', castMultiplier: 1.02, biteBonus: { ...LINE_SHY, 'rainbow-trout': 1.15, 'clanwilliam-yellowfish': 1.15 },
     note: 'Light and invisible: clear-water bass and yellows. Snaps on big fish',
   },
   {
-    id: 'line-braid', name: 'Sufix 832 Braid 20lb (9.2kg)', tier: 3, cost: 380,
+    id: 'line-braid', name: 'Sufix 832 Braid 9.2kg', tier: 3, cost: 380,
     breakKg: 9.2, type: 'braid', castMultiplier: 1.15, note: 'Thin, casts far, no stretch — runs hit harder (SA shops ~R700)',
   },
   {
-    id: 'line-jbraid-30', name: 'Daiwa J-Braid X8 30lb (13.6kg)', tier: 3, cost: 600,
+    id: 'line-jbraid-30', name: 'Daiwa J-Braid X8 13.6kg', tier: 3, cost: 600,
     breakKg: 13.6, type: 'braid', castMultiplier: 1.12, note: 'Top braid for barbel and big carp (SA shops ~R1,000)',
   },
   // Frogging: bass hide under hyacinth mats and a frog is fished on heavy
   // braid that cuts through the weed and hauls the fish straight out.
   {
-    id: 'line-braid-50', name: 'PowerPro Braid 50lb (22.7kg)', tier: 3, cost: 750,
+    id: 'line-braid-50', name: 'PowerPro Braid 22.7kg', tier: 3, cost: 750,
     breakKg: 22.7, type: 'braid', castMultiplier: 1.05, note: 'Frog fishing in hyacinth and heavy tigers — nothing breaks it',
   },
   // Fly lines: the thick, heavy line itself is what gets cast -- it loads
@@ -149,13 +152,13 @@ export const LINES = [
   // usual trout and Vaal yellowfish choice; 1X (12lb) for streamers and big
   // largemouth yellows.
   {
-    id: 'line-fly-float', name: 'Floating Fly Line WF5F + 4X Tippet 6lb (2.7kg)', tier: 2, cost: 380,
+    id: 'line-fly-float', name: 'Floating Fly Line WF5F + 4X Tippet 2.7kg', tier: 2, cost: 380,
     breakKg: 2.7, type: 'fly', sinking: false, castMultiplier: 1.15,
     biteBonus: { 'rainbow-trout': 1.25, 'brown-trout': 1.25, 'smallmouth-yellowfish': 1.2, 'clanwilliam-yellowfish': 1.25, bluegill: 1.15 },
     note: 'For dry flies and nymphs — fine tippet, gentle landing. Fly rod only (SA shops ~R700)',
   },
   {
-    id: 'line-fly-sink', name: 'Intermediate Sinking Fly Line WF6I + 1X Tippet 12lb (5.4kg)', tier: 3, cost: 460,
+    id: 'line-fly-sink', name: 'Intermediate Sinking Fly Line WF6I + 1X Tippet 5.4kg', tier: 3, cost: 460,
     breakKg: 5.4, type: 'fly', sinking: true, castMultiplier: 1.12,
     biteBonus: { 'largemouth-yellowfish': 1.3, 'brown-trout': 1.2, 'rainbow-trout': 1.1, 'largemouth-bass': 1.1, tigerfish: 1.1 },
     note: 'Sinks slowly: streamers deep for big trout and largemouth yellows. Fly rod only (SA shops ~R900)',
@@ -242,7 +245,7 @@ export const HOOKS = [
   // Jozini guides: a 20-30lb leader to 40lb knottable wire. Tigerfish teeth
   // bite clean through ordinary line without it.
   {
-    id: 'hook-wire-trace', name: 'Wire Trace 40lb + 1/0 Hook', cost: 180, tensionBonus: 0.15,
+    id: 'hook-wire-trace', name: 'Wire Trace 18kg + 1/0 Hook', cost: 180, tensionBonus: 0.15,
     speciesBonus: { tigerfish: 1.15 }, isWireTrace: true,
     strengthKg: 16, holdBonus: 0.1, biteBonus: {},
     note: 'Required for tigerfish — their teeth cut through line',
@@ -338,7 +341,7 @@ export const LURES = [
     speciesIds: ['largemouth-bass', 'catfish'],
   },
   {
-    id: 'bass-jig', name: 'Flipping Jig (1/2oz)', kind: 'lure', cost: 100,
+    id: 'bass-jig', name: 'Flipping Jig (14g)', kind: 'lure', cost: 100,
     note: 'Dropped into cover and hopped on the bottom — big bass',
     speciesIds: ['largemouth-bass', 'smallmouth-bass'],
   },
