@@ -7,7 +7,7 @@ import { wrapPglite } from './helpers.js';
 test('migrations create every table, and running them again changes nothing', async () => {
   const db = wrapPglite(new PGlite());
   const first = await migrate(db);
-  assert.deepEqual(first, ['001_init.sql', '002_constraints.sql']);
+  assert.deepEqual(first, ['001_init.sql', '002_constraints.sql', '003_credit_log.sql']);
   const second = await migrate(db);
   assert.deepEqual(second, []);
   const tables = (await db.query(

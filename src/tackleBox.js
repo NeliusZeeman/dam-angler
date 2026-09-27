@@ -1,6 +1,7 @@
 import { RODS, LINES, REELS, HOOKS, LURES, getGearById, rigCheck, TACKLE_SECTIONS, sectionsFor } from './gear.js';
 
-export function createTackleBox({ container, save, onSaveChanged }) {
+// `onBuy(kind, id)`: a purchase was made (the online server checks it).
+export function createTackleBox({ container, save, onSaveChanged, onBuy = () => {} }) {
   const panel = document.createElement('div');
   panel.className = 'shop-panel hidden';
   container.appendChild(panel);
@@ -135,6 +136,7 @@ export function createTackleBox({ container, save, onSaveChanged }) {
       if (save.credits < item.cost) return;
       save.credits -= item.cost;
       owned.push(id);
+      onBuy(kind, id);
     } else {
       if (kind === 'rod') save.equippedRodId = id;
       if (kind === 'line') save.equippedLineId = id;

@@ -49,7 +49,7 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
   const tackleBox = createTackleBox({ container: overlay, save, onSaveChanged: () => {
     saveSave(save);
     if (view === 'home') render(); // credits on the title card
-  } });
+  }, onBuy: (kind, id) => cloud?.queueBuy(kind, id) });
   const logPanel = document.createElement('div');
   logPanel.className = 'shop-panel hidden';
   overlay.appendChild(logPanel);

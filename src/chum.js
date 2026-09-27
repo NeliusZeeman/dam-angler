@@ -4,7 +4,8 @@ import { FEED_TYPES, feedIntensity, feedBoostAt } from './feed.js';
 // Feeding spots in the water: breadcrumbs thrown by hand, or the groundbait
 // a mieliebom leaves around the hook. Fish find the feed, hold on it, then
 // drift off as it runs out (see feed.js for the numbers).
-export const CHUM_COST = 15;
+// The price lives in economy.js (shared with the server).
+export { CHUM_COST } from './economy.js';
 const MAX_GROUNDBAIT_SPOTS = 3; // older mieliebom piles get eaten up
 
 export function createChumSystem(scene) {

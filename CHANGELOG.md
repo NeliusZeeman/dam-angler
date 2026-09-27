@@ -3,6 +3,21 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — The server keeps the books (no more cheating credits)
+
+- Logged in, credits only change on the server: a catch pays what the
+  server works out (same sum the catch card shows — the price wobble is
+  fixed by the catch's id), buying charges the real price and only with
+  enough credits, breadcrumbs cost 15. Every change is recorded
+  (credit_log).
+- A save can no longer set credits or add gear; editing the browser's
+  storage gets undone on the next load. A purchase the server refuses is
+  undone on the device.
+- Trophies are decided by the fish's weight; the payout only counts gear
+  the player owns.
+- A guest's progress still comes across at sign-up, up to 10,000 credits'
+  worth (credits plus gear).
+
 ## v2 (branch `v2`, angler-v2.homeprojecthub.co.za) — Accounts and cloud saves
 
 - **Sign up / log in** (email, username, password) from the title screen,

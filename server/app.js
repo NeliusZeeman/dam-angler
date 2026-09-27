@@ -12,7 +12,7 @@ import {
   createUser, checkLogin, passwordMatches,
 } from './auth.js';
 import { HttpError } from './validate.js';
-import { createPlayer, loadSave, writeSave, recordCatch, importGuest } from './saves.js';
+import { createPlayer, loadSave, writeSave, recordCatch, importGuest, buyItem, spendCredits } from './saves.js';
 import { allDamStats, damStats } from './stats.js';
 
 // What the game page may load: only its own files. Inline script only with
@@ -146,9 +146,22 @@ export function createApp({
 
   app.post('/api/me/catches', requireUser, async (req, res) => {
     if (!playLimiter.hit(`u:${req.user.id}`)) throw slowDown();
-    const { stored } = await recordCatch(db, req.user.id, body(req));
+    const { stored, payout, credits } = await recordCatch(db, req.user.id, body(req));
     if (stored) statsCache.clear();
-    res.status(stored ? 201 : 200).json({ ok: true });
+    res.status(stored ? 201 : 200).json({ ok: true, payout, credits });
+  });
+
+  // Buying from the tackle box: the server checks the price and the balance.
+  app.post('/api/me/buy', requireUser, async (req, res) => {
+    if (!saveLimiter.hit(`u:${req.user.id}`)) throw slowDown();
+    const { kind, itemId } = body(req);
+    res.json(await buyItem(db, req.user.id, String(kind ?? ''), String(itemId ?? '')));
+  });
+
+  // Credits used up in the game (breadcrumbs).
+  app.post('/api/me/spend', requireUser, async (req, res) => {
+    if (!saveLimiter.hit(`u:${req.user.id}`)) throw slowDown();
+    res.json(await spendCredits(db, req.user.id, String(body(req).what ?? '')));
   });
 
   app.delete('/api/me', requireUser, async (req, res) => {

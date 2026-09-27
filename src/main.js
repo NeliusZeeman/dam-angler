@@ -8,9 +8,9 @@ import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimat
 import { RODS, LINES, REELS, HOOKS, LURES, getGearById, rigCheck } from './gear.js';
 import { diagnoseLoss } from './fightReport.js';
 import { castLossChance, soakLossChance } from './baitLoss.js';
-import { calculatePayout } from './economy.js';
+import { catchPayout } from './economy.js';
 import { loadSave, saveSave, onSave, replaceSave } from './save.js';
-import { createCloud } from './cloud.js';
+import { createCloud, newCatchId } from './cloud.js';
 import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
 import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble, showLossReport } from './ui.js';
@@ -36,7 +36,11 @@ const save = loadSave();
 // Online: logged-in players keep one save on the server for every device.
 // Every local save is mirrored there; a newer save from another device
 // replaces this one (keeping any gear either side bought).
-const cloud = createCloud({ onSaveReplaced: (serverSave) => replaceSave(save, serverSave) });
+const cloud = createCloud({
+  onSaveReplaced: (serverSave) => replaceSave(save, serverSave),
+  // The server keeps the books: its balance is the real one.
+  onCredits: (credits) => { save.credits = credits; saveSave(save, { quiet: true }); },
+});
 onSave((s) => cloud.queueSave(s));
 const fromServer = await cloud.init();
 if (fromServer?.save) replaceSave(save, fromServer.save);
@@ -260,7 +264,7 @@ function startGame(locationId, startTimeOfDay) {
   }
   playerRod.setRod(activeRod);
 
-  const rawTackleBox = createTackleBox({ container: appEl, save, onSaveChanged });
+  const rawTackleBox = createTackleBox({ container: appEl, save, onSaveChanged, onBuy: (kind, id) => cloud.queueBuy(kind, id) });
 
   // Menus need the mouse pointer: hand it back whenever a panel opens.
   function freeMouseIfPanelOpen() {
@@ -394,6 +398,7 @@ function startGame(locationId, startTimeOfDay) {
     }
     save.credits -= CHUM_COST;
     saveSave(save);
+    cloud.queueSpend('chum');
     chumSystem.spawn(target);
     audio.splash(0.35 * hearingFalloff(target));
     hud.showToast('Breadcrumbs thrown — fish will find it in a few seconds and stay while it lasts');
@@ -503,8 +508,10 @@ function startGame(locationId, startTimeOfDay) {
       },
       onSuccess: () => {
         audio.landed();
-        // A trophy pays triple.
-        const payout = calculatePayout({ species, weightKg, rod: activeRod, line: activeLine, hook: activeHook }) * (trophy ? 3 : 1);
+        // A trophy pays triple. The catch's id fixes the price wobble, so the
+        // server (which pays out when you're online) comes to the same sum.
+        const catchId = newCatchId();
+        const payout = catchPayout({ species, weightKg: Math.round(weightKg * 100) / 100, rod: activeRod, line: activeLine, hook: activeHook, trophy, catchId });
         save.credits += payout;
         const entry = save.catchLog[species.id] || { count: 0, bestWeightKg: 0 };
         const previousBestKg = entry.bestWeightKg;
@@ -519,7 +526,10 @@ function startGame(locationId, startTimeOfDay) {
         const lengthCm = estimateLengthCm(species, weightKg);
         const damRecordBefore = cloud.cachedDamStats()?.dams?.[location.id]?.record;
         const damRecord = !!cloud.user() && !!cloud.cachedDamStats() && (!damRecordBefore || weightKg > damRecordBefore.weightKg);
-        cloud.queueCatch({ speciesId: species.id, locationId: location.id, weightKg: Math.round(weightKg * 100) / 100, lengthCm, trophy, payout, timeOfDay: phase });
+        cloud.queueCatch({
+          id: catchId, speciesId: species.id, locationId: location.id, weightKg: Math.round(weightKg * 100) / 100,
+          lengthCm, trophy, timeOfDay: phase, gear: { rodId: activeRod.id, lineId: activeLine.id, hookId: activeHook.id },
+        });
         playerController.releasePointer();
         showCatchCard(appEl, {
           species, weightKg, payout, previousBestKg,

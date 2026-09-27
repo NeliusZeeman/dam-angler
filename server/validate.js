@@ -4,6 +4,7 @@
 import { FISH_SPECIES } from '../src/fish.js';
 import { RODS, LINES, REELS, HOOKS, LURES } from '../src/gear.js';
 import { LOCATIONS } from '../src/locations.js';
+import { isTrophyWeight } from '../src/economy.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -34,6 +35,7 @@ const TIMES = new Set(['morning', 'midMorning', 'midday', 'afternoon', 'sunset',
 const TROPHY_FACTOR = 2.1;
 
 export const isKnownLocation = (id) => LOCATION_IDS.has(id);
+export const speciesById = (id) => SPECIES.get(id);
 export const isKnownGear = (kind, id) => GEAR_IDS[kind]?.has(id) ?? false;
 
 // Only plain characters get into the database: an email is letters,
@@ -109,7 +111,8 @@ export function cleanSave(save) {
       if (isKnownGear(kind, id)) owned.add(id);
     }
     out.gear[kind] = [...owned];
-    out.equipped[kind] = owned.has(save[equippedField]) ? save[equippedField] : STARTER[kind];
+    // Whether it's really owned is checked against the server's records (saves.js).
+    out.equipped[kind] = isKnownGear(kind, save[equippedField]) ? save[equippedField] : STARTER[kind];
   }
   const drag = Number(save.drag);
   out.drag = Number.isFinite(drag) ? Math.min(0.9, Math.max(0.05, drag)) : null;
@@ -153,12 +156,12 @@ export function cleanCatch(c) {
     throw bad(`That weight isn't possible for a ${sp.name}.`);
   }
   const lengthCm = Number.isFinite(Number(c.lengthCm)) ? Math.max(0, Math.min(500, Math.round(Number(c.lengthCm)))) : null;
-  const payout = Math.max(0, Math.min(1_000_000, Math.floor(Number(c.payout) || 0)));
   let caughtAt = new Date(c.caughtAt ?? Date.now());
   if (Number.isNaN(caughtAt.getTime()) || caughtAt.getTime() > Date.now() + 86_400_000) caughtAt = new Date();
   return {
     id: c.id.toLowerCase(), speciesId: sp.id, locationId: c.locationId,
-    weightKg: Math.round(weightKg * 100) / 100, lengthCm, trophy: !!c.trophy, payout,
+    // Whether it's a trophy is decided by its weight, not by what the game says.
+    weightKg: Math.round(weightKg * 100) / 100, lengthCm, trophy: isTrophyWeight(sp, weightKg),
     timeOfDay: TIMES.has(c.timeOfDay) ? c.timeOfDay : null, caughtAt: caughtAt.toISOString(),
   };
 }
