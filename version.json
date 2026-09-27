@@ -1,12 +1,14 @@
 {
-  "version": "2e0d5261a9",
-  "built": "2026-09-27T07:37:32.264Z",
+  "version": "c92a88f9db",
+  "built": "2026-09-27T15:43:48.012Z",
   "modules": [
+    "src/accountPanel.js",
     "src/audio.js",
     "src/baitLoss.js",
     "src/castPhysics.js",
     "src/casting.js",
     "src/chum.js",
+    "src/cloud.js",
     "src/dam.js",
     "src/economy.js",
     "src/environment.js",

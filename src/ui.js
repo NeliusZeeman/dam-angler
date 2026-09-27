@@ -208,11 +208,14 @@ let closeActiveCatchCard = null;
 
 // `lockMs`: the close button (and keys) stay inactive this long so a finger
 // or key still held from the fight can't dismiss the card unread.
-export function showCatchCard(container, { species, weightKg, lengthCm, payout, previousBestKg, count, locationName, timeLabel, trophy = false, lockMs = 0, onClose = null }) {
+export function showCatchCard(container, { species, weightKg, lengthCm, payout, previousBestKg, count, locationName, timeLabel, trophy = false, damRecord = false, lockMs = 0, onClose = null }) {
   closeActiveCatchCard?.();
   const firstEver = count === 1;
   const personalBest = !firstEver && weightKg > previousBestKg;
-  const badge = trophy ? 'TROPHY — the big one! (x3 value)' : firstEver ? 'First one!' : personalBest ? 'New personal best!' : '';
+  const badge = trophy && damRecord ? 'TROPHY — and a new dam record!'
+    : trophy ? 'TROPHY — the big one! (x3 value)'
+      : damRecord ? 'New dam record! Biggest fish ever landed here'
+        : firstEver ? 'First one!' : personalBest ? 'New personal best!' : '';
 
   const wrap = document.createElement('div');
   wrap.className = 'catch-card-wrap';

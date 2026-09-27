@@ -9,7 +9,8 @@ import { RODS, LINES, REELS, HOOKS, LURES, getGearById, rigCheck } from './gear.
 import { diagnoseLoss } from './fightReport.js';
 import { castLossChance, soakLossChance } from './baitLoss.js';
 import { calculatePayout } from './economy.js';
-import { loadSave, saveSave } from './save.js';
+import { loadSave, saveSave, onSave, replaceSave } from './save.js';
+import { createCloud } from './cloud.js';
 import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
 import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble, showLossReport } from './ui.js';
@@ -31,6 +32,14 @@ import { createAudio } from './audio.js';
 
 const appEl = document.getElementById('app');
 const save = loadSave();
+
+// Online: logged-in players keep one save on the server for every device.
+// Every local save is mirrored there; a newer save from another device
+// replaces this one (keeping any gear either side bought).
+const cloud = createCloud({ onSaveReplaced: (serverSave) => replaceSave(save, serverSave) });
+onSave((s) => cloud.queueSave(s));
+const fromServer = await cloud.init();
+if (fromServer?.save) replaceSave(save, fromServer.save);
 
 const touchMode = isTouchDevice();
 document.body.classList.toggle('touch', touchMode);
@@ -74,6 +83,8 @@ function openMainMenu() {
   showMainMenu(appEl, {
     onSettingsChanged: () => audio.setVolume(save.settings.volume ?? 0.7),
     save,
+    cloud,
+    sessionEnded: fromServer?.loggedOut,
     onContinue: () => { enterImmersive(); startGame(save.locationId, save.startTimeOfDay || 'morning'); },
     onNewGame: () => showStartMenu(appEl, ({ locationId, timeOfDay }) => {
       enterImmersive();
@@ -81,7 +92,7 @@ function openMainMenu() {
       save.startTimeOfDay = timeOfDay;
       saveSave(save);
       startGame(locationId, timeOfDay);
-    }, { onBack: openMainMenu, initialLocationId: save.locationId }),
+    }, { onBack: openMainMenu, initialLocationId: save.locationId, damStats: () => cloud.damStats() }),
   });
 }
 
@@ -109,6 +120,7 @@ function preloadFishImages(speciesList) {
 function startGame(locationId, startTimeOfDay) {
   gameRunning = true;
   const location = getLocationById(locationId);
+  cloud.damStats(); // this spot's record, for "New dam record!"
   const localSpecies = FISH_SPECIES.filter((s) => location.speciesIds.includes(s.id));
   // We fish the open dam itself, from its bank and angling stands.
   const dam = createDam(location.dam, seedFromString(location.id));
@@ -502,10 +514,17 @@ function startGame(locationId, startTimeOfDay) {
         save.catchLog[species.id] = entry;
         saveSave(save);
         const phase = environment.getState().timeOfDay;
+        // Online: every catch goes to the server (the dam's stats and your
+        // catch log on every device). Beat the spot's record and it says so.
+        const lengthCm = estimateLengthCm(species, weightKg);
+        const damRecordBefore = cloud.cachedDamStats()?.dams?.[location.id]?.record;
+        const damRecord = !!cloud.user() && !!cloud.cachedDamStats() && (!damRecordBefore || weightKg > damRecordBefore.weightKg);
+        cloud.queueCatch({ speciesId: species.id, locationId: location.id, weightKg: Math.round(weightKg * 100) / 100, lengthCm, trophy, payout, timeOfDay: phase });
         playerController.releasePointer();
         showCatchCard(appEl, {
           species, weightKg, payout, previousBestKg,
-          lengthCm: estimateLengthCm(species, weightKg),
+          lengthCm,
+          damRecord,
           count: entry.count,
           locationName: location.name,
           timeLabel: phase.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()),

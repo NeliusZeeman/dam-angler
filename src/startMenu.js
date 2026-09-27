@@ -46,7 +46,7 @@ function waterFeel(loc) {
 }
 
 // New Game: province -> dams or rivers -> fishing spot -> time of day.
-export function showStartMenu(container, onConfirm, { onBack = null, initialLocationId = null } = {}) {
+export function showStartMenu(container, onConfirm, { onBack = null, initialLocationId = null, damStats = null } = {}) {
   // Always starts at the provinces; the one you last fished is marked.
   const initial = LOCATIONS.find((l) => l.id === initialLocationId);
   const lastProvince = initial?.province || null;
@@ -55,6 +55,17 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
   let selectedLocationId = initial?.id || null;
   let selectedTime = 'morning';
   let filter = 'all';
+  // Public dam records from the server (when online).
+  let stats = null;
+  damStats?.().then((s) => { if (s) { stats = s; if (step === 'spots') render(); } });
+  function recordLine(loc) {
+    const d = stats?.dams?.[loc.id];
+    if (!stats) return '';
+    if (!d?.total) return '<div class="spot-record">No fish logged here yet — be the first</div>';
+    const r = d.record;
+    const who = String(r.username).replace(/[&<>"']/g, '');
+    return `<div class="spot-record">Record: <b>${r.weightKg.toFixed(1)} kg ${speciesName(r.speciesId)}</b> by ${who} · ${d.total} caught</div>`;
+  }
 
   const overlay = document.createElement('div');
   overlay.className = 'start-menu';
@@ -116,6 +127,7 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
           <p>${loc.blurb}</p>
           <div class="spot-facts">Best: ${bestTimes(loc).join(' & ')} · ${waterFeel(loc)}</div>
           <div class="start-loc-species">${fish}</div>
+          ${recordLine(loc)}
         </button>`;
     }).join('') || '<p class="start-sub">No waters of that kind here — try another filter.</p>';
     const timeButtons = TIME_OF_DAY_PHASES.map((phase) => `

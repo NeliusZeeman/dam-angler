@@ -24,19 +24,40 @@ export const DEFAULT_SAVE = {
   },
 };
 
+// Settings are merged key by key so saves from before a setting existed
+// still get its default.
+export function normalizeSave(raw = {}) {
+  return { ...DEFAULT_SAVE, ...raw, settings: { ...DEFAULT_SAVE.settings, ...(raw.settings || {}) } };
+}
+
 export function loadSave() {
   const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) return { ...DEFAULT_SAVE, settings: { ...DEFAULT_SAVE.settings } };
+  if (!raw) return normalizeSave();
   try {
-    const parsed = JSON.parse(raw);
-    // Settings are merged key by key so saves from before a setting existed
-    // still get its default.
-    return { ...DEFAULT_SAVE, ...parsed, settings: { ...DEFAULT_SAVE.settings, ...(parsed.settings || {}) } };
+    return normalizeSave(JSON.parse(raw));
   } catch {
-    return { ...DEFAULT_SAVE, settings: { ...DEFAULT_SAVE.settings } };
+    return normalizeSave();
   }
 }
 
-export function saveSave(saveObject) {
+// Anything that wants to know about every save (the online sync does).
+const saveListeners = new Set();
+export function onSave(fn) {
+  saveListeners.add(fn);
+  return () => saveListeners.delete(fn);
+}
+
+// `quiet` saves only on this device (used when the save came from the server).
+export function saveSave(saveObject, { quiet = false } = {}) {
   localStorage.setItem(SAVE_KEY, JSON.stringify(saveObject));
+  if (!quiet) saveListeners.forEach((fn) => fn(saveObject));
+}
+
+// Swaps the contents of the live save object (everything holds a reference
+// to it) for another save, e.g. the one from your account.
+export function replaceSave(target, next) {
+  for (const key of Object.keys(target)) delete target[key];
+  Object.assign(target, normalizeSave(JSON.parse(JSON.stringify(next || {}))));
+  saveSave(target, { quiet: true });
+  return target;
 }

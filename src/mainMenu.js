@@ -4,6 +4,10 @@ import { saveSave } from './save.js';
 import { createTackleBox } from './tackleBox.js';
 import { renderCatchLog } from './ui.js';
 import { buildLabel } from './versionCheck.js';
+import { showAccountPanel } from './accountPanel.js';
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const SYNC_LABELS = { synced: 'Saved online', saving: 'Saving…', offline: 'Saved on this device — will sync', loggedOut: 'Please log in again' };
 
 const TIME_LABELS = {
   morning: 'Morning', midMorning: 'Mid-Morning', midday: 'Midday', afternoon: 'Afternoon',
@@ -36,7 +40,7 @@ const SETTINGS = [
 // The title screen shown every time the game opens. Continue picks up the
 // last dam and time; New Game goes to the dam/time picker; the tackle box,
 // catch log and settings all work from here without starting a session.
-export function showMainMenu(container, { save, onContinue, onNewGame, onSettingsChanged = () => {} }) {
+export function showMainMenu(container, { save, onContinue, onNewGame, onSettingsChanged = () => {}, cloud = null, sessionEnded = false }) {
   const overlay = document.createElement('div');
   overlay.className = 'main-menu';
   container.appendChild(overlay);
@@ -50,7 +54,33 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
   logPanel.className = 'shop-panel hidden';
   overlay.appendChild(logPanel);
 
-  const close = () => overlay.remove();
+  let stopStatus = null;
+  const close = () => { stopStatus?.(); overlay.remove(); };
+
+  // Online accounts: only shown when there's a Dam Angler server behind the page.
+  let online = false;
+  if (cloud) {
+    cloud.available().then((up) => { online = up; if (view === 'home') render(); });
+    stopStatus = cloud.onStatus(() => { if (view === 'home') render(); });
+  }
+  function accountHtml() {
+    if (!cloud || !online) return '';
+    const u = cloud.user();
+    if (!u) {
+      return `
+        <div class="mm-account">
+          ${sessionEnded ? '<p class="mm-note">You were logged out — log in again to keep saving online.</p>' : ''}
+          <button class="mm-btn mm-account-btn" data-go="account" type="button">Log in or sign up<small>Save online · play on phone, tablet and PC</small></button>
+        </div>`;
+    }
+    const status = cloud.status();
+    return `
+      <div class="mm-account signed-in">
+        <span>Signed in as <b>${esc(u.username)}</b></span>
+        <span class="mm-sync" data-status="${status}">${SYNC_LABELS[status] || ''}</span>
+        <button class="mm-link" data-go="account" type="button">Account</button>
+      </div>`;
+  }
 
   function totalCaught() {
     return Object.values(save.catchLog || {}).reduce((n, e) => n + (e.count || 0), 0);
@@ -66,6 +96,7 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
         <h1 class="mm-title">Dam Angler</h1>
         <p class="mm-stats"><span>${save.credits} credits</span><span>${totalCaught()} fish landed</span></p>
         <p class="mm-version">${buildLabel()}</p>
+        ${accountHtml()}
         <nav class="mm-buttons">
           ${hasGame ? `<button class="mm-btn mm-primary" data-go="continue" type="button">Continue<small>${where}</small></button>` : ''}
           <button class="mm-btn ${hasGame ? '' : 'mm-primary'}" data-go="new" type="button">New Game<small>Choose a dam and a time of day</small></button>
@@ -110,6 +141,12 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
     if (target === 'continue') { close(); onContinue(); return; }
     if (target === 'new') { close(); onNewGame(); return; }
     if (target === 'tackle') { logPanel.classList.add('hidden'); tackleBox.toggle(); return; }
+    if (target === 'account') {
+      tackleBox.close();
+      logPanel.classList.add('hidden');
+      showAccountPanel(overlay, { cloud, save, onChanged: () => { sessionEnded = false; onSettingsChanged('volume'); render(); } });
+      return;
+    }
     if (target === 'log') {
       tackleBox.close();
       logPanel.classList.toggle('hidden');
