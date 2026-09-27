@@ -5,6 +5,8 @@ import express from 'express';
 import { HttpError } from './validate.js';
 import { passwordMatches } from './auth.js';
 import { loadSave } from './saves.js';
+import { createTuningAdminRouter } from './tuning.js';
+import { createRateLimiter } from './auth.js';
 
 const PAGE_SIZE = 50;
 export const MAX_ADMIN_CREDITS = 1_000_000;
@@ -200,8 +202,9 @@ export async function adminLog(db, { page = 1 } = {}) {
   };
 }
 
-export function createAdminRouter({ db, statsCache = null }) {
+export function createAdminRouter({ db, statsCache = null, tuningLimiter = createRateLimiter({ limit: 60, windowMs: 5 * 60 * 1000 }) }) {
   const r = express.Router();
+  r.use('/tuning', createTuningAdminRouter({ db, limiter: tuningLimiter }));
   const body = (req) => (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {});
   r.get('/me', (req, res) => res.json({ username: req.user.username }));
   r.get('/overview', async (req, res) => res.json(await overview(db)));

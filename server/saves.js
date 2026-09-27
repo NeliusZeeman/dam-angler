@@ -147,6 +147,8 @@ export async function buyItem(db, userId, kind, itemId) {
   const item = gearItem(kind, itemId);
   return inTx(db, async (tx) => {
     const have = (await tx.query('SELECT 1 FROM player_gear WHERE user_id = $1 AND kind = $2 AND item_id = $3', [userId, kind, itemId])).rows.length;
+    // Taken out of the shop (admin tuning): nobody new can buy it.
+    if (!have && item.inShop === false) throw new HttpError(400, `The ${item.name} isn't in the shop any more.`);
     if (have || item.cost === 0) {
       if (!have) await tx.query('INSERT INTO player_gear (user_id, kind, item_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [userId, kind, itemId]);
       return { credits: await creditsOf(tx, userId), bought: false };

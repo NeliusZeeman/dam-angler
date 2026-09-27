@@ -15,6 +15,7 @@ import { HttpError } from './validate.js';
 import { createPlayer, loadSave, writeSave, recordCatch, importGuest, buyItem, spendCredits } from './saves.js';
 import { allDamStats, damStats } from './stats.js';
 import { createAdminRouter } from './admin.js';
+import { publishedForPlayers } from './tuning.js';
 
 // What the game page may load: only its own files. Inline script only with
 // this visit's nonce (the version loader in index.html), no plugins, no
@@ -216,6 +217,9 @@ export function createApp({
     const id = String(req.params.locationId).slice(0, 64);
     res.json(await cached(`dam:${id}`, () => damStats(db, id)));
   });
+
+  // The published game tuning (see server/tuning.js), loaded by the game on start.
+  app.get('/api/tuning', async (req, res) => { publicLimit(req); res.json(await publishedForPlayers(db)); });
 
   app.use('/api/admin', requireAdmin, createAdminRouter({ db, statsCache }));
 
