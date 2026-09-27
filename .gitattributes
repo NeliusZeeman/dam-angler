@@ -1,0 +1,4 @@
+# Keep line endings right on every machine: bash scripts need LF,
+# Windows batch files CRLF.
+*.sh text eol=lf
+*.bat text eol=crlf
