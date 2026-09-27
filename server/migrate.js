@@ -8,6 +8,7 @@ import path from 'node:path';
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
 
 export async function migrate(db) {
+  if (db.schema) await db.query(`CREATE SCHEMA IF NOT EXISTS ${db.schema}`);
   await db.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
     name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
   const done = new Set((await db.query('SELECT name FROM schema_migrations')).rows.map((r) => r.name));
