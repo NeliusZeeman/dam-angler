@@ -7,7 +7,8 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
   container.appendChild(panel);
 
   function renderSection(title, items, ownedIds, equippedId, kind) {
-    const rows = items.map((item) => {
+    // Items taken out of the shop (admin tuning) only show for those who own them.
+    const rows = items.filter((item) => item.inShop !== false || ownedIds.includes(item.id)).map((item) => {
       const owned = ownedIds.includes(item.id);
       const equipped = equippedId === item.id;
       const label = owned ? (equipped ? 'In tackle box' : 'Use') : `Buy (${item.cost})`;

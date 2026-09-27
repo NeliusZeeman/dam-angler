@@ -1,6 +1,6 @@
 {
-  "version": "81783a3f03",
-  "built": "2026-09-27T20:11:40.512Z",
+  "version": "50f12462f4",
+  "built": "2026-09-27T20:14:06.220Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
@@ -46,6 +46,7 @@
     "src/tips.js",
     "src/touchControls.js",
     "src/tuning/apply.js",
+    "src/tuning/client.js",
     "src/tuning/engine.js",
     "src/tuning/registry.js",
     "src/ui.js",

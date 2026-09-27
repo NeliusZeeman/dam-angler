@@ -10,7 +10,8 @@ import { diagnoseLoss } from './fightReport.js';
 import { castLossChance, soakLossChance } from './baitLoss.js';
 import { catchPayout } from './economy.js';
 import { loadSave, saveSave, onSave, replaceSave } from './save.js';
-import { createCloud, newCatchId } from './cloud.js';
+import { createCloud, createDisabledCloud, newCatchId } from './cloud.js';
+import { loadGameTuning } from './tuning/client.js';
 import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
 import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble, showLossReport } from './ui.js';
@@ -37,7 +38,17 @@ const save = loadSave();
 // Online: logged-in players keep one save on the server for every device.
 // Every local save is mirrored there; a newer save from another device
 // replaces this one (keeping any gear either side bought).
-const cloud = createCloud({
+// Game tuning from the admin area (published values; an admin can preview
+// the draft with ?tuning=draft). Applied before anything else runs.
+const tuning = await loadGameTuning({ wantPreview: new URLSearchParams(location.search).get('tuning') === 'draft' });
+if (tuning.preview) {
+  const banner = document.createElement('div');
+  banner.className = 'preview-banner';
+  banner.textContent = 'Preview — draft tuning. Nothing is saved online while previewing.';
+  document.body.appendChild(banner);
+}
+
+const cloud = tuning.preview ? createDisabledCloud() : createCloud({
   onSaveReplaced: (serverSave) => replaceSave(save, serverSave),
   // The server keeps the books: its balance is the real one.
   onCredits: (credits) => { save.credits = credits; saveSave(save, { quiet: true }); },

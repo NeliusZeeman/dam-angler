@@ -31,6 +31,18 @@ export function mergeOnConflict(local, server) {
 
 export const newCatchId = () => uuid();
 
+// While an admin previews draft tuning: the game works, but nothing is sent
+// online (no saves, no catches, no dam records).
+export function createDisabledCloud() {
+  const nothing = async () => null;
+  return {
+    available: async () => false, user: () => null, status: () => 'guest', onStatus: () => () => {},
+    init: nothing, signup: nothing, login: nothing, logout: nothing, deleteAccount: nothing,
+    queueSave: () => {}, queueBuy: () => {}, queueSpend: () => {},
+    queueCatch: (c) => ({ id: uuid(), ...c }), flush: async () => {}, damStats: nothing, cachedDamStats: () => null,
+  };
+}
+
 // What a save sends: never credits, gear or the catch log -- the server keeps
 // those itself.
 function saveForServer(save) {
