@@ -16,11 +16,14 @@
 <body>
   <div id="app"></div>
   <script>
+    // (The server adds a one-off nonce to this tag for the page's
+    // Content-Security-Policy; the scripts made below carry it on.)
     // Always the latest version: read version.json fresh (never from cache),
     // then load every game file tagged with that version. A phone or web
     // host can't hand back an old copy once anything has changed, because
     // each release asks for different file addresses. (version.json is
     // written by tools/stamp-version.mjs.)
+    var nonce = document.currentScript && document.currentScript.nonce;
     (async function loadLatest() {
       var build = { version: 'dev', modules: [] };
       try {
@@ -37,11 +40,13 @@
       });
       var map = document.createElement('script');
       map.type = 'importmap';
+      if (nonce) map.nonce = nonce;
       map.textContent = JSON.stringify({ imports: imports });
       document.head.appendChild(map);
       document.getElementById('game-css').href = 'src/style.css' + tag;
       var main = document.createElement('script');
       main.type = 'module';
+      if (nonce) main.nonce = nonce;
       main.src = 'src/main.js' + tag;
       document.body.appendChild(main);
     })();

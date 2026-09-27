@@ -12,11 +12,16 @@ branch=$(git branch --show-current)
 node --test "server/test/*.test.js" >/dev/null && node test/run-all.mjs >/dev/null || { echo "Tests failed -- not deploying."; exit 1; }
 git push -q origin v2
 
-ssh "$SERVER" "set -e
+# -t: lets sudo ask for the server password if it needs to.
+ssh -t "$SERVER" "set -e
   cd $APP
   git pull -q --ff-only
   npm ci --omit=dev --no-audit --no-fund --loglevel=error
   node --env-file=server/.env server/migrate.js
+  # Web server settings (security headers, CSP page route) from the repo.
+  sudo cp server/deploy/angler-proxy.conf server/deploy/angler-security-headers.conf /etc/nginx/snippets/
+  sudo cp server/deploy/nginx-angler.conf /etc/nginx/sites-available/angler
+  sudo nginx -t -q && sudo systemctl reload nginx
   sudo systemctl restart dam-angler-api
   sleep 2
   curl -fsS http://127.0.0.1:8100/api/health >/dev/null && echo 'API is up.'

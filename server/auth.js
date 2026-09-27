@@ -3,7 +3,7 @@
 // stored, so a copy of the database can't be used to log in as anyone.
 import { randomBytes, createHash } from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { HttpError, checkEmail, checkUsername, checkPassword } from './validate.js';
+import { HttpError, checkEmail, checkUsername, checkPassword, checkLoginName } from './validate.js';
 
 export const COOKIE = 'da_session';
 const SESSION_DAYS = 30;
@@ -88,17 +88,28 @@ export async function createUser(db, { email, username, password }) {
 
 // Email or username + password. The same message either way, so nobody can
 // use the login form to find out which emails have accounts.
+// A real bcrypt hash of nothing in particular: checked when the account
+// doesn't exist, so a wrong username takes as long as a wrong password and
+// response times don't give away which accounts exist.
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', BCRYPT_COST);
+
 export async function checkLogin(db, login, password) {
-  const key = String(login ?? '').trim().toLowerCase();
+  const key = checkLoginName(login);
   const { rows } = await db.query(
     'SELECT id, username, email, password_hash FROM users WHERE lower(email) = $1 OR lower(username) = $1',
     [key],
   );
   const user = rows[0];
-  const ok = user ? await bcrypt.compare(String(password ?? ''), user.password_hash) : false;
+  const pw = typeof password === 'string' ? password.slice(0, 200) : '';
+  const ok = await bcrypt.compare(pw, user ? user.password_hash : DUMMY_HASH) && !!user;
   if (!ok) throw new HttpError(401, 'Wrong email/username or password.');
   await db.query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
   return { id: user.id, username: user.username, email: user.email };
+}
+
+// Expired logins are removed (run now and then by the server).
+export async function deleteExpiredSessions(db) {
+  await db.query('DELETE FROM sessions WHERE expires_at < now()');
 }
 
 export async function passwordMatches(db, userId, password) {

@@ -25,7 +25,8 @@ export async function newTestDb() {
 export async function startTestServer(db, options = {}) {
   // Every test client comes from 127.0.0.1, so tests get a roomy limiter
   // unless they're testing the limit itself.
-  const app = createApp({ db, limiter: createRateLimiter({ limit: 1000 }), ...options });
+  const roomy = () => createRateLimiter({ limit: 100000 });
+  const app = createApp({ db, limiter: roomy(), playLimiter: roomy(), saveLimiter: roomy(), publicLimiter: roomy(), ...options });
   const server = await new Promise((resolve) => { const s = app.listen(0, () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   return {

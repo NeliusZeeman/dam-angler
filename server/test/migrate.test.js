@@ -7,7 +7,7 @@ import { wrapPglite } from './helpers.js';
 test('migrations create every table, and running them again changes nothing', async () => {
   const db = wrapPglite(new PGlite());
   const first = await migrate(db);
-  assert.deepEqual(first, ['001_init.sql']);
+  assert.deepEqual(first, ['001_init.sql', '002_constraints.sql']);
   const second = await migrate(db);
   assert.deepEqual(second, []);
   const tables = (await db.query(
@@ -22,8 +22,9 @@ test('migrations create every table, and running them again changes nothing', as
 test('emails and usernames are unique whatever their case', async () => {
   const db = wrapPglite(new PGlite());
   await migrate(db);
-  await db.query("INSERT INTO users (email, username, password_hash) VALUES ('a@b.co', 'Nelius', 'x')");
-  await assert.rejects(db.query("INSERT INTO users (email, username, password_hash) VALUES ('A@B.CO', 'other', 'x')"));
-  await assert.rejects(db.query("INSERT INTO users (email, username, password_hash) VALUES ('c@d.co', 'NELIUS', 'x')"));
+  const H = `$2a$11$${'a'.repeat(53)}`; // bcrypt-shaped (the table only takes hashes)
+  await db.query("INSERT INTO users (email, username, password_hash) VALUES ('a@b.co', 'Nelius', $1)", [H]);
+  await assert.rejects(db.query("INSERT INTO users (email, username, password_hash) VALUES ('A@B.CO', 'other', $1)", [H]));
+  await assert.rejects(db.query("INSERT INTO users (email, username, password_hash) VALUES ('c@d.co', 'NELIUS', $1)", [H]));
   await db.end();
 });
