@@ -47,6 +47,7 @@ export function createHUD(container, { showHints = true, touch = false, onDrag =
   // `s` is the fight state from minigame.getState(), or null when no fish is on.
   function setFight(s) {
     gauges.classList.toggle('hidden', !s);
+    document.body.classList.toggle('fighting', !!s);
     if (!s) return;
     const level = (v, warn, bad) => (v >= bad ? 'bad' : v >= warn ? 'warn' : 'ok');
     setGauge('rod', s.rodLoad, s.rodLoad > 1 ? 'OVERLOADED' : `${Math.round(s.rodLoad * 100)}%`, level(s.rodLoad, 0.75, 1));

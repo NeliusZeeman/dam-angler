@@ -60,7 +60,17 @@ body.touch .hud-drag .drag-btn { width: 36px; height: 36px; }
 .loss-part[data-status="fail"] .loss-icon, .loss-part[data-status="fail"] b { color: #ff8a70; }
 .loss-tip { margin-top: 2px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.15); color: #ffe08a; }
 .loss-close { font-size: 11px; opacity: 0.5; text-align: right; }
-body.touch .fight-gauges { bottom: calc(120px + env(safe-area-inset-bottom)); width: min(280px, calc(100vw - 32px)); }
+/* Phones and small screens: the gauges move out of the middle to the
+   top-right corner, and shrink. The tip bubble steps aside mid-fight. */
+@media (pointer: coarse), (max-width: 900px), (max-height: 500px) {
+  .fight-gauges { top: calc(44px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); bottom: auto; left: auto; transform: none; width: 170px; gap: 1px; padding: 4px 6px; font-size: 9.5px; }
+  .fight-gauges .gauge { grid-template-columns: 26px 1fr 58px; gap: 4px; }
+  .fight-gauges .gauge-track { height: 5px; }
+  body.fighting .tip-bubble { display: none; }
+}
+@media (max-width: 600px) and (orientation: portrait) {
+  .fight-gauges { top: calc(128px + env(safe-area-inset-top)); }
+}
 body.touch .loss-report { top: 96px; }
 .hud-toast { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: #ffe08a; padding: 8px 16px; border-radius: 6px; z-index: 4; font-size: 14px; }
 .hud-toast.hidden { display: none; }

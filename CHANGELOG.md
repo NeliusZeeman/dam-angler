@@ -3,6 +3,12 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## 2026-09-27 — Fight gauges out of the way on phones
+
+- On phones and small screens the rod/reel/line/hook gauges sit small in
+  the top-right corner instead of the middle of the screen; the tip bubble
+  steps aside while a fish is on.
+
 ## 2026-09-27 — Loose drag lets fish run; New Game: province, then dams or rivers
 
 - **Drag and line out:** a loose drag lets a strong fish strip line and run
