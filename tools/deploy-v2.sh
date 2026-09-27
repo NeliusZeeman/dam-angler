@@ -26,3 +26,6 @@ ssh -t "$SERVER" "set -e
   sleep 2
   curl -fsS http://127.0.0.1:8100/api/health >/dev/null && echo 'API is up.'
   git log --oneline -1"
+
+# Live now: master on GitHub follows what is live.
+git push -q origin v2:master && echo "GitHub master now matches the live game."
