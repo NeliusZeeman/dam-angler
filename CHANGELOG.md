@@ -3,6 +3,26 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 (branch `v2`, angler-v2.homeprojecthub.co.za) — Accounts and cloud saves
+
+- **Sign up / log in** (email, username, password) from the title screen,
+  or keep playing as a guest. A guest's progress (credits, gear, catch log)
+  moves into the new account. POPIA privacy notice and consent on sign-up;
+  delete your account (and everything in it) any time.
+- **One game on every device:** credits, gear, what's rigged, drag, last
+  spot and settings are saved on the server; log in on a phone, tablet or
+  PC and carry on. Changes go up within 2 seconds; offline they wait on the
+  device and sync when the connection is back ("Saved on this device — will
+  sync"). If two devices clash, gear bought on either is kept.
+- **Every catch is stored** (species, weight, length, trophy, spot, time)
+  exactly once, and builds your catch log.
+- **Dam records:** spot cards show the record fish and who caught it, and
+  how many fish the dam has given up; the catch card says "New dam record!".
+- Server: Node/Express API + Postgres (`angler` schema in `dam_anglers`) on
+  192.168.1.36 behind nginx and the Cloudflare Tunnel; passwords bcrypt-
+  hashed, login cookies HTTPS-only, password guessing rate-limited; only
+  usernames are ever public. `bash tools/deploy-v2.sh` publishes.
+
 ## 2026-09-27 — Fight gauges out of the way on phones
 
 - On phones and small screens the rod/reel/line/hook gauges sit small in
