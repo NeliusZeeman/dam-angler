@@ -218,6 +218,8 @@ function startGame(locationId, startTimeOfDay) {
     getCastMultiplier: () => (activeReel.castMultiplier || 1) * (activeLine.castMultiplier || 1)
       * (currentLure().heavy && activeRod.power === 'light' ? 0.72 : 1) * rig.castFactor,
     getCastDrag: () => currentLure().castDrag ?? null,
+    getLure: () => currentLure(),
+    isBareHook: () => bareHook,
     // A full fly rig casts the fly-fishing way: false casts that whip the
     // line back and forth overhead before it unrolls onto the water.
     isFlyCast: () => rig.flyRig,

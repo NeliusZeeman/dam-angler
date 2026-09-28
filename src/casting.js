@@ -2,6 +2,7 @@ import * as THREE from '../vendor/three.module.js';
 import { waterSurfaceY } from './water.js';
 import { simulateCast, launchSpeed, DRAG } from './castPhysics.js';
 import { createFightMotion, fightStyleFor } from './fightMotion.js';
+import { createTerminalTackle } from './gfx/terminalTackle.js';
 
 const TWITCH_COOLDOWN = 0.35;
 const TWITCH_KICK_UP = 0.14;
@@ -46,10 +47,20 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   // callback when the hooked fish leaps clear of the water.
   getFightInput = () => ({ progress: 0, holding: false }), onFishJump = null,
   // Fly rig: cast with false casts, and draw the thick coloured fly line.
-  isFlyCast = () => false, getLineLook = () => null, onFlyStroke = null }) {
-  const bobber = createFloatMesh();
+  isFlyCast = () => false, getLineLook = () => null, onFlyStroke = null,
+  // What's on the end of the line (a LURES item), and whether the bait has
+  // come off the hook.
+  getLure = () => null, isBareHook = () => false }) {
+  // `bobber` is the end of the line: it carries the float (for float rigs)
+  // and the actual bait, feeder, lure or fly.
+  const bobber = new THREE.Group();
+  const floatMesh = createFloatMesh();
+  const tackle = createTerminalTackle();
+  bobber.add(floatMesh, tackle.group);
   bobber.visible = false;
   scene.add(bobber);
+  let tackleY = 0;
+  const toRod = new THREE.Vector3();
 
   // The line is drawn as a curve (not a straight segment) so it visibly
   // bends/sags between casts and pulls taut while being reeled in. It's a
@@ -531,9 +542,37 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     }
   }
 
+  // Show what's actually on the line. A float rig shows the float with the
+  // bait hanging under it; a feeder or bottom bait sinks out of sight once
+  // it's in; lures swim just under the top facing the rod; topwater lures
+  // and dry flies sit on the surface.
+  function dressRig(dt) {
+    const rig = tackle.set(getLure());
+    tackle.setBaitOn(!isBareHook());
+    floatMesh.visible = rig === 'float';
+    const inWater = bobber.visible && phase !== 'inAir' && phase !== 'hanging' && isPointInWater(bobber.position);
+    let y;
+    if (rig === 'float') y = inWater ? -0.3 : -0.1;
+    else if (!inWater) y = 0;
+    else y = { bottom: -0.6, lure: -0.018, surface: -0.004, fly: -0.012 }[rig] ?? 0;
+    const rate = rig === 'bottom' && inWater ? 1.5 : 14;
+    tackleY += (y - tackleY) * Math.min(1, dt * rate);
+    tackle.group.position.y = tackleY;
+    const swim = inWater && rig !== 'float';
+    if (swim) {
+      toRod.subVectors(rodTipWorld, bobber.position);
+      tackle.group.rotation.y = Math.atan2(toRod.x, toRod.z);
+    } else {
+      tackle.group.rotation.y = 0;
+    }
+    const moving = phase === 'reeling' || phase === 'biting' || (phase === 'waiting' && motionSpeed > MOTION_REEL_THRESHOLD);
+    tackle.update(dt, { pose: swim ? 'swim' : 'hang', moving });
+  }
+
   function update(deltaSeconds, windState) {
     rodTip.getWorldPosition(rodTipWorld);
     if (windState) lastWind = windState;
+    dressRig(deltaSeconds);
 
     // Clock only runs while there's actually a fishable line in the water --
     // pauses if the lure's up on the sand or the rod's just hanging.
