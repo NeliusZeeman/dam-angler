@@ -461,8 +461,8 @@ export function createFishSwarm(scene, speciesIds, count, dam) {
   return fishes;
 }
 
-// onBreach(position) fires as a fish leaves the water and again as it
-// drops back in, so jumps throw up a splash. `attractors` are feeding spots
+// onBreach(position, landing) fires as a fish leaves the water and again as
+// it drops back in (landing = true), so jumps throw up a splash. `attractors` are feeding spots
 // ({x, z, strength}): fish that like the feed swim over, circle tight over
 // it while it lasts, and wander back home as it runs out.
 const FEED_REACH = 45; // metres a fish will travel to a feeding spot
@@ -505,7 +505,7 @@ export function updateFishSwarm(fishes, elapsedSeconds, onBreach = null, attract
     fish.rotation.z = jump > 0 ? Math.sin(cycle * Math.PI) * 0.9 : 0;
     setFishSwim(fish, elapsedSeconds * 7 + orbitRadius * 3, jumping ? 1.6 : 0.8);
     if (onBreach && jumping !== fish.userData.wasJumping) {
-      onBreach(fish.position.clone().setY(0));
+      onBreach(fish.position.clone().setY(0), !jumping);
     }
     fish.userData.wasJumping = jumping;
   }

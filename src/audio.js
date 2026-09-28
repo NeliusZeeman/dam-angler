@@ -2,7 +2,8 @@
 // files, so nothing extra to download on a phone.
 //
 //   ambience  wind in the reeds (follows the game's wind), water lapping at
-//             the bank, birds by day, crickets and frogs after dark
+//             the bank, the odd fish rising, birds by day, crickets and
+//             reed frogs after dark
 //   casting   the rod whooshing, line peeling off the reel, the plop
 //   fight     reel ratchet while you wind, the drag screaming when a fish
 //             takes line, splashes, the line creaking near breaking point
@@ -17,7 +18,7 @@ const NIGHT = { lateTwilight: 0.6, night: 1 };
 export function createAudio({ volume = 0.7 } = {}) {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   const silent = {
-    unlock() {}, setVolume() {}, update() {}, cast() {}, plop() {}, splash() {}, bite() {}, snap() {}, landed() {}, click() {},
+    unlock() {}, setVolume() {}, update() {}, cast() {}, plop() {}, splash() {}, rise() {}, bite() {}, snap() {}, landed() {}, click() {},
   };
   if (!Ctx) return silent;
 
@@ -77,7 +78,7 @@ export function createAudio({ volume = 0.7 } = {}) {
 
   // ---- One-shot sounds ---------------------------------------------------
   // A shaped burst of filtered noise (splash, whoosh, crack).
-  function noiseBurst({ dur = 0.3, type = 'lowpass', freq = 1200, freqEnd = null, q = 0.8, vol = 0.5, attack = 0.005, when = 0 }) {
+  function noiseBurst({ dur = 0.3, type = 'lowpass', freq = 1200, freqEnd = null, q = 0.8, vol = 0.5, attack = 0.005, when = 0, dest = sfx }) {
     const t = ctx.currentTime + when;
     const src = noise();
     const f = filter(type, freq, q);
@@ -86,7 +87,7 @@ export function createAudio({ volume = 0.7 } = {}) {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(vol, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f); f.connect(g); g.connect(sfx);
+    src.connect(f); f.connect(g); g.connect(dest);
     src.start(t, Math.random() * 1.5, dur + 0.05);
   }
   // A pitched blip that slides (bird chirps, plops, notes).
@@ -120,16 +121,51 @@ export function createAudio({ volume = 0.7 } = {}) {
       tone({ freq: f, freqEnd: f * (up ? 1.35 : 0.72), dur: 0.07 + Math.random() * 0.06, vol: 0.05 + Math.random() * 0.04, when: i * (0.1 + Math.random() * 0.06), dest: amb });
     }
   }
-  // A frog: two or three low, throaty croaks.
+  // Night frogs at an SA dam. Mostly painted reed frogs: short, high
+  // whistled "tinks" from the reeds, a few at a time and never quite
+  // evenly spaced. Now and then a guttural toad's long, soft snore.
   function frog() {
-    const f = 110 + Math.random() * 90;
-    const n = 2 + Math.floor(Math.random() * 2);
-    for (let i = 0; i < n; i++) tone({ freq: f, freqEnd: f * 0.8, dur: 0.12, type: 'sawtooth', vol: 0.05, attack: 0.02, when: i * 0.22, dest: amb });
+    if (Math.random() < 0.8) {
+      const n = 2 + Math.floor(Math.random() * 4);
+      let when = 0;
+      for (let i = 0; i < n; i++) {
+        const f = 2700 + Math.random() * 700;
+        tone({ freq: f, freqEnd: f * 1.06, dur: 0.045 + Math.random() * 0.03, vol: 0.018 + Math.random() * 0.018, attack: 0.008, when, dest: amb });
+        when += 0.18 + Math.random() * 0.35;
+      }
+      return;
+    }
+    // Guttural toad: a buzzy note trilled ~20 times a second, muffled by
+    // distance, swelling in and out over about a second.
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = 170 + Math.random() * 40;
+    const lp = filter('lowpass', 650, 0.7);
+    const trill = ctx.createOscillator();
+    trill.frequency.value = 18 + Math.random() * 6;
+    const trillDepth = gainNode(0.5);
+    const g = gainNode(0.5); // 0.5 +/- 0.5: pulses between silent and full
+    const body = gainNode(0);
+    trill.connect(trillDepth); trillDepth.connect(g.gain);
+    body.gain.setValueAtTime(0, t);
+    body.gain.linearRampToValueAtTime(0.03, t + 0.25);
+    body.gain.setValueAtTime(0.03, t + 0.7);
+    body.gain.linearRampToValueAtTime(0, t + 1.1);
+    o.connect(lp); lp.connect(g); g.connect(body); body.connect(amb);
+    o.start(t); trill.start(t);
+    o.stop(t + 1.2); trill.stop(t + 1.2);
+  }
+  // A small wave arriving at the bank: swells in slowly, then washes out.
+  // No hard edge, so it never sounds like a knock.
+  function lap(windiness) {
+    noiseBurst({ dur: 0.9 + Math.random() * 0.6, type: 'lowpass', freq: 520 + windiness * 300, freqEnd: 160, q: 0.6,
+      vol: 0.025 + windiness * 0.03 + Math.random() * 0.01, attack: 0.3 + Math.random() * 0.2, dest: amb });
   }
 
   // ---- Per-frame state ---------------------------------------------------
   let ambienceOn = false;
-  let birdTimer = 2, frogTimer = 4, lapPhase = 0, cricketPhase = 0;
+  let birdTimer = 2, frogTimer = 4, lapPhase = 0, cricketPhase = 0, lapTimer = 1;
   let reelAcc = 0, dragAcc = 0;
 
   function update(dt, { active = false, windSpeed = 0, timeOfDay = 'midday', reelRate = 0, dragRate = 0, tension = 0 } = {}) {
@@ -147,7 +183,10 @@ export function createAudio({ volume = 0.7 } = {}) {
     windF.frequency.setTargetAtTime(300 + w * 900, now, 0.5);
 
     lapPhase += dt * (0.5 + Math.random() * 0.2);
-    lapG.gain.setTargetAtTime(0.05 + 0.04 * (0.5 + 0.5 * Math.sin(lapPhase * 1.3) * Math.sin(lapPhase * 0.37)) + w * 0.03, now, 0.3);
+    lapG.gain.setTargetAtTime(0.035 + 0.03 * (0.5 + 0.5 * Math.sin(lapPhase * 1.3) * Math.sin(lapPhase * 0.37)) + w * 0.025, now, 0.3);
+    // Now and then a little wave laps in -- more often in a breeze.
+    lapTimer -= dt * (0.6 + w);
+    if (lapTimer <= 0) { lap(w); lapTimer = 1.5 + Math.random() * 3; }
 
     const night = NIGHT[timeOfDay] || 0;
     cricketPhase += dt;
@@ -158,7 +197,7 @@ export function createAudio({ volume = 0.7 } = {}) {
     birdTimer -= dt * birdRate;
     if (birdTimer <= 0) { if (birdRate > 0) bird(); birdTimer = 2 + Math.random() * 6; }
     frogTimer -= dt * night;
-    if (frogTimer <= 0) { frog(); frogTimer = 3 + Math.random() * 7; }
+    if (frogTimer <= 0) { frog(); frogTimer = 2.5 + Math.random() * 6; }
 
     // Winding the reel: steady ratchet clicks.
     reelAcc += dt * 16 * reelRate;
@@ -202,6 +241,12 @@ export function createAudio({ volume = 0.7 } = {}) {
       const s = Math.min(1.6, strength);
       noiseBurst({ dur: 0.25 + s * 0.3, type: 'lowpass', freq: 1800, freqEnd: 350, vol: 0.14 + s * 0.18, attack: 0.01 });
       noiseBurst({ dur: 0.12, type: 'highpass', freq: 3000, vol: 0.05 * s, when: 0.02 });
+    },
+    // A fish rising somewhere on the dam: a soft bloop, not a splash.
+    rise(strength = 1) {
+      const s = Math.min(1, strength);
+      tone({ freq: 240 + Math.random() * 80, freqEnd: 110, dur: 0.16, vol: 0.09 * s, attack: 0.012 });
+      noiseBurst({ dur: 0.3, type: 'lowpass', freq: 900, freqEnd: 220, vol: 0.05 * s, attack: 0.02, when: 0.01 });
     },
     // Something's taken the bait.
     bite() {

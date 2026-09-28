@@ -758,6 +758,7 @@ function startGame(locationId, startTimeOfDay) {
     frame(delta, now / 1000);
   }
 
+  let lastRiseSound = -99;
   function frame(delta, elapsed) {
     if (!paused) {
       environment.tick(delta);
@@ -768,9 +769,14 @@ function startGame(locationId, startTimeOfDay) {
       water.setAtmosphere(atmos, envState.windSpeed, windUniforms.uWindDir.value);
       updateWater(waterMesh, elapsed);
       post.setLook(atmos, elapsed, location.skyWarmth);
-      updateFishSwarm(fishSwarm, elapsed, (point) => {
+      updateFishSwarm(fishSwarm, elapsed, (point, landing) => {
         splashEffect.spawn(point, 0.8);
-        audio.splash(0.5 * hearingFalloff(point));
+        // A fish rising: one soft bloop as it drops back in, and not every
+        // time -- two dozen fish splashing on cue sounded like knocking.
+        if (landing && elapsed - lastRiseSound > 4 + Math.random() * 4) {
+          const heard = hearingFalloff(point);
+          if (heard > 0.03) { audio.rise(heard); lastRiseSound = elapsed; }
+        }
       }, chumSystem.attractors(), delta);
       catchReveal.update(delta);
       splashEffect.update(delta);
