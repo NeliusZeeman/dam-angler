@@ -58,10 +58,14 @@ export async function seedDevData(db, { players = 50, adminFile = null } = {}) {
   const admin = await createUser(db, { email: 'admin@example.co.za', username: 'dev_admin', password });
   await createPlayer(db, admin.id);
   await setRole(db, 'dev_admin', 'admin');
+  // Plenty of credits for trying out all the tackle in the shop.
+  await db.query('UPDATE player_state SET credits = $2 WHERE user_id = $1', [admin.id, DEV_ADMIN_CREDITS]);
+  await db.query('INSERT INTO credit_log (user_id, amount, reason, ref) VALUES ($1, $2, $3, $4)', [admin.id, DEV_ADMIN_CREDITS, 'admin', 'local testing']);
   if (adminFile) {
-    writeFileSync(adminFile, `Local test admin (made-up data, this PC only)\nusername: dev_admin\npassword: ${password}\n`);
+    writeFileSync(adminFile, `Local test admin (made-up data, this PC only)\nusername: dev_admin\npassword: ${password}\nStarts with ${DEV_ADMIN_CREDITS.toLocaleString('en-ZA')} credits for testing tackle.\n`);
   }
   return { players, admin: 'dev_admin' };
 }
 
+export const DEV_ADMIN_CREDITS = 1_000_000;
 export const DEV_ADMIN_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dev-admin.txt');
