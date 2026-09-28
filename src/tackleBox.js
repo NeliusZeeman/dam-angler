@@ -15,7 +15,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     const rows = shown.sort((a, b) => a.cost - b.cost).map((item) => {
       const owned = ownedIds.includes(item.id);
       const equipped = equippedId === item.id;
-      const label = owned ? (equipped ? 'In tackle box' : 'Use') : `Buy (${item.cost})`;
+      const label = owned ? (equipped ? 'In use' : 'Use') : 'Buy';
       const disabled = (!owned && save.credits < item.cost) || equipped;
       // Rods: action and power. Lines: type and breaking strain. Hooks: how
       // big a fish they'll hold. Plus each item's own short note.
@@ -23,15 +23,25 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
       const hookSpec = item.strengthKg ? `Holds fish to ~${item.strengthKg} kg` : '';
       const specText = [lineSpec || hookSpec, item.note].filter(Boolean).join(' · ');
       // Shop rods and reels (gearCatalog.js) carry their real specs in the note.
-      const spec = item.priceR ? `<small class="shop-spec shop-note">${item.note}</small>`
-        : item.action ? `<small class="shop-spec">${item.action} action · ${item.power} power${item.note ? `<span class="shop-note"> · ${item.note}</span>` : ''}</small>`
-        : specText ? `<small class="shop-spec shop-note">${specText}</small>` : '';
-      return `<div class="shop-row">
-        <span>${item.name}${spec}</span>
-        <button data-kind="${kind}" data-id="${item.id}" ${disabled ? 'disabled' : ''}>${label}</button>
-      </div>`;
+      const spec = item.priceR ? item.note
+        : item.action ? `${item.action} action · ${item.power} power${item.note ? ` · ${item.note}` : ''}`
+        : specText;
+      return card({ kind, id: item.id, name: item.name, spec, cost: item.cost, owned, equipped, label, disabled });
     }).join('');
-    return `<h3>${title}</h3>${rows}`;
+    return `<h3>${title}</h3><div class="shop-grid">${rows}</div>`;
+  }
+
+  // One item as a card: name, specs, then its price (or owned / rigged) and
+  // the button.
+  function card({ kind, id, name, spec, cost, owned, equipped, label, disabled }) {
+    const status = equipped ? '<span class="card-tag rigged">Rigged</span>'
+      : owned ? '<span class="card-tag">Owned</span>'
+        : `<span class="card-price">${cost ? `${cost} credits` : 'Free'}</span>`;
+    return `<div class="shop-card${owned ? ' owned' : ''}${equipped ? ' equipped' : ''}">
+      <div class="card-name">${name}</div>
+      ${spec ? `<small class="card-spec">${spec}</small>` : ''}
+      <div class="card-foot">${status}<button data-kind="${kind}" data-id="${id}" ${disabled ? 'disabled' : ''}>${label}</button></div>
+    </div>`;
   }
 
   // Combos: one price for a rod and reel sold together. "Use" rigs both.
@@ -40,15 +50,13 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     const rows = items.filter((c) => c.inShop !== false || hasCombo(c)).sort((a, b) => a.cost - b.cost).map((c) => {
       const owned = hasCombo(c);
       const rigged = save.equippedRodId === c.rodId && save.equippedReelId === c.reelId;
-      const label = owned ? (rigged ? 'In tackle box' : 'Use') : `Buy (${c.cost})`;
+      const label = owned ? (rigged ? 'In use' : 'Use') : 'Buy';
       const disabled = (!owned && save.credits < c.cost) || rigged;
       const rod = getGearById(RODS, c.rodId), reel = getGearById(REELS, c.reelId);
-      return `<div class="shop-row">
-        <span>${c.name}<small class="shop-spec shop-note">${c.note}<br>Rod: ${rod.note}<br>Reel: ${reel.note}</small></span>
-        <button data-kind="combo" data-id="${c.id}" ${disabled ? 'disabled' : ''}>${label}</button>
-      </div>`;
+      const spec = `${c.note}<br><b>Rod:</b> ${rod.note}<br><b>Reel:</b> ${reel.note}`;
+      return card({ kind: 'combo', id: c.id, name: c.name, spec, cost: c.cost, owned, equipped: rigged, label, disabled });
     }).join('');
-    return `<h3>${title}</h3>${rows}`;
+    return `<h3>${title}</h3><div class="shop-grid">${rows}</div>`;
   }
 
   // Two rows of tabs: the kind of fishing (General, Carp, Bass, Fly & Trout,
@@ -102,10 +110,14 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     const rigged = TABS.map((t) => getGearById(t.items(), t.equipped())?.name.split(' (')[0]).filter(Boolean).join(' · ');
     panel.innerHTML = `
       <button class="panel-close" id="shop-close">Close</button>
-      <div class="tackle-credits">Credits: ${save.credits}</div>
-      <div class="tackle-rigged"><b>Rigged:</b> ${rigged}</div>
-      ${rigHtml()}
-      ${dragHtml()}
+      <div class="tackle-head">
+        <div>
+          <div class="tackle-credits">Credits: ${save.credits}</div>
+          <div class="tackle-rigged"><b>Rigged:</b> ${rigged}</div>
+          ${rigHtml()}
+        </div>
+        ${dragHtml()}
+      </div>
       <div class="tackle-tabs tackle-sections" role="tablist" aria-label="Kind of fishing">
         ${TACKLE_SECTIONS.map((x) => `<button type="button" role="tab" class="tackle-tab section-tab ${x.id === section.id ? 'on' : ''}" aria-selected="${x.id === section.id}" data-section="${x.id}">${x.label}</button>`).join('')}
       </div>
