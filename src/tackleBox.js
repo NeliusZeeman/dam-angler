@@ -1,4 +1,5 @@
 import { RODS, LINES, REELS, HOOKS, LURES, COMBOS, getGearById, rigCheck, TACKLE_SECTIONS, sectionsFor } from './gear.js';
+import { gearPicture } from './gfx/gearThumbs.js';
 
 // `onBuy(kind, id)`: a purchase was made (the online server checks it).
 export function createTackleBox({ container, save, onSaveChanged, onBuy = () => {} }) {
@@ -38,6 +39,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
       : owned ? '<span class="card-tag">Owned</span>'
         : `<span class="card-price">${cost ? `${cost} credits` : 'Free'}</span>`;
     return `<div class="shop-card${owned ? ' owned' : ''}${equipped ? ' equipped' : ''}">
+      <div class="card-img"><img alt="" data-pic="${kind}|${id}" hidden></div>
       <div class="card-name">${name}</div>
       ${spec ? `<small class="card-spec">${spec}</small>` : ''}
       <div class="card-foot">${status}<button data-kind="${kind}" data-id="${id}" ${disabled ? 'disabled' : ''}>${label}</button></div>
@@ -128,6 +130,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
       ${renderSection(`${section.label} — ${tab.title}`, tab.items().filter(inSection), tab.owned(), tab.equipped(), tab.kind)}
     `;
     panel.querySelector('#shop-close').addEventListener('click', () => panel.classList.add('hidden'));
+    fillPictures();
     const slider = panel.querySelector('#drag-slider');
     slider.addEventListener('input', () => {
       save.drag = Number(slider.value) / 100;
@@ -147,6 +150,21 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     }));
     panel.querySelectorAll('button[data-kind]').forEach((btn) => {
       btn.addEventListener('click', () => handleClick(btn.dataset.kind, btn.dataset.id));
+    });
+  }
+
+  // Each card's picture: a snapshot of the item's own 3D model.
+  const LISTS = { rod: RODS, line: LINES, reel: REELS, hook: HOOKS, lure: LURES, combo: COMBOS };
+  function fillPictures() {
+    panel.querySelectorAll('img[data-pic]').forEach((img) => {
+      const [kind, id] = img.dataset.pic.split('|');
+      const item = getGearById(LISTS[kind] || [], id);
+      if (!item) return;
+      gearPicture(kind, item, (url) => {
+        if (!url) return;
+        img.src = url;
+        img.hidden = false;
+      });
     });
   }
 

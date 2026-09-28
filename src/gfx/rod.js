@@ -330,6 +330,9 @@ export function createPlayerRod(camera) {
   let threadPath = [];
   let threadGeo = null;
   let spinReelParts = () => {};
+  let reelGroup = null; // the reel on the rod (for Tackle Box pictures)
+  let rodTotal = 2; // tip to butt, metres on screen
+  let threadLine = null;
   let sFix = 1.45; // where the blank meets the handle
   let builtKey = '';
 
@@ -345,6 +348,7 @@ export function createPlayerRod(camera) {
 
     const T = onScreenLength(m.len);
     sFix = T - HANDLE_LEN[m.grip];
+    rodTotal = T;
     const rAt = (s) => m.tipR + (m.buttR - m.tipR) * Math.min(1, s / sFix);
     // Guides go on the same side as the reel, so the line runs straight up
     // the rod: on top for a baitcaster, underneath for spinning and fly
@@ -599,6 +603,7 @@ export function createPlayerRod(camera) {
     reel.group.scale.setScalar(rm.size || 1);
     reel.group.position.set(0, y(seatMid), onTop ? seatR : -seatR);
     parts.add(reel.group);
+    reelGroup = reel.group;
     reel.group.updateMatrix();
     spinReelParts = reel.spin;
     const from = reel.from.clone().applyMatrix4(reel.group.matrix);
@@ -608,6 +613,7 @@ export function createPlayerRod(camera) {
     threadGeo = new THREE.BufferGeometry().setFromPoints(threadPath.map((p) => p.rest));
     const threaded = new THREE.Line(threadGeo, new THREE.LineBasicMaterial({ color: rm.style === 'fly' ? 0xd4dc70 : 0xf2f2ea, transparent: true, opacity: 0.8 }));
     threaded.frustumCulled = false;
+    threadLine = threaded;
     parts.add(threaded);
 
     frame.position.copy(handAt).addScaledVector(axis, -(T - hold));
@@ -812,5 +818,8 @@ export function createPlayerRod(camera) {
   }
 
   setRod(null, null);
-  return { rodGroup, setRod, tip, spinReel, restTilt, update, getBend: () => bend.length() };
+  // For Tackle Box pictures: the rod's frame (tip at the origin, butt down
+  // -Y), its reel, and where the blank meets the handle.
+  const parts3d = () => ({ frame, reel: reelGroup, line: threadLine, handleStart: sFix, total: rodTotal });
+  return { rodGroup, setRod, tip, spinReel, restTilt, update, getBend: () => bend.length(), parts3d };
 }

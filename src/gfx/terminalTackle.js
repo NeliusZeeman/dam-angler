@@ -69,7 +69,7 @@ const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // A single hook: eye at the origin, shank down -Y, bend curling toward +Z
 // and the point back up.
-function hook(L = 0.03, gap = 0.008, material = METAL(), wireR = 0.0012) {
+export function hook(L = 0.03, gap = 0.008, material = METAL(), wireR = 0.0012) {
   const g = new THREE.Group();
   g.add(new THREE.Mesh(new THREE.TorusGeometry(wireR * 2.2, wireR * 0.7, 5, 10), material)); // eye
   g.add(wire(v(0, -wireR * 2, 0), v(0, -L, 0), wireR, material));
