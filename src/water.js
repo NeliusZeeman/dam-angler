@@ -12,18 +12,29 @@ uniform float uTime;
 uniform sampler2D uShoreMap;
 uniform sampler2D uFarMap;
 uniform float uShoreRange;
+uniform float uShoreSamples;
 uniform mat4 uTextureMatrix;
 varying vec3 vWorldPos;
 varying vec4 vReflCoord;
 varying float vEdgeDist;
 varying float vEdgeRadius;
+// The shoreline maps are read texel by texel and blended here, not by the
+// GPU: smoothing 32-bit float textures isn't supported on every device
+// (some iPads return nothing, and the whole dam then looks like the shore).
+float shoreAt(sampler2D map, float u) {
+  float x = clamp(u, 0.0, 1.0) * (uShoreSamples - 1.0);
+  float i = floor(x);
+  float a = texture2D(map, vec2((i + 0.5) / uShoreSamples, 0.5)).r;
+  float b = texture2D(map, vec2((min(i + 1.0, uShoreSamples - 1.0) + 0.5) / uShoreSamples, 0.5)).r;
+  return mix(a, b, x - i);
+}
 void main() {
   vec4 wp = modelMatrix * vec4(position, 1.0);
   // Distance out from the nearer bank: the shorelines are stored as z for
   // each x (near bank, and the far bank across the dam).
   float u = wp.x / (2.0 * uShoreRange) + 0.5;
-  float nearZ = texture2D(uShoreMap, vec2(u, 0.5)).r;
-  float farZ = texture2D(uFarMap, vec2(u, 0.5)).r;
+  float nearZ = shoreAt(uShoreMap, u);
+  float farZ = shoreAt(uFarMap, u);
   float edgeDist = min(wp.z - nearZ, farZ - wp.z);
   float edge = 0.0;
   // Swell is damped to nothing at the bank so the waterline stays put.
@@ -144,8 +155,10 @@ function buildShoreMap(zAt, samples = 4096) {
   }
   const texture = new THREE.DataTexture(data, samples, 1, THREE.RedFormat, THREE.FloatType);
   texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearFilter;
+  // Nearest: plain float textures can always be read this way (the shader
+  // blends neighbouring texels itself -- see shoreAt).
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
@@ -198,6 +211,7 @@ export function createWater(scene, dam, {
     uShoreMap: { value: buildShoreMap(dam.shoreZ) },
     uFarMap: { value: buildShoreMap(dam.farShoreZ) },
     uShoreRange: { value: SHORE_RANGE },
+    uShoreSamples: { value: 4096 },
     uDepthScale: { value: dam.spec.depthSlope * 1.5 },
     uSunDir: { value: new THREE.Vector3(0.4, 0.8, 0.4).normalize() },
     uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },

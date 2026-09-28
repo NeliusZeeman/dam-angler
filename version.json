@@ -1,6 +1,6 @@
 {
-  "version": "ced009347c",
-  "built": "2026-09-27T17:02:24.736Z",
+  "version": "6fb7759785",
+  "built": "2026-09-28T11:04:57.161Z",
   "modules": [
     "src/accountPanel.js",
     "src/audio.js",
