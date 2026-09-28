@@ -339,7 +339,10 @@ export function createPlayerRod(camera) {
     const T = onScreenLength(m.len);
     sFix = T - HANDLE_LEN[m.grip];
     const rAt = (s) => m.tipR + (m.buttR - m.tipR) * Math.min(1, s / sFix);
-    const gs = m.seat === 'trigger' ? 1 : -1; // guide side: +1 on top
+    // Guides go on the same side as the reel, so the line runs straight up
+    // the rod: on top for a baitcaster, underneath for spinning and fly
+    // reels -- whichever rod it's fitted to.
+    const gs = rm.style === 'baitcaster' ? 1 : -1; // guide side: +1 on top
 
     function ride(obj, s) {
       riders.push({ obj, s, pos: obj.position.clone(), quat: obj.quaternion.clone() });
@@ -504,7 +507,7 @@ export function createPlayerRod(camera) {
         // Screw-down locking collar of a carp reel seat.
         for (let i = 0; i < 4; i++) band(u1 - 0.05 + i * 0.008, u1 - 0.045 + i * 0.008, r + 0.0042, r + 0.0042, seatMat);
       }
-      if (kind === 'trigger') {
+      if (kind === 'trigger' && gs > 0) {
         // Finger trigger hooking down under the seat.
         const trig = box(0.007, 0.012, 0.024, seatMat, 0, y(u0 + 0.02), -(r + 0.011));
         trig.rotation.x = -0.45;
