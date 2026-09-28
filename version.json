@@ -1,6 +1,6 @@
 {
-  "version": "392ab8b8f7",
-  "built": "2026-09-28T11:05:58.333Z",
+  "version": "2e2e94803e",
+  "built": "2026-09-28T11:26:59.346Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
@@ -28,6 +28,7 @@
     "src/gfx/post.js",
     "src/gfx/props.js",
     "src/gfx/rod.js",
+    "src/gfx/rodModels.js",
     "src/gfx/shoreline.js",
     "src/gfx/terrain.js",
     "src/gfx/trees.js",

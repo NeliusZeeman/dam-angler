@@ -24,7 +24,9 @@ function haul() {
 
 {
   // The snap point is read live: raise it out of reach and hauling can't snap the line.
-  assert.equal(haul() === 'line-snapped' || haul() === 'hook-straightened', true, 'built-in: hauling a 7 kg carp on starter gear breaks something');
+  // Fights are random (a hook can also pull out first), so give it a few goes.
+  const breaks = Array.from({ length: 8 }, haul).some((r) => r === 'line-snapped' || r === 'hook-straightened');
+  assert.equal(breaks, true, 'built-in: hauling a 7 kg carp on starter gear breaks something');
   ENGINE.fight.snapAt = 5;
   ENGINE.fight.haulOver = 0.35;
   const r = haul();

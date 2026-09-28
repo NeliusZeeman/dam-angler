@@ -268,13 +268,13 @@ function startGame(locationId, startTimeOfDay) {
     activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
     activeLureId = save.equippedLureId || LURES[0].id;
     refreshRig();
-    playerRod.setRod(activeRod);
+    playerRod.setRod(activeRod, activeReel);
     if (typeof save.drag === 'number') {
       minigame.setDrag(save.drag);
       hud.setDrag(save.drag, activeLine.breakKg);
     }
   }
-  playerRod.setRod(activeRod);
+  playerRod.setRod(activeRod, activeReel);
 
   const rawTackleBox = createTackleBox({ container: appEl, save, onSaveChanged, onBuy: (kind, id) => cloud.queueBuy(kind, id) });
 
