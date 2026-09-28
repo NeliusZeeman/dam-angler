@@ -28,6 +28,8 @@ const FLICK_POWER_MAX = 0.35;
 // Float physics: a buoyancy spring toward the water surface, lightly damped
 // so it bobs a few times after landing or being twitched.
 const FLOAT_REST = 0.005; // black band sits right on the waterline
+const FLOAT_TOP = 0.155; // float's antenna tip above its waterline band
+const FLOAT_KEEL = 0.075; // and its keel below
 const FLOAT_K = 110;
 const FLOAT_DAMP = 5;
 
@@ -56,8 +58,13 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   const bobber = new THREE.Group();
   const floatMesh = createFloatMesh();
   const tackle = createTerminalTackle();
-  bobber.add(floatMesh, tackle.group);
-  bobber.visible = false;
+  // Short length of line joining the float (or the line's end) to the bait.
+  const leaderGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  const leader = new THREE.Line(leaderGeo, new THREE.LineBasicMaterial({ color: 0xf2f2ea, transparent: true, opacity: 0.75 }));
+  leader.frustumCulled = false;
+  bobber.add(floatMesh, tackle.group, leader);
+  // The rig hangs off the rod tip whenever it isn't cast out.
+  bobber.visible = true;
   scene.add(bobber);
   let tackleY = 0;
   const toRod = new THREE.Vector3();
@@ -86,7 +93,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   const line = new THREE.Mesh(lineGeo, lineMat);
   line.frustumCulled = false;
   line.renderOrder = 20; // after the (transparent) water surface
-  line.visible = false;
+  line.visible = true;
   scene.add(line);
   const ribbonTangent = new THREE.Vector3();
   const ribbonView = new THREE.Vector3();
@@ -340,8 +347,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     flyCast = null;
     bobber.rotation.set(0, 0, 0);
     floatVy = 0;
-    bobber.visible = false;
-    line.visible = false;
+    bobber.visible = true;
+    line.visible = true;
     twitchOffset.set(0, 0, 0);
     fightOffset.set(0, 0, 0);
     fightProfile = null;
@@ -550,14 +557,22 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     const rig = tackle.set(getLure());
     tackle.setBaitOn(!isBareHook());
     floatMesh.visible = rig === 'float';
-    const inWater = bobber.visible && phase !== 'inAir' && phase !== 'hanging' && isPointInWater(bobber.position);
+    const inWater = bobber.visible && phase !== 'inAir' && phase !== 'hanging' && phase !== 'idle' && phase !== 'aiming' && isPointInWater(bobber.position);
+    // Out of the water the float hangs from the line by its top eye, the
+    // bait dangling a hand's length below it; in, it stands at the waterline.
+    floatMesh.position.y = rig === 'float' && !inWater ? -FLOAT_TOP : 0;
     let y;
-    if (rig === 'float') y = inWater ? -0.3 : -0.1;
+    if (rig === 'float') y = inWater ? -0.3 : -FLOAT_TOP - FLOAT_KEEL - 0.12;
     else if (!inWater) y = 0;
     else y = { bottom: -0.6, lure: -0.018, surface: -0.004, fly: -0.012 }[rig] ?? 0;
     const rate = rig === 'bottom' && inWater ? 1.5 : 14;
     tackleY += (y - tackleY) * Math.min(1, dt * rate);
     tackle.group.position.y = tackleY;
+    const top = rig === 'float' ? floatMesh.position.y - FLOAT_KEEL : 0;
+    const lp = leaderGeo.getAttribute('position');
+    lp.setXYZ(0, 0, top, 0);
+    lp.setXYZ(1, 0, Math.min(top, tackleY), 0);
+    lp.needsUpdate = true;
     const swim = inWater && rig !== 'float';
     if (swim) {
       toRod.subVectors(rodTipWorld, bobber.position);
@@ -760,7 +775,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       updateLineCurve(0.05); // taut while actively reeled
     }
 
-    if (phase === 'hanging') {
+    if (phase === 'hanging' || phase === 'idle' || phase === 'aiming') {
       bobber.position.copy(rodTipWorld).add(hangOffset);
       bobber.rotation.set(0, 0, 0);
       updateLineCurve(0.02);
@@ -956,6 +971,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   }
 
   function isBobberInWater() {
+    // Hanging off the rod tip before a cast isn't fishing.
+    if (phase === 'idle' || phase === 'aiming') return false;
     return bobber.visible && isPointInWater(bobber.position);
   }
 

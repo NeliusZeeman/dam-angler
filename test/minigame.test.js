@@ -233,4 +233,27 @@ const carp = FISH_SPECIES.find((f) => f.id === 'common-carp');
   console.log('PASS: a fish is only landed once it is brought in to you');
 }
 
+{
+  // A bass jumps while you keep winding: with the rod tip dropped it throws
+  // the hook far less often than with the rod held high.
+  const bass = FISH_SPECIES.find((f) => f.id === 'largemouth-bass');
+  const thrown = (lift) => {
+    let n = 0;
+    for (let i = 0; i < 400; i++) {
+      const mg = createMinigame();
+      let result = null;
+      mg.start({ species: bass, weightKg: 1.5, ...starter, onSuccess: () => {}, onFailure: (r) => { result = r; } });
+      mg.setRodLift(lift);
+      mg.setHolding(true);
+      mg.jump(1.2);
+      for (let t = 0; t < 30 && mg.isActive(); t++) mg.update(0.05);
+      if (result === 'threw-hook') n++;
+    }
+    return n;
+  };
+  const high = thrown(1), low = thrown(-1);
+  assert.ok(low < high * 0.6, `rod low should throw fewer (low ${low}, high ${high})`);
+  console.log(`PASS: dropping the rod tip in a jump keeps more fish on (thrown: high ${high}/400, low ${low}/400)`);
+}
+
 console.log('All minigame tests passed.');

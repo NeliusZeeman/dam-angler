@@ -49,7 +49,9 @@ export function diagnoseLoss(reason, info = {}, { rod, reel, line, hook, weightK
   } else if (reason === 'threw-hook') {
     title = 'It jumped and threw the hook';
     parts.hook = { status: 'fail', text: 'Shaken loose while it was in the air' };
-    parts.rod = { status: 'warn', text: 'Rod held high and winding during the jump' };
+    parts.rod = info.rodHighInJump
+      ? { status: 'warn', text: 'Rod held high during the jump' }
+      : { status: 'ok', text: 'Rod tip was down — it was the winding that did it' };
     tip = 'When it jumps, stop winding and drop the rod tip until it\'s back in the water. Circle and hair-rig hooks hold better.';
   } else if (reason === 'fish-escaped') {
     title = 'Slack line — it shook free';

@@ -8,6 +8,9 @@ export function createMinigame() {
   let tension = 0.35;
   let progress = 0;
   let holding = false;
+  // Rod angle, -1 (tip down at the water) .. 0 (normal) .. 1 (held high).
+  let rodLift = 0;
+  let highInJump = false;
   let slackTimer = 0;
   let runTimer = 0;
   let context = null;
@@ -49,6 +52,7 @@ export function createMinigame() {
   // barbel that takes a long time to tire (see fightMotion.fightStamina).
   function start({ species, weightKg, rod, line, hook = null, reel = null, onSuccess, onFailure, canLand = () => true, stamina = 1, drag: startDrag = null }) {
     landingBlocked = false;
+    highInJump = false;
     if (startDrag !== null) setDrag(startDrag);
     slipping = false;
     lastSpike = 99;
@@ -78,13 +82,19 @@ export function createMinigame() {
   function fail(reason) {
     active = false;
     context.onFailure(reason, {
-      holding, slipping, drag, airborne: airborne > 0, jolt: lastSpike < 0.35, stuckDrag,
+      holding, slipping, drag, airborne: airborne > 0, jolt: lastSpike < 0.35, stuckDrag, rodHighInJump: highInJump,
       rodLoad, hookLoad, lineLoad, rodOverloaded: rodOverloaded > 0.3,
     });
   }
 
   function setHolding(value) {
     holding = value;
+  }
+
+  // Where the rod tip is: high pumps a fish in faster, low keeps a jumping
+  // fish from shaking the hook against a tight line.
+  function setRodLift(value) {
+    rodLift = Math.max(-1, Math.min(1, value));
   }
 
   // A fish swimming away takes line off the reel against its drag: the line
@@ -105,6 +115,7 @@ export function createMinigame() {
     if (!active) return;
     airborne = durationSeconds;
     strainedInAir = 0;
+    highInJump = false;
   }
 
   function update(deltaSeconds) {
@@ -154,7 +165,9 @@ export function createMinigame() {
       const gain = slipping ? 0.45 + 0.55 * Math.min(1, (slipAt - 0.25) / (wantTarget - 0.25)) : 1;
       const rate = ENGINE.fight.reelTensionRate * 3 * style.load;
       tension += (holdTarget - tension) * Math.min(1, rate * deltaSeconds);
-      progress += (ENGINE.fight.progressRate * style.progressMul * gain / context.stamina) * deltaSeconds;
+      // Rod held high pumps the fish in; winding with the tip down gains less.
+      const pump = 1 + 0.2 * Math.max(0, rodLift) - 0.15 * Math.max(0, -rodLift);
+      progress += (ENGINE.fight.progressRate * style.progressMul * gain * pump / context.stamina) * deltaSeconds;
     } else if (fishPulling) {
       // Line peeling off against the drag: tight, but not climbing.
       // A tighter drag makes it work harder for every metre.
@@ -215,9 +228,12 @@ export function createMinigame() {
     // is safe (and doesn't count as slack -- the fish is in the air).
     if (airborne > 0) {
       airborne -= deltaSeconds;
+      // Dropping the rod tip gives the fish slack to jump against.
+      const low = Math.max(0, -rodLift);
+      if (rodLift > 0.2) highInJump = true;
       if (holding) {
-        tension += ENGINE.fight.jumpStrain * weightLoad * gearRelief * deltaSeconds;
-        strainedInAir += deltaSeconds;
+        tension += ENGINE.fight.jumpStrain * weightLoad * gearRelief * (1 - 0.6 * low) * deltaSeconds;
+        strainedInAir += deltaSeconds * (1 - 0.7 * low);
       }
       if (airborne <= 0 && strainedInAir > 0) {
         // A hook set deep in the corner of the mouth rarely shakes loose.
@@ -276,7 +292,7 @@ export function createMinigame() {
 
   function getState() {
     return {
-      tension: Math.min(1, tension), active, progress, holding, airborne: airborne > 0, landingBlocked, slack: slackTimer > 0.6,
+      tension: Math.min(1, tension), active, progress, holding, rodLift, airborne: airborne > 0, landingBlocked, slack: slackTimer > 0.6,
       drag, slipping, rodLoad, hookLoad, lineLoad, jolt: lastSpike < 0.35, stuckDrag: stuckDrag && lastSpike < 0.5,
     };
   }
@@ -285,5 +301,5 @@ export function createMinigame() {
     return active;
   }
 
-  return { start, update, getState, isActive, setHolding, setFishPulling, jump, setDrag, getDrag: () => drag };
+  return { start, update, getState, isActive, setHolding, setRodLift, setFishPulling, jump, setDrag, getDrag: () => drag };
 }

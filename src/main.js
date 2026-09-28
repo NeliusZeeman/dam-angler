@@ -242,7 +242,7 @@ function startGame(locationId, startTimeOfDay) {
     getFightInput: () => minigame.getState(),
     onFishJump: (point, duration) => {
       minigame.jump(duration);
-      hud.showToast('It jumps! Ease off — don\'t reel while it\'s in the air!');
+      hud.showToast('It jumps! Drop the rod tip and stop reeling till it\'s back in!');
     },
   });
   const touchControls = touchMode
@@ -780,6 +780,10 @@ function startGame(locationId, startTimeOfDay) {
       }
 
       casting.update(delta, envState);
+      // Playing a fish: the view follows it, and up/down moves the rod.
+      const fighting = casting.getState().phase === 'biting';
+      playerController.setFightTarget(fighting ? casting.bobberPosition : null);
+      minigame.setRodLift(fighting ? playerController.getRodLift() : 0);
       // A fish running away keeps the line tight against the drag.
       minigame.setFishPulling(!!casting.getFightFish()?.takingLine);
       rollBitesIfWaiting(delta);
@@ -830,8 +834,10 @@ function startGame(locationId, startTimeOfDay) {
         pullTarget = rodFishScratch.addScaledVector(rodAimScratch, -4).setY(rodFishScratch.y - 2.5);
         linePull = 0.04 + castState.power * 0.2;
       } else if (castState.phase === 'biting') {
-        // Rod held high against the fish, higher still while pumping it in.
-        rodPitch += 0.55 + (mgState.holding ? 0.15 : 0);
+        // Up/down moves the rod: tip right down at the water, up to held
+        // high for pumping the fish in.
+        const lift = playerController.getRodLift();
+        rodPitch += 0.35 + lift * (lift < 0 ? 0.9 : 0.6) + (mgState.holding ? 0.08 : 0);
         // A hooked fish loads the blank hard -- harder the more line tension.
         linePull = 0.15 + (mgState.tension || 0) * 0.4 + (mgState.holding ? 0.06 : 0);
         // Swing the rod a little toward wherever the fish is running.

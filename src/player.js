@@ -8,6 +8,11 @@ const DRAG_LOOK = 0.0035; // rad per pixel of right-button drag (mouse not captu
 // the window regains focus; a real flick never moves this far in one event.
 const MAX_MOUSE_STEP = 180;
 const PITCH_MIN = -1.25, PITCH_MAX = 1.0;
+// Playing a fish: up/down look moves the rod tip instead (about 300 px of
+// mouse travel from tip-down to held high) while the view follows the fish.
+const ROD_LIFT_PER_PIXEL = 0.0033;
+const FIGHT_PITCH_MIN = -0.75, FIGHT_PITCH_MAX = 0.25;
+const FIGHT_YAW_FREE = 0.12; // the fish can wander this far off centre before the view follows
 
 // Free roaming on the bank, first-person style. Click the game to capture the
 // mouse; from then on moving the mouse turns your head -- a full 360 degrees
@@ -22,6 +27,8 @@ export function createPlayerController({ camera, domElement, dam, turnSpeed = 1 
   let bob = 0;
   let dragging = false;
   const pressed = new Set();
+  let fightTarget = null; // world point to keep in view while playing a fish
+  let rodLift = 0; // -1 tip down at the water .. 1 held high
 
   // Pointer lock: the mouse is captured while you fish and released for menus.
   let locked = false;
@@ -75,6 +82,10 @@ export function createPlayerController({ camera, domElement, dam, turnSpeed = 1 
   function look(dx, dy, perPixel) {
     if (Math.abs(dx) > MAX_MOUSE_STEP || Math.abs(dy) > MAX_MOUSE_STEP) return;
     yaw = (yaw - dx * perPixel * turnSpeed) % (Math.PI * 2);
+    if (fightTarget) {
+      rodLift = Math.min(1, Math.max(-1, rodLift - dy * ROD_LIFT_PER_PIXEL * (perPixel / MOUSE_LOOK) * turnSpeed));
+      return;
+    }
     pitch = Math.min(PITCH_MAX, Math.max(PITCH_MIN, pitch - dy * perPixel * turnSpeed));
   }
   window.addEventListener('mousemove', (e) => {
@@ -122,6 +133,19 @@ export function createPlayerController({ camera, domElement, dam, turnSpeed = 1 
     // Step up onto a deck or over a bump smoothly rather than snapping.
     const targetY = dam.floorHeight(x, z) + EYE_HEIGHT;
     eyeY += (targetY - eyeY) * Math.min(1, dt * 10);
+    // Playing a fish: the view keeps the fish and the line in sight -- a
+    // little above it, so the rod and the water round the fish both show --
+    // however low or high you hold the rod.
+    if (fightTarget) {
+      const tx = fightTarget.x - x, tz = fightTarget.z - z;
+      const flat = Math.max(1, Math.hypot(tx, tz));
+      const wantPitch = Math.min(FIGHT_PITCH_MAX, Math.max(FIGHT_PITCH_MIN, Math.atan2(fightTarget.y - eyeY, flat) + 0.12));
+      pitch += (wantPitch - pitch) * Math.min(1, dt * 3);
+      let off = Math.atan2(-tx, -tz) - yaw;
+      off = Math.atan2(Math.sin(off), Math.cos(off));
+      if (Math.abs(off) > FIGHT_YAW_FREE) yaw += (off - Math.sign(off) * FIGHT_YAW_FREE) * Math.min(1, dt * 2.5);
+    }
+
     const bobY = moving ? Math.sin(bob) * 0.03 : 0;
     camera.position.set(x, eyeY + bobY, z);
     camera.rotation.set(pitch, yaw, 0, 'YXZ');
@@ -137,6 +161,13 @@ export function createPlayerController({ camera, domElement, dam, turnSpeed = 1 
     // Touch look: pixels dragged; perPixel defaults to the mouse feel.
     look: (dx, dy, perPixel = MOUSE_LOOK * 1.6) => look(dx, dy, perPixel),
     setStick: (x, y) => { stick.x = x; stick.y = y; },
+    // While playing a fish: keep `target` (a world point) in view and turn
+    // up/down look into rod height. null ends it.
+    setFightTarget: (target) => {
+      if (!!target !== !!fightTarget) rodLift = 0;
+      fightTarget = target;
+    },
+    getRodLift: () => rodLift,
     isLocked: () => locked,
     // Fires when the browser takes the mouse back (the Esc key), not when
     // we release it ourselves for a menu.
