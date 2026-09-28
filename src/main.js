@@ -702,7 +702,9 @@ function startGame(locationId, startTimeOfDay) {
       waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay, habitat, lureKind, chumBoost,
       // The right hook and line for the fish get more bites.
       gearBite: (s) => (activeHook.biteBonus?.[s.id] ?? 1) * (activeLine.biteBonus?.[s.id] ?? 1)
-        * (activeRod.biteBonus?.[s.id] ?? 1) * rig.biteFactor,
+        * (activeRod.biteBonus?.[s.id] ?? 1) * rig.biteFactor
+        // A baitrunner only helps with bait: the fish runs off with it freely.
+        * (currentLure().kind === 'bait' ? (activeReel.biteBonus?.[s.id] ?? 1) : 1),
     };
     const bite = rollDamBite(localSpecies, location.catchShare, { ...conditions, deltaSeconds: delta, biteChanceMultiplier });
     if (bite) {

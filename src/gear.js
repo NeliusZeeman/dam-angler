@@ -17,6 +17,8 @@
 // it reaches the line: moderate/through rods cushion lunges (why bass
 // crankbait rods are moderate action, and why carp rods fight "like a
 // bungee"), stiff fast rods pass the shock straight on.
+import { SHOP_RODS, SHOP_REELS, COMBO_RODS, COMBO_REELS, COMBOS as SHOP_COMBOS } from './gearCatalog.js';
+
 export const RODS = [
   {
     id: 'rod-starter', maxKg: 5, name: 'Starter Rod (Fibreglass)', tier: 1, cost: 0, castSpeed: 17, spread: 4, tensionTolerance: 1.0,
@@ -85,6 +87,9 @@ export const RODS = [
     action: 'fast', power: 'heavy', flex: { length: 0.6, softness: 0.6 }, shockAbsorb: 0.1,
     look: { blank: 0x121216, wrap: 0xc9a13a },
   },
+  // Real rods from SA tackle shops (gearCatalog.js).
+  ...SHOP_RODS,
+  ...COMBO_RODS,
 ];
 
 // Lines as SA tackle shops sell them, with their real breaking strains.
@@ -182,7 +187,13 @@ export const REELS = [
   // Origin II 5/6/7 ~R3,500.
   { id: 'reel-fly', name: 'Fly Reel 5/6 (Click & Pawl)', tier: 2, cost: 220, castMultiplier: 1.0, dragBonus: 0.12, fly: true, note: 'Holds the fly line. Fly rod only (SA shops ~R1,200)' },
   { id: 'reel-fly-disc', name: 'Machined Fly Reel 5/6/7 (Sealed Disc Drag)', tier: 3, cost: 650, castMultiplier: 1.0, dragBonus: 0.3, fly: true, note: 'Smooth drag for big yellows and trout runs (SA shops ~R3,500)' },
+  // Real reels from SA tackle shops (gearCatalog.js).
+  ...SHOP_REELS,
+  ...COMBO_REELS,
 ];
+
+// Rod-and-reel combos, sold as a pair: buying one gives you both.
+export const COMBOS = SHOP_COMBOS;
 
 // Hooks and rigs, as SA anglers use them.
 //   strengthKg  roughly the pull a hook takes before a fine wire opens up
@@ -398,7 +409,7 @@ const SECTIONS_OF = {
 };
 // Anything new and unlisted shows under General until it's given a home.
 export function sectionsFor(item) {
-  return SECTIONS_OF[item.id] || ['general'];
+  return SECTIONS_OF[item.id] || item.sections || ['general'];
 }
 
 // Does this rig belong together? Wrong pairings still work, just badly:

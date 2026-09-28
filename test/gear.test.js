@@ -1,9 +1,13 @@
 import assert from 'node:assert';
-import { RODS, LINES, REELS, HOOKS, LURES, getGearById } from '../src/gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, COMBOS, getGearById } from '../src/gear.js';
 import { FISH_SPECIES } from '../src/fish.js';
 
+// The game's own rods (the balance below is about them) and the real shop
+// rods from gearCatalog.js, which follow their spec sheets instead.
+const BASE_RODS = RODS.filter((r) => !r.priceR);
+
 {
-  assert.strictEqual(RODS.length, 9);
+  assert.strictEqual(BASE_RODS.length, 9);
   assert.ok(LINES.length >= 6, 'a real range of lines');
   for (const line of LINES) {
     assert.ok(line.breakKg > 0 && ['mono', 'braid', 'fluoro', 'fly'].includes(line.type), `${line.id} has a breaking strain and a line type`);
@@ -44,17 +48,17 @@ import { FISH_SPECIES } from '../src/fish.js';
   // a fast spinning rod; the heavy barbel/tiger rod is the stiffest of all.
   assert.ok(byId('rod-bass').flex.softness > byId('rod-spinning').flex.softness);
   assert.ok(byId('rod-bass').shockAbsorb > byId('rod-spinning').shockAbsorb);
-  assert.ok(RODS.every((r) => r.flex.softness >= byId('rod-heavy').flex.softness));
+  assert.ok(BASE_RODS.every((r) => r.flex.softness >= byId('rod-heavy').flex.softness));
   // Casting: the 12ft carp rod throws furthest, the fibreglass starter least;
   // the bass rod gives up a little distance for the tightest accuracy.
-  assert.ok(RODS.every((r) => r.castSpeed <= byId('rod-carp').castSpeed));
-  assert.ok(RODS.every((r) => r.castSpeed >= byId('rod-starter').castSpeed));
-  assert.ok(RODS.every((r) => r.spread >= byId('rod-bass').spread));
+  assert.ok(BASE_RODS.every((r) => r.castSpeed <= byId('rod-carp').castSpeed));
+  assert.ok(RODS.every((r) => r.castSpeed >= byId('rod-starter').castSpeed), 'nothing casts worse than the fibreglass starter');
+  assert.ok(BASE_RODS.every((r) => r.spread >= byId('rod-bass').spread));
   console.log('PASS: rod action/power match real freshwater rods');
 }
 
 {
-  const sortedRods = [...RODS].sort((a, b) => a.tier - b.tier);
+  const sortedRods = [...BASE_RODS].sort((a, b) => a.tier - b.tier);
   for (let i = 1; i < sortedRods.length; i++) {
     assert.ok(sortedRods[i].cost > sortedRods[i - 1].cost, 'rod cost should increase with tier');
     assert.ok(sortedRods[i].tensionTolerance >= sortedRods[i - 1].tensionTolerance, 'tension tolerance should not decrease with tier');
@@ -133,7 +137,8 @@ import { FISH_SPECIES } from '../src/fish.js';
   // Better reels cast further and fight better; braid casts further than
   // the starter line. This is what makes upgrades feel like upgrades.
   // (Fly reels only hold line -- they're checked with the fly gear below.)
-  const castingReels = REELS.filter((r) => !r.fly);
+  // (The real shop reels follow their spec sheets -- checked further down.)
+  const castingReels = REELS.filter((r) => !r.fly && !r.priceR);
   assert.ok(castingReels.length >= 3);
   const sortedReels = [...castingReels].sort((a, b) => a.tier - b.tier);
   for (let i = 1; i < sortedReels.length; i++) {
@@ -207,4 +212,41 @@ console.log('All gear tests passed.');
     assert.ok(SPECIES.some((s) => s.preferredLureIds.includes(lure.id)), `no fish takes ${lure.id}`);
   }
   console.log(`PASS: all ${LURES.length} baits and lures catch something`);
+}
+
+{
+  // Real shop gear (gearCatalog.js): stats follow the spec sheets.
+  const shopRods = RODS.filter((r) => r.priceR && !r.comboOnly);
+  const shopReels = REELS.filter((r) => r.priceR && !r.comboOnly);
+  assert.ok(shopRods.length >= 25 && shopReels.length >= 24, 'the Jacita rods and reels are in');
+  const ids = new Set([...RODS, ...REELS].map((i) => i.id));
+  assert.strictEqual(ids.size, RODS.length + REELS.length, 'no two items share an id');
+  for (const item of [...shopRods, ...shopReels]) {
+    assert.ok(item.cost > 0 && item.tier >= 1 && item.tier <= 3, `${item.id} has a price and tier`);
+    assert.ok(!/\d\s*(ft|lb|oz)|\d'|"/.test(item.name + item.note), `${item.id} shows metric units only: ${item.name}`);
+    assert.ok(item.model, `${item.id} has its own look`);
+  }
+  const byId = (id) => getGearById(RODS, id);
+  // Longer carp rods cast further; a higher test curve is a stronger rod.
+  assert.ok(byId('rod-mitchell-catapult-pro').castSpeed > byId('rod-adrenalin-carp-killer').castSpeed);
+  assert.ok(byId('rod-sensation-dc-booster').maxKg > byId('rod-adrenalin-eco-tech').maxKg);
+  // Casting rods are the accurate ones; tiger rods are built for tigers.
+  assert.ok(byId('rod-okuma-hakai-cast').spread < byId('rod-daiwa-black-spin').spread);
+  assert.ok(byId('rod-shimano-beastmaster-tiger').biteBonus.tigerfish > 1);
+  // A dearer rod never costs fewer credits.
+  const byPrice = [...shopRods].sort((a, b) => a.priceR - b.priceR);
+  for (let i = 1; i < byPrice.length; i++) assert.ok(byPrice[i].cost >= byPrice[i - 1].cost, `${byPrice[i].id} priced in line with the shop`);
+  // More drag, better drag bonus (same brand class); baitrunners help with bait fish.
+  const reel = (id) => getGearById(REELS, id);
+  assert.ok(reel('reel-okuma-ls-8k').dragBonus > reel('reel-adrenalin-q3000').dragBonus);
+  assert.ok(reel('reel-okuma-ls-8k').castMultiplier > reel('reel-adrenalin-q3000').castMultiplier, 'long-cast big pit spool casts further');
+  assert.ok(reel('reel-okuma-longbow-xr').baitrunner && reel('reel-okuma-longbow-xr').biteBonus['common-carp'] > 1);
+  assert.ok(!reel('reel-shimano-slx-dc').baitrunner);
+  // Combos: each one's rod and reel exist and are sold only with it.
+  assert.ok(COMBOS.length >= 12);
+  for (const c of COMBOS) {
+    assert.ok(byId(c.rodId)?.comboOnly && reel(c.reelId)?.comboOnly, `${c.id} rod and reel exist`);
+    assert.ok(c.cost > 0, `${c.id} has a price`);
+  }
+  console.log(`PASS: ${shopRods.length} shop rods, ${shopReels.length} shop reels and ${COMBOS.length} combos follow their real specs`);
 }

@@ -84,7 +84,7 @@ function discX(r0, r1, w, mat, radial = 28) {
   return new THREE.Mesh(geo, mat);
 }
 
-function spinningReel(M, big) {
+function spinningReel(M, big, baitrunner = false) {
   const d = big
     ? { body: 0.037, rotor: 0.035, rotorLow: 0.027, rotorH: 0.034, spoolH: 0.05, spoolBack: 0.035, spoolFront: 0.028, z: -0.088, drag: 0.017, dragH: 0.02, arm: 0.078, knob: 0.0085, knobLen: 0.03, bail: 0.0019 }
     : { body: 0.03, rotor: 0.029, rotorLow: 0.022, rotorH: 0.03, spoolH: 0.026, spoolBack: 0.024, spoolFront: 0.024, z: -0.068, drag: 0.009, dragH: 0.012, arm: 0.055, knob: 0.006, knobLen: 0.022, bail: 0.0013 };
@@ -149,6 +149,13 @@ function spinningReel(M, big) {
   knob.rotation.z = Math.PI / 2;
   knob.position.set(0.021 + d.knobLen / 2, 0, -d.arm * 0.9);
   crank.add(shaft, arm, knob);
+  if (baitrunner) {
+    // The free-spool lever at the back: flick it and a fish can take line
+    // without feeling the drag.
+    const lever = box(0.006, 0.026, 0.005, M.trim, 0, -0.045, z + d.body * 0.35);
+    lever.rotation.x = 0.5;
+    g.add(lever, box(0.012, 0.012, 0.012, M.reel, 0, -0.036, z + d.body * 0.2));
+  }
   g.add(crank);
 
   return {
@@ -515,6 +522,8 @@ export function createPlayerRod(camera) {
       }
     }
 
+    // Reel seat: trigger (casting rods), screw-lock (carp) or plain spinning.
+    const sk = m.seat === 'trigger' ? 'trigger' : m.seat === 'screw' ? 'screw' : 'spinning';
     let seatMid, hold, seatR;
     switch (m.grip) {
       case 'splitCork':
@@ -523,28 +532,28 @@ export function createPlayerRod(camera) {
         winding(0.075, 0.013);
         winding(0.186, 0.012);
         band(0.19, 0.26, 0.0128, 0.013, corkMat);
-        seatR = 0.0105; seat(0.26, 0.37, seatR);
+        seatR = 0.0105; seat(0.26, 0.37, seatR, sk);
         band(0.37, 0.46, 0.0122, 0.009, corkMat);
         seatMid = hold = 0.315;
         break;
       case 'fullCork':
         cap(0.015, 0.0165);
         lathe(0.015, 0.36, (t) => 0.0157 + 0.0012 * Math.sin(Math.PI * t), corkMat);
-        seatR = 0.012; seat(0.36, 0.48, seatR);
+        seatR = 0.012; seat(0.36, 0.48, seatR, sk);
         lathe(0.48, 0.6, (t) => 0.0145 - 0.0042 * t, corkMat);
         seatMid = hold = 0.42;
         break;
       case 'longEva':
         cap(0.022, 0.0195);
         band(0.022, 0.42, 0.0172, 0.0165, gripMat);
-        seatR = 0.0132; seat(0.42, 0.55, seatR);
+        seatR = 0.0132; seat(0.42, 0.55, seatR, sk);
         band(0.55, 0.73, 0.0165, 0.0132, gripMat);
         seatMid = hold = 0.485;
         break;
       case 'shrink':
         cap(0.015, 0.0158);
         band(0.015, 0.5, 0.0146, 0.0142, gripMat);
-        seatR = 0.0125; seat(0.5, 0.63, seatR, 'screw');
+        seatR = 0.0125; seat(0.5, 0.63, seatR, sk);
         band(0.63, 0.74, 0.0142, 0.0118, gripMat);
         seatMid = hold = 0.565;
         break;
@@ -553,7 +562,7 @@ export function createPlayerRod(camera) {
         band(0.014, 0.09, 0.0155, 0.0145, gripMat);
         winding(0.09, 0.0138);
         band(0.2, 0.27, 0.0136, 0.014, gripMat);
-        seatR = 0.0115; seat(0.27, 0.38, seatR, 'trigger');
+        seatR = 0.0115; seat(0.27, 0.38, seatR, sk);
         band(0.38, 0.45, 0.0128, 0.0102, gripMat);
         seatMid = hold = 0.325;
         break;
@@ -577,7 +586,7 @@ export function createPlayerRod(camera) {
       default: // foam
         cap(0.015, 0.016);
         band(0.015, 0.3, 0.0158, 0.0148, gripMat);
-        seatR = 0.0118; seat(0.3, 0.42, seatR);
+        seatR = 0.0118; seat(0.3, 0.42, seatR, sk);
         band(0.42, 0.52, 0.0148, 0.0122, gripMat);
         seatMid = hold = 0.36;
     }
@@ -585,7 +594,7 @@ export function createPlayerRod(camera) {
     // ── Reel ──
     const reel = rm.style === 'baitcaster' ? baitcaster(M)
       : rm.style === 'fly' ? flyReel(M, rm.arbor === 'large')
-        : spinningReel(M, rm.style === 'bigpit');
+        : spinningReel(M, rm.style === 'bigpit', !!rm.baitrunner);
     const onTop = rm.style === 'baitcaster';
     reel.group.scale.setScalar(rm.size || 1);
     reel.group.position.set(0, y(seatMid), onTop ? seatR : -seatR);
@@ -765,8 +774,13 @@ export function createPlayerRod(camera) {
 
   // Dress the rod as the equipped rod and reel.
   function setRod(rod, reel) {
-    const m = ROD_MODELS[rod?.id] || ROD_MODELS[rod?.fly ? 'rod-fly' : DEFAULT_ROD];
-    const rm = REEL_MODELS[reel?.id] || REEL_MODELS[rod?.fly ? 'reel-fly' : DEFAULT_REEL];
+    // Shop rods and reels carry their own look on top of a base model.
+    const m = ROD_MODELS[rod?.id]
+      || (rod?.model && { ...ROD_MODELS[rod.model.base || DEFAULT_ROD], ...rod.model })
+      || ROD_MODELS[rod?.fly ? 'rod-fly' : DEFAULT_ROD];
+    const rm = REEL_MODELS[reel?.id]
+      || (reel?.model && { size: 1, bodyMetal: 0.5, ...reel.model })
+      || REEL_MODELS[rod?.fly ? 'reel-fly' : DEFAULT_REEL];
     const key = `${rod?.id}|${reel?.id}`;
     if (key !== builtKey) {
       build(m, rm);
@@ -783,6 +797,7 @@ export function createPlayerRod(camera) {
     if (m.seatWood) woodMat.color.set(m.seatWood);
     M.reel.color.set(rm.body);
     M.reel.metalness = rm.bodyMetal;
+    M.knob.color.set(rm.knob ?? 0x151515);
     M.accent.color.set(rm.accent);
     M.trim.color.set(rm.trim);
     flexFeel = rod?.flex?.length ?? 0.8;

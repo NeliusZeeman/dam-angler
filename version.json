@@ -1,6 +1,6 @@
 {
-  "version": "bc75b92264",
-  "built": "2026-09-28T17:11:40.289Z",
+  "version": "5d5c78a512",
+  "built": "2026-09-28T19:16:46.260Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
@@ -20,6 +20,7 @@
     "src/fish.js",
     "src/fish3d.js",
     "src/gear.js",
+    "src/gearCatalog.js",
     "src/gfx/atmosphere.js",
     "src/gfx/grass.js",
     "src/gfx/life.js",

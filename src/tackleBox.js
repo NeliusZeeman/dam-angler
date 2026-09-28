@@ -1,4 +1,4 @@
-import { RODS, LINES, REELS, HOOKS, LURES, getGearById, rigCheck, TACKLE_SECTIONS, sectionsFor } from './gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, COMBOS, getGearById, rigCheck, TACKLE_SECTIONS, sectionsFor } from './gear.js';
 
 // `onBuy(kind, id)`: a purchase was made (the online server checks it).
 export function createTackleBox({ container, save, onSaveChanged, onBuy = () => {} }) {
@@ -7,8 +7,12 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
   container.appendChild(panel);
 
   function renderSection(title, items, ownedIds, equippedId, kind) {
-    // Items taken out of the shop (admin tuning) only show for those who own them.
-    const rows = items.filter((item) => item.inShop !== false || ownedIds.includes(item.id)).map((item) => {
+    if (kind === 'combo') return renderCombos(title, items);
+    // Items taken out of the shop (admin tuning) only show for those who own
+    // them, and a combo's own rod or reel only once you have it. Cheapest
+    // first.
+    const shown = items.filter((item) => (item.inShop !== false && !item.comboOnly) || ownedIds.includes(item.id));
+    const rows = shown.sort((a, b) => a.cost - b.cost).map((item) => {
       const owned = ownedIds.includes(item.id);
       const equipped = equippedId === item.id;
       const label = owned ? (equipped ? 'In tackle box' : 'Use') : `Buy (${item.cost})`;
@@ -18,11 +22,30 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
       const lineSpec = item.breakKg ? `${{ mono: 'Mono', braid: 'Braid', fluoro: 'Fluorocarbon', fly: item.sinking ? 'Sinking fly line' : 'Floating fly line' }[item.type] || ''} · breaks at ${item.breakKg} kg` : '';
       const hookSpec = item.strengthKg ? `Holds fish to ~${item.strengthKg} kg` : '';
       const specText = [lineSpec || hookSpec, item.note].filter(Boolean).join(' · ');
-      const spec = item.action ? `<small class="shop-spec">${item.action} action · ${item.power} power${item.note ? `<span class="shop-note"> · ${item.note}</span>` : ''}</small>`
+      // Shop rods and reels (gearCatalog.js) carry their real specs in the note.
+      const spec = item.priceR ? `<small class="shop-spec shop-note">${item.note}</small>`
+        : item.action ? `<small class="shop-spec">${item.action} action · ${item.power} power${item.note ? `<span class="shop-note"> · ${item.note}</span>` : ''}</small>`
         : specText ? `<small class="shop-spec shop-note">${specText}</small>` : '';
       return `<div class="shop-row">
         <span>${item.name}${spec}</span>
         <button data-kind="${kind}" data-id="${item.id}" ${disabled ? 'disabled' : ''}>${label}</button>
+      </div>`;
+    }).join('');
+    return `<h3>${title}</h3>${rows}`;
+  }
+
+  // Combos: one price for a rod and reel sold together. "Use" rigs both.
+  const hasCombo = (c) => save.ownedRodIds.includes(c.rodId) && save.ownedReelIds.includes(c.reelId);
+  function renderCombos(title, items) {
+    const rows = items.filter((c) => c.inShop !== false || hasCombo(c)).sort((a, b) => a.cost - b.cost).map((c) => {
+      const owned = hasCombo(c);
+      const rigged = save.equippedRodId === c.rodId && save.equippedReelId === c.reelId;
+      const label = owned ? (rigged ? 'In tackle box' : 'Use') : `Buy (${c.cost})`;
+      const disabled = (!owned && save.credits < c.cost) || rigged;
+      const rod = getGearById(RODS, c.rodId), reel = getGearById(REELS, c.reelId);
+      return `<div class="shop-row">
+        <span>${c.name}<small class="shop-spec shop-note">${c.note}<br>Rod: ${rod.note}<br>Reel: ${reel.note}</small></span>
+        <button data-kind="combo" data-id="${c.id}" ${disabled ? 'disabled' : ''}>${label}</button>
       </div>`;
     }).join('');
     return `<h3>${title}</h3>${rows}`;
@@ -38,6 +61,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     { kind: 'reel', label: 'Reels', title: 'Reels', items: () => REELS, owned: () => save.ownedReelIds, equipped: () => save.equippedReelId },
     { kind: 'line', label: 'Line', title: 'Lines', items: () => LINES, owned: () => save.ownedLineIds, equipped: () => save.equippedLineId },
     { kind: 'hook', label: 'Hooks', title: 'Hooks & Rigs', items: () => HOOKS, owned: () => save.ownedHookIds, equipped: () => save.equippedHookId },
+    { kind: 'combo', label: 'Combos', title: 'Rod & Reel Combos', items: () => COMBOS, owned: () => [], equipped: () => null },
   ];
   let activeTab = 'lure';
   let activeSection = 'general';
@@ -131,6 +155,21 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
   }
 
   function handleClick(kind, id) {
+    if (kind === 'combo') {
+      const c = COMBOS.find((x) => x.id === id);
+      if (!hasCombo(c)) {
+        if (save.credits < c.cost) return;
+        save.credits -= c.cost;
+        if (!save.ownedRodIds.includes(c.rodId)) save.ownedRodIds.push(c.rodId);
+        if (!save.ownedReelIds.includes(c.reelId)) save.ownedReelIds.push(c.reelId);
+        onBuy('combo', id);
+      }
+      save.equippedRodId = c.rodId;
+      save.equippedReelId = c.reelId;
+      onSaveChanged();
+      refresh();
+      return;
+    }
     const owned = ownedListFor(kind);
     const item = itemsFor(kind).find((i) => i.id === id);
     if (!owned.includes(id)) {

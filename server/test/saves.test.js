@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { newTestDb, startTestServer } from './helpers.js';
 import { catchPayout } from '../../src/economy.js';
 import { FISH_SPECIES } from '../../src/fish.js';
-import { RODS, LINES, HOOKS } from '../../src/gear.js';
+import { RODS, LINES, HOOKS, COMBOS } from '../../src/gear.js';
 import { GUEST_IMPORT_LIMIT } from '../saves.js';
 
 let db, srv;
@@ -83,6 +83,24 @@ test('buying: the real price, only with enough credits, and the gear is yours on
   // Now it can be rigged.
   await other.put('/api/me/save', { save: { ...rig, equippedRodId: 'rod-spinning' }, baseVersion: (await other.get('/api/me')).body.version });
   assert.equal((await other.get('/api/me')).body.save.equippedRodId, 'rod-spinning');
+});
+
+test('a combo: one price for the rod and reel, and its parts aren\'t sold on their own', async () => {
+  const p = await player();
+  const combo = COMBOS.find((c) => c.id === 'combo-okuma-fin-chaser');
+  assert.equal((await p.c.post('/api/me/buy', { kind: 'combo', itemId: combo.id })).status, 400, 'not without the credits');
+  const credits = await earn(p.c, 2);
+  const lone = await p.c.post('/api/me/buy', { kind: 'rod', itemId: combo.rodId });
+  assert.equal(lone.status, 400);
+  assert.match(lone.body.error, /combo/);
+  const buy = await p.c.post('/api/me/buy', { kind: 'combo', itemId: combo.id });
+  assert.equal(buy.status, 200);
+  assert.equal(buy.body.credits, credits - combo.cost);
+  const s = (await p.c.get('/api/me')).body.save;
+  assert.ok(s.ownedRodIds.includes(combo.rodId) && s.ownedReelIds.includes(combo.reelId), 'both are yours');
+  const twice = await p.c.post('/api/me/buy', { kind: 'combo', itemId: combo.id });
+  assert.equal(twice.body.credits, buy.body.credits, 'buying it again costs nothing');
+  assert.equal((await p.c.post('/api/me/buy', { kind: 'combo', itemId: 'combo-imaginary' })).status, 400);
 });
 
 test('breadcrumbs cost 15 credits, and not without them', async () => {

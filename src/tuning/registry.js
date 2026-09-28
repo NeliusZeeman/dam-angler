@@ -6,7 +6,7 @@
 // gear.rod.rod-carp.castSpeed, spot.jozini.share.tigerfish,
 // engine.fight.snapAt.
 import { FISH_SPECIES } from '../fish.js';
-import { RODS, LINES, REELS, HOOKS, LURES } from '../gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, COMBOS } from '../gear.js';
 import { LOCATIONS } from '../locations.js';
 import { FIGHT_STYLES } from '../fightMotion.js';
 import { ENGINE, ENGINE_DEFAULTS } from './engine.js';
@@ -57,9 +57,10 @@ const GEAR_FIELDS = {
     tensionBonus: { label: 'Fight bonus', unit: '', min: 0, max: 1, step: 0.01, hint: 'A well-set hook eases the fight a little.' },
   },
   lure: {},
+  combo: {},
 };
-const GEAR_LISTS = { rod: RODS, line: LINES, reel: REELS, hook: HOOKS, lure: LURES };
-const GEAR_GROUP = { rod: 'Rods', line: 'Lines', reel: 'Reels', hook: 'Hooks', lure: 'Baits' };
+const GEAR_LISTS = { rod: RODS, line: LINES, reel: REELS, hook: HOOKS, lure: LURES, combo: COMBOS };
+const GEAR_GROUP = { rod: 'Rods', line: 'Lines', reel: 'Reels', hook: 'Hooks', lure: 'Baits', combo: 'Combos' };
 
 const ENGINE_FIELDS = {
   bites: {
@@ -189,7 +190,7 @@ for (const [area, fields] of Object.entries(ENGINE_FIELDS)) {
 for (const t of TUNABLES) if (t.key.startsWith('engine.')) { const [, a, f] = t.key.split('.'); t.defaultValue = ENGINE_DEFAULTS[a][f]; }
 
 export const tunable = (key) => BY_KEY.get(key);
-export const GROUPS = ['Fish', 'Rods', 'Lines', 'Reels', 'Hooks', 'Baits', 'Spots', 'Game settings'];
+export const GROUPS = ['Fish', 'Rods', 'Lines', 'Reels', 'Combos', 'Hooks', 'Baits', 'Spots', 'Game settings'];
 
 // Checks a value for a key; returns the clean value or throws with a sentence.
 export function validateValue(key, value) {

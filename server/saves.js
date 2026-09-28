@@ -11,6 +11,7 @@
 import { GEAR, GEAR_FIELDS, STARTER, HttpError, cleanSave, cleanCatch, cleanCatchLog, isKnownGear, speciesById } from './validate.js';
 import { catchPayout } from '../src/economy.js';
 import { ENGINE } from '../src/tuning/engine.js';
+import { COMBOS } from '../src/gear.js';
 
 const inTx = (db, fn) => (db.transaction ? db.transaction(fn) : fn(db));
 const gearItem = (kind, id) => GEAR[kind]?.find((i) => i.id === id);
@@ -143,12 +144,15 @@ export async function recordCatch(db, userId, raw, { pay = true } = {}) {
 
 // Buys an item at its real price. Owning it already costs nothing.
 export async function buyItem(db, userId, kind, itemId) {
+  if (kind === 'combo') return buyCombo(db, userId, itemId);
   if (!isKnownGear(kind, itemId)) throw new HttpError(400, 'That item isn\'t in the tackle box.');
   const item = gearItem(kind, itemId);
   return inTx(db, async (tx) => {
     const have = (await tx.query('SELECT 1 FROM player_gear WHERE user_id = $1 AND kind = $2 AND item_id = $3', [userId, kind, itemId])).rows.length;
     // Taken out of the shop (admin tuning): nobody new can buy it.
     if (!have && item.inShop === false) throw new HttpError(400, `The ${item.name} isn't in the shop any more.`);
+    // A combo's own rod or reel only comes with the combo.
+    if (!have && item.comboOnly) throw new HttpError(400, `The ${item.name} only comes as part of its combo.`);
     if (have || item.cost === 0) {
       if (!have) await tx.query('INSERT INTO player_gear (user_id, kind, item_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [userId, kind, itemId]);
       return { credits: await creditsOf(tx, userId), bought: false };
@@ -156,6 +160,28 @@ export async function buyItem(db, userId, kind, itemId) {
     const credits = await changeCredits(tx, userId, -item.cost, 'buy', `${kind}:${itemId}`);
     if (credits === null) throw new HttpError(400, `Not enough credits for the ${item.name} (${item.cost}).`);
     await tx.query('INSERT INTO player_gear (user_id, kind, item_id) VALUES ($1, $2, $3)', [userId, kind, itemId]);
+    return { credits, bought: true };
+  });
+}
+
+// A rod-and-reel combo: one price, both items. Owning both already costs
+// nothing; owning only one still pays the combo price, as in the shop.
+export async function buyCombo(db, userId, comboId) {
+  const combo = COMBOS.find((c) => c.id === comboId);
+  if (!combo) throw new HttpError(400, 'That combo isn\'t in the tackle box.');
+  const parts = [['rod', combo.rodId], ['reel', combo.reelId]];
+  return inTx(db, async (tx) => {
+    let owned = 0;
+    for (const [kind, id] of parts) {
+      owned += (await tx.query('SELECT 1 FROM player_gear WHERE user_id = $1 AND kind = $2 AND item_id = $3', [userId, kind, id])).rows.length;
+    }
+    if (owned === parts.length) return { credits: await creditsOf(tx, userId), bought: false };
+    if (combo.inShop === false) throw new HttpError(400, `The ${combo.name} isn't in the shop any more.`);
+    const credits = await changeCredits(tx, userId, -combo.cost, 'buy', `combo:${comboId}`);
+    if (credits === null) throw new HttpError(400, `Not enough credits for the ${combo.name} (${combo.cost}).`);
+    for (const [kind, id] of parts) {
+      await tx.query('INSERT INTO player_gear (user_id, kind, item_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [userId, kind, id]);
+    }
     return { credits, bought: true };
   });
 }
