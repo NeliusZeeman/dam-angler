@@ -896,7 +896,9 @@ function startGame(locationId, startTimeOfDay) {
   }
 
   // Fish are all below the mirror plane, so skip them in the reflection pass.
-  const hiddenInReflection = [playerRod.rodGroup, ...fishSwarm];
+  // The fishing line is too thin to show a reflection; drawn in it, it looks
+  // like a second line running straight down into the water.
+  const hiddenInReflection = [playerRod.rodGroup, casting.lineMesh, ...fishSwarm];
   function renderFrame() {
     water.renderReflection(renderer, scene, camera, hiddenInReflection);
     post.render(scene, camera);

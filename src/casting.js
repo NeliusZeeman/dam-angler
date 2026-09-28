@@ -573,6 +573,12 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     lp.setXYZ(0, 0, top, 0);
     lp.setXYZ(1, 0, Math.min(top, tackleY), 0);
     lp.needsUpdate = true;
+    // Once in the water the line to a sunk bait (under a float, or a feeder
+    // on the bottom) goes out of sight with it, rather than hanging straight
+    // down through the surface.
+    const sunk = inWater && (rig === 'float' || rig === 'bottom');
+    leader.visible = !inWater;
+    tackle.group.visible = !(sunk && tackleY < -0.15);
     const swim = inWater && rig !== 'float';
     if (swim) {
       toRod.subVectors(rodTipWorld, bobber.position);
@@ -992,7 +998,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
   return {
     update, getState, onBite, triggerBite,
-    resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position,
+    resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position, lineMesh: line,
     updateAimFromPointer, aimPoint, onFightHold, isBobberInWater, getMouseOffset,
     getPredictedLanding: (out) => computeLanding(aimPoint, phase === 'aiming' ? power : 0, out || new THREE.Vector3()),
     getBobberHabitat: () => habitatAt(bobber.position),

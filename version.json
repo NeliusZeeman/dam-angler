@@ -1,6 +1,6 @@
 {
-  "version": "d9fdcf044e",
-  "built": "2026-09-28T16:58:46.390Z",
+  "version": "bc75b92264",
+  "built": "2026-09-28T17:11:40.289Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
