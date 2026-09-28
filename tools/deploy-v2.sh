@@ -10,10 +10,9 @@ APP=/home/nelius/online_app/dam-angler-v2
 branch=$(git branch --show-current)
 [ "$branch" = "v2" ] || { echo "On branch '$branch' -- switch to v2 first."; exit 1; }
 node --test "server/test/*.test.js" >/dev/null && node test/run-all.mjs >/dev/null || { echo "Tests failed -- not deploying."; exit 1; }
+# The server's game folder follows GitHub's master branch (= what's live).
 git push -q origin v2
+git push -q origin v2:master
 
 # -t: lets sudo ask for the server password if it needs to.
-ssh -t "$SERVER" "set -e; cd $APP && git pull -q --ff-only && bash tools/update-on-server.sh"
-
-# Live now: master on GitHub follows what is live.
-git push -q origin v2:master && echo "GitHub master now matches the live game."
+ssh -t "$SERVER" "set -e; cd $APP && git checkout -q master && git pull -q --ff-only && bash tools/update-on-server.sh"
