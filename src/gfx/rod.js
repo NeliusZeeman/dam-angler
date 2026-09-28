@@ -726,12 +726,13 @@ export function createPlayerRod(camera) {
     }
     if (targets.pullTarget && pullAmount > 0) {
       pull.subVectors(targets.pullTarget, tipWorld).normalize().applyQuaternion(frameQuat);
-      // Bend follows the sideways part of the line's pull. Even a line running
-      // nearly straight out along the blank still loads the tip, so keep a
-      // floor on it instead of letting the rod go dead straight.
+      // Bend follows the sideways part of the line's pull. A rod held high
+      // with the fish out in front bows right over; point it down the line
+      // at the fish (rod low) and the line pulls straight off the tip, so it
+      // barely bends -- just a small floor so the tip isn't dead straight.
       const side = Math.hypot(pull.x, pull.z);
       if (side > 1e-4) {
-        const load = pullAmount * Math.max(0.55, side) / side;
+        const load = pullAmount * Math.max(0.15, side) / side;
         tx = pull.x * load;
         tz = pull.z * load;
       }
