@@ -1,6 +1,6 @@
 {
-  "version": "21fd075544",
-  "built": "2026-09-28T20:16:23.337Z",
+  "version": "eb3a17faf7",
+  "built": "2026-10-27T18:54:03.013Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
@@ -47,6 +47,7 @@
     "src/scene.js",
     "src/spots.js",
     "src/startMenu.js",
+    "src/strike.js",
     "src/tackleBox.js",
     "src/tips.js",
     "src/touchControls.js",

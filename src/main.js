@@ -14,6 +14,7 @@ import { createCloud, createDisabledCloud, newCatchId } from './cloud.js';
 import { loadGameTuning } from './tuning/client.js';
 import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
+import { planTake, judgeStrike, takeExpired, takeLook } from './strike.js';
 import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble, showLossReport } from './ui.js';
 import { randomTip } from './tips.js';
 import { fightStamina, fightStrength } from './fightMotion.js';
@@ -180,6 +181,9 @@ function startGame(locationId, startTimeOfDay) {
   const playerRod = createPlayerRod(camera);
 
   window.addEventListener('resize', () => {
+    // A hidden or minimised window can report 0 x 0: keep the last shape
+    // rather than a 0/0 camera that aims every cast at nowhere.
+    if (!window.innerWidth || !window.innerHeight) return;
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -359,7 +363,9 @@ function startGame(locationId, startTimeOfDay) {
         : mg.active && mg.holding && !fish?.takingLine ? 1
           : cs.working ? 0.5 : 0,
       // The drag screams while a fish strips line.
-      dragRate: mg.active && fish?.takingLine ? 1 : 0,
+      dragRate: mg.active && fish?.takingLine ? 1
+        // A carp running off with the bait: the baitrunner screams.
+        : take?.real && take.plan.baitrunner && (take.plan.type === 'run' || take.plan.type === 'pull') ? 0.9 : 0,
       tension: mg.active ? mg.tension : 0,
     });
   }
@@ -472,7 +478,11 @@ function startGame(locationId, startTimeOfDay) {
       audio.setVolume(save.settings.volume);
       hud.showToast(on ? 'Sound off (M)' : 'Sound on (M)');
     }
-    if (e.code === 'Space') { minigame.setHolding(true); e.preventDefault(); }
+    if (e.code === 'Space') {
+      if (casting.getState().phase === 'take' && !e.repeat) casting.pressStart();
+      else minigame.setHolding(true);
+      e.preventDefault();
+    }
   });
   window.addEventListener('keyup', (e) => {
     if (e.code === 'Space') minigame.setHolding(false);
@@ -629,14 +639,62 @@ function startGame(locationId, startTimeOfDay) {
   }
 
   let forceTrophy = false; // dev hook: the next bite is a trophy
+  // A fish takes the bait -- not hooked yet. See strike.js.
+  let take = null; // { plan, species, t, warned, real }
+  let comeBackTimer = 0; // after a strike too early, the fish may come back
   function startBite(species) {
+    const plan = planTake({ species, lure: currentLure(), hook: activeHook, reel: activeReel });
+    if (!casting.triggerTake()) return;
+    take = { plan, species, t: 0, warned: false, real: false };
+  }
+  // Hooked: the fight starts.
+  function hookFish(species) {
+    take = null;
     audio.bite();
     bitingSpecies = species;
-    // The bite message first, so a trophy's "Something BIG" warning (shown
-    // as the fight starts) is the one left on screen.
-    if (species.bite) hud.showToast(species.bite.label + '!');
+    hud.showToast('Fish on!');
     casting.triggerBite(species.bite, species.id);
   }
+  function endTake(message) {
+    take = null;
+    casting.cancelTake();
+    if (message) hud.showToast(message);
+  }
+  function tickTake(delta) {
+    if (!take) return;
+    if (casting.getState().phase !== 'take') { take = null; return; }
+    take.t += delta;
+    const look = takeLook(take.plan, take.t);
+    casting.setTakeLook(look);
+    if (look.cue === 'false' && !take.warned) {
+      take.warned = true;
+      hud.showToast(take.plan.type === 'run' || take.plan.type === 'pull' ? 'The rod tip knocks… something’s at the bait' : 'Something’s at the bait…');
+    }
+    if (look.cue === 'real' && !take.real) {
+      take.real = true;
+      audio.bite();
+      hud.showToast(`${take.species.bite?.label || 'A take'}! Strike!`);
+    }
+    if (take.t > take.plan.end) {
+      const species = take.species;
+      if (takeExpired(take.plan) === 'selfHooked') { hookFish(species); return; }
+      const lure = currentLure();
+      endTake(`It dropped the bait.${take?.plan.type === 'hit' ? '' : ' Strike sooner!'}`);
+      // Soft baits get stripped off the hook by a fish that drops them.
+      const softBait = lure.soft || ['bread-bait', 'worm', 'dough-bait', 'sardine', 'mielies'].includes(lure.id);
+      if (softBait && Math.random() < 0.5) loseBait('was stripped off the hook');
+    }
+  }
+  casting.onStrike(() => {
+    if (!take) return;
+    const result = judgeStrike(take.plan, take.t, { species: take.species, hook: activeHook, lure: currentLure() });
+    if (result === 'hooked') hookFish(take.species);
+    else if (result === 'early') {
+      comeBackTimer = ENGINE.strike.comeBackSeconds;
+      endTake('Too early — you pulled the bait away. It might come back…');
+    } else if (result === 'missed') endTake(activeHook.id === 'hook-circle' ? 'Missed — with a circle hook, don’t strike: just start winding.' : 'Missed — the hook didn’t stick.');
+    else endTake('Too late — it dropped the bait.');
+  });
 
   // The hooked fish itself: hidden in the murk while it's deep, seen as it
   // comes up near the top, and in full view when it jumps.
@@ -697,7 +755,7 @@ function startGame(locationId, startTimeOfDay) {
     // bite becomes very likely well before the deadline without landing at a
     // predictable moment every time.
     const urgency = 1 + Math.pow(Math.min(1, waitElapsed / ENGINE.bites.guaranteeSeconds), 4) * 40;
-    const biteChanceMultiplier = (twitchBoostTimer > 0 ? 1.8 : 1) * urgency;
+    const biteChanceMultiplier = (twitchBoostTimer > 0 ? 1.8 : 1) * (comeBackTimer > 0 ? 3 : 1) * urgency;
     const conditions = {
       waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay, habitat, lureKind, chumBoost,
       // The right hook and line for the fish get more bites.
@@ -795,6 +853,8 @@ function startGame(locationId, startTimeOfDay) {
       // A fish running away keeps the line tight against the drag.
       minigame.setFishPulling(!!casting.getFightFish()?.takingLine);
       rollBitesIfWaiting(delta);
+      tickTake(delta);
+      comeBackTimer = Math.max(0, comeBackTimer - delta);
       tickTips(delta);
       touchControls?.update();
       updateFightFish(elapsed);
@@ -829,7 +889,7 @@ function startGame(locationId, startTimeOfDay) {
       // twitch flicks it up, and the release punches it forward and down.
       let rodPitch = playerRod.restTilt + mouse.y * 0.1 + rodRecoil - castSnap * 0.8;
       let rodYaw = -mouse.x * 0.12;
-      const lineOut = castState.phase === 'inAir' || castState.phase === 'waiting' || castState.phase === 'reeling' || castState.phase === 'biting';
+      const lineOut = castState.phase === 'inAir' || castState.phase === 'waiting' || castState.phase === 'reeling' || castState.phase === 'biting' || castState.phase === 'take';
       let linePull = 0;
       let pullTarget = lineOut ? casting.bobberPosition : null;
       if (castState.phase === 'aiming') {
@@ -861,6 +921,9 @@ function startGame(locationId, startTimeOfDay) {
         rodPitch = playerRod.restTilt + (fs.forward ? (fs.delivery ? -0.35 : -0.15) : 1.05);
         pullTarget = fs.pull;
         linePull = 0.05 + 0.12 * Math.sin(Math.PI * Math.min(1, fs.s * 1.6));
+      } else if (castState.phase === 'take') {
+        // The take: knocks on the rod tip, and the line loading on a run.
+        linePull = 0.02 + (take ? takeLook(take.plan, take.t).pull : 0);
       } else if (castState.phase === 'reeling') linePull = 0.06;
       else if (castState.phase === 'waiting') linePull = castState.working ? 0.07 : 0.015;
       else if (castState.phase === 'inAir') linePull = 0.02;
@@ -869,7 +932,7 @@ function startGame(locationId, startTimeOfDay) {
       if (casting.isBobberInWater()) {
         if (castState.phase === 'biting') lineDrag = 1;
         else if (castState.phase === 'reeling' || castState.working) lineDrag = 0.8;
-        else if (castState.phase === 'waiting') lineDrag = 0.6;
+        else if (castState.phase === 'waiting' || castState.phase === 'take') lineDrag = 0.6;
       }
       playerRod.update(delta, { pitch: rodPitch, yaw: rodYaw, pullTarget, pull: linePull, lineDrag });
       if (castState.phase === 'reeling' || castState.working || (mgState.active && mgState.holding)) {
@@ -940,10 +1003,16 @@ function startGame(locationId, startTimeOfDay) {
       }
     },
     // Dev hook: force a bite from a given local species (line must be out).
+    // Dev hook: a fish takes the bait (not hooked) -- strike to test timing.
+    debugForceTake: (speciesId) => {
+      const species = localSpecies.find((s) => s.id === speciesId) || localSpecies[0];
+      startBite(species);
+      return take?.plan;
+    },
     debugForceBite: (speciesId, { trophy = false } = {}) => {
       const species = localSpecies.find((s) => s.id === speciesId) || localSpecies[0];
       forceTrophy = trophy;
-      startBite(species);
+      hookFish(species);
     },
   };
 }

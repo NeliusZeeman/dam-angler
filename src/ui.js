@@ -132,6 +132,7 @@ export function createHUD(container, { showHints = true, touch = false, onDrag =
     onBank: `Lure on the sand — hold ${press} to reel it in`,
     reeling: 'Reeling in',
     hanging: `Line hanging — ${tap} to cast`,
+    take: `Something's at it — ${touch ? 'tap the rod button' : 'click'} to strike!`,
     biting: `FISH ON! Hold ${press} to reel`,
     bareHook: `Bait's off the hook — hold ${press} to reel in and re-bait`,
   };

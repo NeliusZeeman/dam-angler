@@ -85,6 +85,22 @@ const ENGINE_FIELDS = {
     throwChancePerSecond: { label: 'Hook thrown on a jump', min: 0, max: 5, step: 0.05, hint: 'Chance per second of reeling through a jump that the fish throws the hook.' },
     landReach: { label: 'Landing reach', unit: 'm', min: 1, max: 20, step: 0.1, hint: 'How close a fish must be to land it.' },
   },
+  strike: {
+    lureWindow: { label: 'Strike time: lure hit', unit: 's', min: 0.1, max: 5, step: 0.05, hint: 'How long after a fish hits a lure you have to strike.' },
+    flyWindow: { label: 'Strike time: fly take', unit: 's', min: 0.1, max: 5, step: 0.05, hint: 'How long after a fish takes a fly you have to strike.' },
+    nibbleWindow: { label: 'Strike time: kurper on a float', unit: 's', min: 0.1, max: 5, step: 0.05, hint: 'After the nibbles, once the float goes under.' },
+    floatWindow: { label: 'Strike time: float pulled under', unit: 's', min: 0.1, max: 5, step: 0.05, hint: 'An aggressive fish on a float.' },
+    slideWindow: { label: 'Strike time: float sliding away', unit: 's', min: 0.1, max: 5, step: 0.05, hint: 'A carp or heavy fish on a float.' },
+    runWindow: { label: 'Strike time: a run (bottom rig)', unit: 's', min: 0.1, max: 8, step: 0.1, hint: 'Carp and barbel on the bottom. 30% longer on a baitrunner.' },
+    pullWindow: { label: 'Strike time: slow pull', unit: 's', min: 0.1, max: 8, step: 0.1, hint: 'Barbel on liver or sardine.' },
+    hookup: { label: 'Hook-up on a good strike', min: 0, max: 1, step: 0.01, hint: 'Chance a well-timed strike sets the hook.' },
+    tigerHookup: { label: 'Hook-up on a tigerfish', min: 0, max: 1, step: 0.01, hint: 'Their bony mouth: even a good strike often fails (+0.1 on treble lures).' },
+    circleStrikeHookup: { label: 'Hook-up striking a circle hook', min: 0, max: 1, step: 0.01, hint: 'Striking hard pulls a circle hook out — better to just wind.' },
+    selfHookHair: { label: 'Self-hook: hair / chod rig', min: 0, max: 1, step: 0.01, hint: 'Chance a hair or chod rig hooks the fish if you do not strike.' },
+    selfHookCircle: { label: 'Self-hook: circle hook', min: 0, max: 1, step: 0.01, hint: 'Chance a circle hook hooks the fish if you do not strike.' },
+    selfHookTreble: { label: 'Self-hook: treble lure', min: 0, max: 1, step: 0.01, hint: 'Chance a fish hitting a treble lure hooks itself.' },
+    comeBackSeconds: { label: 'Fish comes back after an early strike', unit: 's', min: 0, max: 60, step: 1, hint: 'Bites are three times as likely for this long after striking too early.' },
+  },
   motion: {
     runSeconds: { label: 'Length of a run', unit: 's', min: 0.2, max: 10, step: 0.1, hint: 'How long each run lasts.' },
     reelSpeed: { label: 'Reel speed', unit: 'm/s', min: 0.2, max: 10, step: 0.1, hint: 'How fast the reel winds line in during a fight.' },
@@ -99,7 +115,7 @@ const ENGINE_FIELDS = {
     guestImportLimit: { label: 'Guest progress limit', unit: 'credits', min: 0, max: 1000000, step: 100, type: 'integer', hint: 'Most a guest can bring into a new account (credits plus gear value).' },
   },
 };
-const ENGINE_GROUP = { bites: 'Bites', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
+const ENGINE_GROUP = { bites: 'Bites', strike: 'Strike', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
 
 // ─── Building the list ──────────────────────────────────────────────────────
 export const TUNABLES = [];

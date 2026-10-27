@@ -159,6 +159,10 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   let thrashTimer = 1;
   let lastWind = { windSpeed: 0, windDirX: 1, windDirZ: 0 };
   let biteCallback = null;
+  // A take in progress (strike.js): the fish has the bait but isn't hooked.
+  let strikeCallback = null;
+  const takeLookNow = { sink: 0, drift: 0 };
+  const takeAway = new THREE.Vector3();
   let twitchCallback = null;
   let twitchCooldown = 0;
   let fightProfile = null;
@@ -307,8 +311,36 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   }
 
   // `speciesId` picks how the hooked fish swims, runs and jumps.
+  // A fish has taken the bait but isn't hooked: the float, rod tip and line
+  // show the take (main.js feeds what it looks like each frame) until the
+  // angler strikes, or the fish hooks itself or drops it.
+  function triggerTake() {
+    if (phase !== 'waiting' && phase !== 'reeling') return false;
+    phase = 'take';
+    restPosition.copy(bobber.position);
+    takeAway.subVectors(restPosition, rodTipWorld).setY(0);
+    if (takeAway.lengthSq() < 1e-6) takeAway.set(0, 0, -1);
+    takeAway.normalize();
+    takeLookNow.sink = 0; takeLookNow.drift = 0;
+    pressing = false;
+    return true;
+  }
+  function setTakeLook(look) {
+    takeLookNow.sink = look.sink;
+    takeLookNow.drift = look.drift;
+  }
+  // Back to waiting (missed, too early, or dropped).
+  function cancelTake() {
+    if (phase !== 'take') return;
+    phase = 'waiting';
+    restPosition.copy(bobber.position);
+    twitchOffset.set(0, 0, 0);
+    pressing = false;
+  }
+  function onStrike(callback) { strikeCallback = callback; }
+
   function triggerBite(bite, speciesId = null) {
-    if (phase !== 'waiting' && phase !== 'reeling') return;
+    if (phase !== 'waiting' && phase !== 'reeling' && phase !== 'take') return;
     phase = 'biting';
     fightProfile = bite || { speed: 'medium', style: 'steady' };
     fightTimer = 0;
@@ -781,6 +813,14 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       updateLineCurve(0.05); // taut while actively reeled
     }
 
+    if (phase === 'take') {
+      // The fish has it: the float dips, slides off or goes under, and the
+      // line draws out with a running fish.
+      bobber.position.copy(restPosition).addScaledVector(takeAway, takeLookNow.drift);
+      if (isPointInWater(bobber.position)) floatOnWater(deltaSeconds, takeLookNow.sink, 0.5);
+      updateLineCurve(Math.max(0.03, 0.4 + takeLookNow.sink * 2 - takeLookNow.drift * 0.2));
+    }
+
     if (phase === 'hanging' || phase === 'idle' || phase === 'aiming') {
       bobber.position.copy(rodTipWorld).add(hangOffset);
       bobber.rotation.set(0, 0, 0);
@@ -864,11 +904,12 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
 
   function updateAimFromPointer(clientX, clientY) {
     if (!waterMesh) return;
-    if (isLookLocked()) {
+    const rect = domElement.getBoundingClientRect();
+    if (isLookLocked() || !rect.width || !rect.height) {
       // Mouse-look: you aim with your head, at the centre of the screen.
+      // (Also if the view has no size yet, rather than aiming at NaN.)
       pointerNDC.set(0, 0);
     } else {
-      const rect = domElement.getBoundingClientRect();
       pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
       pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     }
@@ -915,6 +956,14 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       pressing = true;
       pressTimer = 0;
       castArmed = false;
+    } else if (phase === 'take') {
+      // The strike. Hooked and still holding? Keep winding.
+      castArmed = false;
+      if (strikeCallback) strikeCallback();
+      if (phase === 'biting') {
+        fightHolding = true;
+        if (fightHoldCallback) fightHoldCallback(true);
+      }
     } else if (phase === 'biting') {
       fightHolding = true;
       castArmed = false;
@@ -999,6 +1048,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   return {
     update, getState, onBite, triggerBite,
     resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position, lineMesh: line,
+    triggerTake, setTakeLook, cancelTake, onStrike,
     updateAimFromPointer, aimPoint, onFightHold, isBobberInWater, getMouseOffset,
     getPredictedLanding: (out) => computeLanding(aimPoint, phase === 'aiming' ? power : 0, out || new THREE.Vector3()),
     getBobberHabitat: () => habitatAt(bobber.position),

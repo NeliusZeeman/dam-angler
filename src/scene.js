@@ -23,7 +23,7 @@ export function createScene({ location, dam, quality = 'high' }) {
 
   const { sky, uniforms: skyUniforms } = createSky(scene);
 
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 9000);
+  const camera = new THREE.PerspectiveCamera(60, (window.innerWidth / window.innerHeight) || 16 / 9, 0.1, 9000);
   camera.layers.enable(1); // layer 1 = grass & mist, skipped by the water's reflection pass
   camera.position.set(dam.spawn.x, dam.floorHeight(dam.spawn.x, dam.spawn.z) + 1.6, dam.spawn.z);
   camera.rotation.set(-0.1, dam.spawn.yaw, 0, 'YXZ');

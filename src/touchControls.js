@@ -113,6 +113,7 @@ export function createTouchControls({ container, domElement, player, casting }) 
     inAir: ['…', ''],
     waiting: ['Reel', 'tap: twitch · hold: reel'],
     reeling: ['Reel', 'keep holding'],
+    take: ['Strike!', 'tap when it takes'],
     biting: ['Fight!', 'hold to reel, ease off in the red'],
   };
   let lastPhase = null;
