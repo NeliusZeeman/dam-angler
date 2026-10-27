@@ -15,6 +15,7 @@ import { loadGameTuning } from './tuning/client.js';
 import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
 import { planTake, judgeStrike, takeExpired, takeLook } from './strike.js';
+import { retrieveFor, createActionTracker, scoreAction, actionBiteMultiplier } from './lureAction.js';
 import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble, showLossReport } from './ui.js';
 import { randomTip } from './tips.js';
 import { fightStamina, fightStrength } from './fightMotion.js';
@@ -495,6 +496,7 @@ function startGame(locationId, startTimeOfDay) {
   casting.onTwitch(() => {
     twitchBoostTimer = 2.0;
     rodRecoil = 0.28;
+    twitchedThisFrame = true;
   });
   casting.onFightHold((holding) => minigame.setHolding(holding));
 
@@ -734,6 +736,95 @@ function startGame(locationId, startTimeOfDay) {
     hud.showToast(`Your ${currentLure().name.toLowerCase()} ${how} — reel in and re-bait.`);
   }
 
+  // What the fish see right now: the water, the bait or lure, the rig.
+  function biteConditions() {
+    const state = environment.getState();
+    return {
+      waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay,
+      habitat: casting.getBobberHabitat(), lureKind: currentLure().kind, chumBoost: chumSystem.boostAt(casting.bobberPosition),
+      // The right hook and line for the fish get more bites.
+      gearBite: (s) => (activeHook.biteBonus?.[s.id] ?? 1) * (activeLine.biteBonus?.[s.id] ?? 1)
+        * (activeRod.biteBonus?.[s.id] ?? 1) * rig.biteFactor
+        // A baitrunner only helps with bait: the fish runs off with it freely.
+        * (currentLure().kind === 'bait' ? (activeReel.biteBonus?.[s.id] ?? 1) : 1),
+    };
+  }
+
+  // ── Working a lure (lureAction.js): the action meter, and fish that
+  // follow a well-worked lure in and hit it -- or turn away. ──
+  const actionTracker = createActionTracker();
+  let lureAction = null; // { quality, hint, label } while a lure is being worked
+  let twitchedThisFrame = false;
+  let follow = null; // { species, t, dur, mesh }
+  const lureMeter = document.createElement('div');
+  lureMeter.className = 'lure-meter hidden';
+  lureMeter.innerHTML = '<span class="lm-label"></span><div class="lm-bar"><i></i></div><span class="lm-hint"></span>';
+  appEl.appendChild(lureMeter);
+  const followAway = new THREE.Vector3();
+  function endFollow(message) {
+    if (!follow) return;
+    scene.remove(follow.mesh);
+    follow = null;
+    if (message) hud.showToast(message);
+  }
+  function tickLureAction(delta, elapsed) {
+    const phase = casting.getState().phase;
+    const retrieve = retrieveFor(currentLure());
+    const fishing = retrieve && (phase === 'waiting' || phase === 'reeling') && casting.isBobberInWater() && !bareHook;
+    if (fishing) {
+      actionTracker.update(delta, { speed: casting.getLureSpeed(), twitched: twitchedThisFrame });
+      const scored = scoreAction(retrieve, actionTracker.features());
+      lureAction = { ...scored, label: retrieve.label };
+    } else {
+      actionTracker.reset();
+      lureAction = null;
+    }
+    twitchedThisFrame = false;
+    // The meter.
+    lureMeter.classList.toggle('hidden', !lureAction);
+    if (lureAction) {
+      const q = lureAction.quality;
+      lureMeter.querySelector('.lm-label').textContent = `Action: ${lureAction.label}`;
+      const bar = lureMeter.querySelector('.lm-bar i');
+      bar.style.width = `${Math.round(q * 100)}%`;
+      bar.style.background = q > 0.7 ? '#7fd18a' : q > 0.4 ? '#ffcf7a' : '#ff8a70';
+      lureMeter.querySelector('.lm-hint').textContent = lureAction.hint;
+    }
+    // A fish following the lure in.
+    if (!fishing) {
+      if (follow && phase === 'hanging') endFollow('It followed it right to your feet, then swam off.');
+      else endFollow(null);
+      return;
+    }
+    const lurePos = casting.bobberPosition;
+    const me = playerController.getPosition();
+    const near = Math.hypot(lurePos.x - me.x, lurePos.z - me.z) < 30;
+    if (!follow && near && lureAction.quality >= 0.6 && Math.random() < ENGINE.lures.followChance * lureAction.quality * delta) {
+      const species = pickGuaranteedBite(localSpecies, biteConditions(), location.catchShare);
+      if (species) {
+        const mesh = createFishMesh(species.id);
+        mesh.scale.setScalar((estimateLengthCm(species, randomWeightFor(species)) / 100) / 0.62);
+        scene.add(mesh);
+        follow = { species, t: 0, dur: 2.5 + Math.random() * 3, mesh };
+      }
+    }
+    if (!follow) return;
+    follow.t += delta;
+    // Just behind the lure, closing on it.
+    const tip = casting.getRodTipWorld();
+    followAway.set(lurePos.x - tip.x, 0, lurePos.z - tip.z).normalize();
+    const gap = 1.4 - Math.min(1, follow.t / follow.dur) * 0.9;
+    follow.mesh.position.set(lurePos.x + followAway.x * gap, lurePos.y - 0.28, lurePos.z + followAway.z * gap);
+    follow.mesh.rotation.set(0, Math.atan2(followAway.z, -followAway.x), 0);
+    setFishSwim(follow.mesh, elapsed * 9, 1.2);
+    if (lureAction.quality < 0.35) { endFollow(`It turned away — ${lureAction.hint.toLowerCase()}.`); return; }
+    if (follow.t >= follow.dur) {
+      const species = follow.species;
+      endFollow(null);
+      startBite(species);
+    }
+  }
+
   function rollBitesIfWaiting(delta) {
     const castState = casting.getState();
     const phase = castState.phase;
@@ -746,24 +837,15 @@ function startGame(locationId, startTimeOfDay) {
       loseBait('came off the hook');
       return;
     }
-    const state = environment.getState();
-    const habitat = casting.getBobberHabitat();
-    const lureKind = (getGearById(LURES, activeLureId) || LURES[0]).kind;
-    const chumBoost = chumSystem.boostAt(casting.bobberPosition);
+    const conditions = biteConditions();
     const waitElapsed = castState.waitElapsed || 0;
     // Ramps from 1x up to a steep 41x as the wait nears the guarantee, so a
     // bite becomes very likely well before the deadline without landing at a
     // predictable moment every time.
     const urgency = 1 + Math.pow(Math.min(1, waitElapsed / ENGINE.bites.guaranteeSeconds), 4) * 40;
-    const biteChanceMultiplier = (twitchBoostTimer > 0 ? 1.8 : 1) * (comeBackTimer > 0 ? 3 : 1) * urgency;
-    const conditions = {
-      waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay, habitat, lureKind, chumBoost,
-      // The right hook and line for the fish get more bites.
-      gearBite: (s) => (activeHook.biteBonus?.[s.id] ?? 1) * (activeLine.biteBonus?.[s.id] ?? 1)
-        * (activeRod.biteBonus?.[s.id] ?? 1) * rig.biteFactor
-        // A baitrunner only helps with bait: the fish runs off with it freely.
-        * (currentLure().kind === 'bait' ? (activeReel.biteBonus?.[s.id] ?? 1) : 1),
-    };
+    // Bait: a twitch draws a look. Lures: how well you're working it.
+    const actionMult = lureAction ? actionBiteMultiplier(lureAction.quality) : (twitchBoostTimer > 0 ? 1.8 : 1);
+    const biteChanceMultiplier = actionMult * (comeBackTimer > 0 ? 3 : 1) * urgency;
     const bite = rollDamBite(localSpecies, location.catchShare, { ...conditions, deltaSeconds: delta, biteChanceMultiplier });
     if (bite) {
       startBite(bite);
@@ -854,6 +936,7 @@ function startGame(locationId, startTimeOfDay) {
       minigame.setFishPulling(!!casting.getFightFish()?.takingLine);
       rollBitesIfWaiting(delta);
       tickTake(delta);
+      tickLureAction(delta, elapsed);
       comeBackTimer = Math.max(0, comeBackTimer - delta);
       tickTips(delta);
       touchControls?.update();

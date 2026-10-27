@@ -44,6 +44,13 @@ const DEFAULTS = {
     selfHookTreble: 0.3, // a fish hitting a treble lure
     comeBackSeconds: 8, // after a strike too early, bites x3 for this long
   },
+  // Working a lure (lureAction.js).
+  lures: {
+    badBites: 0.35, // bites with a dead or wrong retrieve (x normal)
+    bestBites: 2.5, // bites with a perfect retrieve
+    followChance: 0.09, // per second, with good action, a fish starts following
+    reelSpeed: 1.4, // m/s a lure comes in while you hold to reel (bait: faster)
+  },
   motion: {
     runSeconds: 1.3,
     reelSpeed: 1.5, // m/s the reel winds in

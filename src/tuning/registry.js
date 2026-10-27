@@ -101,6 +101,12 @@ const ENGINE_FIELDS = {
     selfHookTreble: { label: 'Self-hook: treble lure', min: 0, max: 1, step: 0.01, hint: 'Chance a fish hitting a treble lure hooks itself.' },
     comeBackSeconds: { label: 'Fish comes back after an early strike', unit: 's', min: 0, max: 60, step: 1, hint: 'Bites are three times as likely for this long after striking too early.' },
   },
+  lures: {
+    badBites: { label: 'Bites on a badly worked lure', unit: '×', min: 0, max: 3, step: 0.05, hint: 'Bite chance with a dead or wrong retrieve, compared with normal.' },
+    bestBites: { label: 'Bites on a well worked lure', unit: '×', min: 0.5, max: 6, step: 0.05, hint: 'Bite chance with a perfect retrieve, compared with normal.' },
+    followChance: { label: 'Fish following the lure', unit: 'per s', min: 0, max: 1, step: 0.01, hint: 'With good action, how often a fish starts following the lure in.' },
+    reelSpeed: { label: 'Lure reel-in speed', unit: 'm/s', min: 0.3, max: 5, step: 0.1, hint: 'How fast a lure comes in while you hold to reel (a steady crank).' },
+  },
   motion: {
     runSeconds: { label: 'Length of a run', unit: 's', min: 0.2, max: 10, step: 0.1, hint: 'How long each run lasts.' },
     reelSpeed: { label: 'Reel speed', unit: 'm/s', min: 0.2, max: 10, step: 0.1, hint: 'How fast the reel winds line in during a fight.' },
@@ -115,7 +121,7 @@ const ENGINE_FIELDS = {
     guestImportLimit: { label: 'Guest progress limit', unit: 'credits', min: 0, max: 1000000, step: 100, type: 'integer', hint: 'Most a guest can bring into a new account (credits plus gear value).' },
   },
 };
-const ENGINE_GROUP = { bites: 'Bites', strike: 'Strike', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
+const ENGINE_GROUP = { bites: 'Bites', strike: 'Strike', lures: 'Working lures', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
 
 // ─── Building the list ──────────────────────────────────────────────────────
 export const TUNABLES = [];

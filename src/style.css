@@ -541,3 +541,16 @@ body.touch .shop-card button { min-height: 36px; }
 .card-img { aspect-ratio: 1 / 1; margin: -2px -3px 2px; border-radius: 6px; background: radial-gradient(circle at 50% 40%, #2c4a3c, #13241c 75%); overflow: hidden; }
 .card-img img { display: block; width: 100%; height: 100%; object-fit: contain; }
 @media (max-width: 600px) { .card-img { aspect-ratio: 4 / 3; } }
+
+/* Working a lure: how well it's being worked, just above the distance. */
+.lure-meter {
+  position: absolute; left: 50%; bottom: calc(118px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  width: min(260px, calc(100vw - 32px)); display: grid; gap: 3px; padding: 6px 10px; border-radius: 8px;
+  background: rgba(8, 16, 12, 0.72); color: #e8f0ea; font-size: 11.5px; z-index: 2; pointer-events: none; text-align: center;
+}
+.lure-meter.hidden { display: none; }
+.lm-label { opacity: 0.8; }
+.lm-bar { height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.lm-bar i { display: block; height: 100%; width: 0; border-radius: 4px; transition: width 0.25s, background 0.25s; }
+.lm-hint { font-weight: 700; font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) { .lm-bar i { transition: none; } }

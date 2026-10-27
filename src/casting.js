@@ -3,6 +3,7 @@ import { waterSurfaceY } from './water.js';
 import { simulateCast, launchSpeed, DRAG } from './castPhysics.js';
 import { createFightMotion, fightStyleFor } from './fightMotion.js';
 import { createTerminalTackle } from './gfx/terminalTackle.js';
+import { ENGINE } from './tuning/engine.js';
 
 const TWITCH_COOLDOWN = 0.35;
 const TWITCH_KICK_UP = 0.14;
@@ -622,10 +623,28 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     tackle.update(dt, { pose: swim ? 'swim' : 'hang', moving });
   }
 
+  // How fast the lure has been moving through the water (m/s), for
+  // scoring the retrieve (lureAction.js).
+  let lureSpeed = 0;
+  const lastLurePos = new THREE.Vector3();
+  let lureTracked = false;
+  function trackLure(dt) {
+    const fishing = (phase === 'waiting' || phase === 'reeling') && isPointInWater(bobber.position);
+    if (fishing && lureTracked && dt > 0) {
+      const d = Math.hypot(bobber.position.x - lastLurePos.x, bobber.position.z - lastLurePos.z);
+      lureSpeed += (Math.min(8, d / dt) - lureSpeed) * Math.min(1, dt * 10);
+    } else if (!fishing) {
+      lureSpeed = 0;
+    }
+    lureTracked = fishing;
+    lastLurePos.copy(bobber.position);
+  }
+
   function update(deltaSeconds, windState) {
     rodTip.getWorldPosition(rodTipWorld);
     if (windState) lastWind = windState;
     dressRig(deltaSeconds);
+    trackLure(deltaSeconds);
 
     // Clock only runs while there's actually a fishable line in the water --
     // pauses if the lure's up on the sand or the rod's just hanging.
@@ -790,7 +809,9 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
         return;
       }
       toTip.normalize();
-      bobber.position.addScaledVector(toTip, REEL_SPEED * deltaSeconds);
+      // A lure comes in at a steady crank; bait is reeled straight in.
+      const reelSpeed = getLureKind() === 'lure' ? ENGINE.lures.reelSpeed : REEL_SPEED;
+      bobber.position.addScaledVector(toTip, reelSpeed * deltaSeconds);
       if (isPointInWater(bobber.position)) {
         // Skims the surface, dragged low and leaning into the pull.
         floatOnWater(deltaSeconds, -0.015, 0.55);
@@ -1049,6 +1070,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
     update, getState, onBite, triggerBite,
     resetToIdle, onTwitch, tapRod, bobberPosition: bobber.position, lineMesh: line,
     triggerTake, setTakeLook, cancelTake, onStrike,
+    getLureSpeed: () => lureSpeed,
+    getRodTipWorld: () => rodTipWorld,
     updateAimFromPointer, aimPoint, onFightHold, isBobberInWater, getMouseOffset,
     getPredictedLanding: (out) => computeLanding(aimPoint, phase === 'aiming' ? power : 0, out || new THREE.Vector3()),
     getBobberHabitat: () => habitatAt(bobber.position),
