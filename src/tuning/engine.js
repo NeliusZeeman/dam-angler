@@ -51,6 +51,14 @@ const DEFAULTS = {
     followChance: 0.09, // per second, with good action, a fish starts following
     reelSpeed: 1.4, // m/s a lure comes in while you hold to reel (bait: faster)
   },
+  // Reading the water (waterReading.js).
+  water: {
+    rightDepth: 1.4, // bites with the bait at the depth the fish feed at
+    dropOffSlope: 0.18, // metres of depth per metre that count as a drop-off
+    dropOffBonus: 1.35, // bass, yellowfish, trout and tigers on a drop-off
+    windBonus: 1.3, // carp and yellowfish on the bank the wind blows onto
+    windMin: 2.7, // wind needed for that (game units; x3 = km/h, so ~8 km/h)
+  },
   motion: {
     runSeconds: 1.3,
     reelSpeed: 1.5, // m/s the reel winds in

@@ -103,6 +103,21 @@ test('a combo: one price for the rod and reel, and its parts aren\'t sold on the
   assert.equal((await p.c.post('/api/me/buy', { kind: 'combo', itemId: 'combo-imaginary' })).status, 400);
 });
 
+test('a fish finder is bought once and is yours on every device; the float depth is saved', async () => {
+  const p = await player();
+  await earn(p.c, 6);
+  const buy = await p.c.post('/api/me/buy', { kind: 'gadget', itemId: 'gadget-deeper-start' });
+  assert.equal(buy.status, 200, JSON.stringify(buy.body));
+  const me = (await p.c.get('/api/me')).body;
+  assert.deepEqual(me.save.ownedGadgetIds, ['gadget-deeper-start']);
+  assert.equal((await p.c.post('/api/me/buy', { kind: 'gadget', itemId: 'gadget-imaginary' })).status, 400);
+  const r = await p.c.put('/api/me/save', { save: { ...rig, ownedGadgetIds: ['gadget-garmin-striker'], settings: { floatDepth: 2.3 } }, baseVersion: me.version });
+  assert.equal(r.status, 200);
+  const s = (await p.c.get('/api/me')).body.save;
+  assert.deepEqual(s.ownedGadgetIds, ['gadget-deeper-start'], 'a save cannot hand out a fish finder');
+  assert.equal(s.settings.floatDepth, 2.3);
+});
+
 test('breadcrumbs cost 15 credits, and not without them', async () => {
   const p = await player();
   assert.equal((await p.c.post('/api/me/spend', { what: 'chum' })).status, 400);

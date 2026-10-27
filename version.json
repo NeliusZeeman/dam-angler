@@ -1,6 +1,6 @@
 {
-  "version": "fdf089568b",
-  "built": "2026-10-27T19:01:22.409Z",
+  "version": "733e6fd3c9",
+  "built": "2026-10-27T19:10:42.119Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
@@ -59,6 +59,7 @@
     "src/ui.js",
     "src/versionCheck.js",
     "src/water.js",
+    "src/waterReading.js",
     "src/weather.js",
     "vendor/three.module.js"
   ]

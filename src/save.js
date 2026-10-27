@@ -9,6 +9,7 @@ export const DEFAULT_SAVE = {
   ownedReelIds: ['reel-starter'],
   ownedHookIds: ['hook-small'],
   ownedLureIds: ['bread-bait'],
+  ownedGadgetIds: [], // fish finders: owning one is using it
   equippedRodId: 'rod-starter',
   equippedLineId: 'line-starter',
   equippedReelId: 'reel-starter',
@@ -21,6 +22,7 @@ export const DEFAULT_SAVE = {
     showHints: true, // the controls reminder along the top bar
     turnSpeed: 1, // multiplier on Q/E, edge-of-screen and right-drag turning
     volume: 0.7, // 0 = sound off .. 1 = loud
+    floatDepth: 1.5, // metres from the float down to the bait
   },
 };
 

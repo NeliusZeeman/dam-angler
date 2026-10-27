@@ -1,4 +1,4 @@
-import { RODS, LINES, REELS, HOOKS, LURES, COMBOS, getGearById, rigCheck, TACKLE_SECTIONS, sectionsFor } from './gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, COMBOS, GADGETS, getGearById, rigCheck, TACKLE_SECTIONS, sectionsFor } from './gear.js';
 import { gearPicture } from './gfx/gearThumbs.js';
 
 // `onBuy(kind, id)`: a purchase was made (the online server checks it).
@@ -15,7 +15,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     const shown = items.filter((item) => (item.inShop !== false && !item.comboOnly) || ownedIds.includes(item.id));
     const rows = shown.sort((a, b) => a.cost - b.cost).map((item) => {
       const owned = ownedIds.includes(item.id);
-      const equipped = equippedId === item.id;
+      const equipped = equippedId === item.id || (kind === 'gadget' && owned);
       const label = owned ? (equipped ? 'In use' : 'Use') : 'Buy';
       const disabled = (!owned && save.credits < item.cost) || equipped;
       // Rods: action and power. Lines: type and breaking strain. Hooks: how
@@ -72,6 +72,8 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     { kind: 'line', label: 'Line', title: 'Lines', items: () => LINES, owned: () => save.ownedLineIds, equipped: () => save.equippedLineId },
     { kind: 'hook', label: 'Hooks', title: 'Hooks & Rigs', items: () => HOOKS, owned: () => save.ownedHookIds, equipped: () => save.equippedHookId },
     { kind: 'combo', label: 'Combos', title: 'Rod & Reel Combos', items: () => COMBOS, owned: () => [], equipped: () => null },
+    // Fish finders: owning one is using it.
+    { kind: 'gadget', label: 'Electronics', title: 'Fish Finders', items: () => GADGETS, owned: () => (save.ownedGadgetIds ||= []), equipped: () => null },
   ];
   let activeTab = 'lure';
   let activeSection = 'general';
@@ -102,6 +104,17 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     </div>`;
   }
 
+  // How deep the bait hangs under a float. Feeders, bottom baits and lures
+  // fish their own depth.
+  function floatHtml() {
+    const d = save.settings?.floatDepth ?? 1.5;
+    return `<div class="tackle-drag">
+      <label for="float-slider"><b>Float depth</b> <span id="float-read">${d.toFixed(1)} m</span></label>
+      <input id="float-slider" type="range" min="0.3" max="4" step="0.1" value="${d}">
+      <small>Float rigs only: bait this far under the float. Set it deeper than the water and the bait lies on the bottom (carp, barbel). Kurper feed shallow, bass and yellows mid-water.</small>
+    </div>`;
+  }
+
   function refresh() {
     const section = TACKLE_SECTIONS.find((x) => x.id === activeSection) || TACKLE_SECTIONS[0];
     // Only the parts this kind of fishing has (flies come tied on their own
@@ -118,7 +131,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
           <div class="tackle-rigged"><b>Rigged:</b> ${rigged}</div>
           ${rigHtml()}
         </div>
-        ${dragHtml()}
+        <div class="tackle-sliders">${dragHtml()}${floatHtml()}</div>
       </div>
       <div class="tackle-tabs tackle-sections" role="tablist" aria-label="Kind of fishing">
         ${TACKLE_SECTIONS.map((x) => `<button type="button" role="tab" class="tackle-tab section-tab ${x.id === section.id ? 'on' : ''}" aria-selected="${x.id === section.id}" data-section="${x.id}">${x.label}</button>`).join('')}
@@ -138,6 +151,13 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
       panel.querySelector('#drag-read').textContent = `${slider.value}% · ${(save.drag * lineKg).toFixed(1)} kg`;
     });
     slider.addEventListener('change', () => { onSaveChanged(); refresh(); });
+    const floatSlider = panel.querySelector('#float-slider');
+    floatSlider.addEventListener('input', () => {
+      save.settings = save.settings || {};
+      save.settings.floatDepth = Number(floatSlider.value);
+      panel.querySelector('#float-read').textContent = `${Number(floatSlider.value).toFixed(1)} m`;
+    });
+    floatSlider.addEventListener('change', () => { onSaveChanged(); refresh(); });
     panel.querySelectorAll('[data-section]').forEach((btn) => btn.addEventListener('click', () => {
       activeSection = btn.dataset.section;
       refresh();
@@ -154,7 +174,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
   }
 
   // Each card's picture: a snapshot of the item's own 3D model.
-  const LISTS = { rod: RODS, line: LINES, reel: REELS, hook: HOOKS, lure: LURES, combo: COMBOS };
+  const LISTS = { rod: RODS, line: LINES, reel: REELS, hook: HOOKS, lure: LURES, combo: COMBOS, gadget: GADGETS };
   function fillPictures() {
     panel.querySelectorAll('img[data-pic]').forEach((img) => {
       const [kind, id] = img.dataset.pic.split('|');
@@ -173,6 +193,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     if (kind === 'line') return save.ownedLineIds;
     if (kind === 'reel') return save.ownedReelIds;
     if (kind === 'hook') return save.ownedHookIds;
+    if (kind === 'gadget') return (save.ownedGadgetIds ||= []);
     return save.ownedLureIds;
   }
 
@@ -181,6 +202,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     if (kind === 'line') return LINES;
     if (kind === 'reel') return REELS;
     if (kind === 'hook') return HOOKS;
+    if (kind === 'gadget') return GADGETS;
     return LURES;
   }
 

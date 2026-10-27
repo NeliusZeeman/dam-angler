@@ -554,3 +554,10 @@ body.touch .shop-card button { min-height: 36px; }
 .lm-bar i { display: block; height: 100%; width: 0; border-radius: 4px; transition: width 0.25s, background 0.25s; }
 .lm-hint { font-weight: 700; font-size: 12.5px; }
 @media (prefers-reduced-motion: reduce) { .lm-bar i { transition: none; } }
+/* What a fish finder reads where you aim, under the distance. */
+.hud-distance-extra { font-size: 11.5px; opacity: 0.9; }
+.hud-distance-extra:empty { display: none; }
+.hud-distance { flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 32px); border-radius: 16px; }
+.hud-distance-extra { flex-basis: 100%; text-align: center; white-space: normal; }
+.tackle-sliders { display: grid; gap: 6px; align-content: start; }
+.tackle-sliders .tackle-drag { margin: 0; }

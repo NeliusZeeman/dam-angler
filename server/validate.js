@@ -2,7 +2,7 @@
 // data (the same fish, gear and spots the game uses), so nothing unknown or
 // impossible gets into the database.
 import { FISH_SPECIES } from '../src/fish.js';
-import { RODS, LINES, REELS, HOOKS, LURES } from '../src/gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, GADGETS } from '../src/gear.js';
 import { LOCATIONS } from '../src/locations.js';
 import { isTrophyWeight } from '../src/economy.js';
 
@@ -14,7 +14,8 @@ export class HttpError extends Error {
 }
 const bad = (message) => new HttpError(400, message);
 
-export const GEAR = { rod: RODS, line: LINES, reel: REELS, hook: HOOKS, lure: LURES };
+// Gadgets (fish finders) are owned, not rigged: no 'equipped' field.
+export const GEAR = { rod: RODS, line: LINES, reel: REELS, hook: HOOKS, lure: LURES, gadget: GADGETS };
 // Save field names for each kind of gear.
 export const GEAR_FIELDS = {
   rod: ['ownedRodIds', 'equippedRodId'],
@@ -84,6 +85,7 @@ const SETTING_RULES = {
   turnSpeed: (v) => (Number.isFinite(v) ? Math.min(3, Math.max(0.2, v)) : undefined),
   volume: (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined),
   lastVolume: (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined),
+  floatDepth: (v) => (Number.isFinite(v) ? Math.min(4, Math.max(0.3, Math.round(v * 10) / 10)) : undefined),
 };
 export function cleanSettings(settings) {
   const out = {};
@@ -114,6 +116,7 @@ export function cleanSave(save) {
     // Whether it's really owned is checked against the server's records (saves.js).
     out.equipped[kind] = isKnownGear(kind, save[equippedField]) ? save[equippedField] : STARTER[kind];
   }
+  out.gear.gadget = [...new Set((Array.isArray(save.ownedGadgetIds) ? save.ownedGadgetIds : []).filter((id) => isKnownGear('gadget', id)))];
   const drag = Number(save.drag);
   out.drag = Number.isFinite(drag) ? Math.min(0.9, Math.max(0.05, drag)) : null;
   out.locationId = isKnownLocation(save.locationId) ? save.locationId : null;

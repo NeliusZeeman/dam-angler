@@ -169,7 +169,47 @@ function hookPicture(h) {
   return url;
 }
 
+// A fish finder: the Deeper is a little round sonar ball you cast out, the
+// Garmin a head unit with a colour screen.
+function gadgetPicture(item) {
+  const g = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({ color: 0x1c1f24, roughness: 0.45, metalness: 0.2 });
+  const glow = new THREE.MeshStandardMaterial({ color: 0x1f6fd0, emissive: 0x1f6fd0, emissiveIntensity: 0.6, roughness: 0.3 });
+  if (item.level >= 2) {
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.62, 0.16), shell));
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.46), glow);
+    screen.position.z = 0.081;
+    g.add(screen);
+    // Fish arches on the screen.
+    const arch = new THREE.MeshBasicMaterial({ color: 0xffcf3a });
+    for (const [x, y] of [[-0.15, 0.05], [0.08, -0.08], [0.2, 0.1]]) {
+      const a = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.01, 4, 10, Math.PI), arch);
+      a.position.set(x, y, 0.083);
+      g.add(a);
+    }
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, 0.3, 12), shell);
+    stand.position.set(0, -0.42, -0.05);
+    g.add(stand);
+    g.rotation.set(-0.1, -0.35, 0);
+  } else {
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 32, 20), new THREE.MeshStandardMaterial({ color: 0xf2f2f0, roughness: 0.35 })));
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 8, 40), new THREE.MeshStandardMaterial({ color: 0xe0622a, roughness: 0.5 }));
+    band.rotation.x = Math.PI / 2;
+    g.add(band);
+    const eye = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.02, 6, 16), shell);
+    eye.position.y = 0.47;
+    g.add(eye);
+    g.rotation.set(0.35, 0, 0.1);
+  }
+  studio.scene.add(g);
+  const url = shoot(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0), 0.7);
+  studio.scene.remove(g);
+  g.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+  return url;
+}
+
 function render(kind, item) {
+  if (kind === 'gadget') return gadgetPicture(item);
   if (kind === 'rod') return rodPicture(item, null);
   if (kind === 'reel') return reelPicture(item);
   if (kind === 'combo') return rodPicture(getGearById(RODS, item.rodId), getGearById(REELS, item.reelId));

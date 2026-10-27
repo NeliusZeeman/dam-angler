@@ -91,9 +91,10 @@ export function createHUD(container, { showHints = true, touch = false, onDrag =
   // and whether it's taking line or coming in.
   const distEl = document.createElement('div');
   distEl.className = 'hud-distance hidden';
-  distEl.innerHTML = '<span class="hud-distance-label"></span><span class="hud-distance-value"></span><span class="hud-distance-trend"></span>';
+  distEl.innerHTML = '<span class="hud-distance-label"></span><span class="hud-distance-value"></span><span class="hud-distance-trend"></span><span class="hud-distance-extra"></span>';
   container.appendChild(distEl);
-  function setDistance(label, meters, { trend = '', highlight = false } = {}) {
+  // `extra`: what a fish finder shows where you're aiming.
+  function setDistance(label, meters, { trend = '', highlight = false, extra = '' } = {}) {
     if (label == null || meters == null || !Number.isFinite(meters)) {
       distEl.classList.add('hidden');
       return;
@@ -104,6 +105,7 @@ export function createHUD(container, { showHints = true, touch = false, onDrag =
     distEl.querySelector('.hud-distance-label').textContent = label;
     distEl.querySelector('.hud-distance-value').textContent = `${meters.toFixed(1)} m`;
     distEl.querySelector('.hud-distance-trend').textContent = trend === 'out' ? 'taking line' : trend === 'in' ? 'coming in' : '';
+    distEl.querySelector('.hud-distance-extra').textContent = extra;
   }
 
   const toast = document.createElement('div');

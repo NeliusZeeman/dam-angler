@@ -47,7 +47,7 @@ export function createDisabledCloud() {
 // those itself.
 function saveForServer(save) {
   // eslint-disable-next-line no-unused-vars
-  const { catchLog, credits, ownedRodIds, ownedLineIds, ownedReelIds, ownedHookIds, ownedLureIds, ...rest } = save || {};
+  const { catchLog, credits, ownedRodIds, ownedLineIds, ownedReelIds, ownedHookIds, ownedLureIds, ownedGadgetIds, ...rest } = save || {};
   return JSON.parse(JSON.stringify(rest));
 }
 

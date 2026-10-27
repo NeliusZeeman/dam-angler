@@ -107,6 +107,13 @@ const ENGINE_FIELDS = {
     followChance: { label: 'Fish following the lure', unit: 'per s', min: 0, max: 1, step: 0.01, hint: 'With good action, how often a fish starts following the lure in.' },
     reelSpeed: { label: 'Lure reel-in speed', unit: 'm/s', min: 0.3, max: 5, step: 0.1, hint: 'How fast a lure comes in while you hold to reel (a steady crank).' },
   },
+  water: {
+    rightDepth: { label: 'Bites at the right depth', unit: '×', min: 1, max: 4, step: 0.05, hint: 'With the bait where the fish feed (bottom, or their depth band). Far off drops to x0.35.' },
+    dropOffSlope: { label: 'Drop-off steepness', unit: 'm/m', min: 0.02, max: 1, step: 0.01, hint: 'How steep the bottom must fall away to count as a drop-off.' },
+    dropOffBonus: { label: 'Bites on a drop-off', unit: '×', min: 1, max: 4, step: 0.05, hint: 'Bass, yellowfish, trout and tigers patrolling a drop-off.' },
+    windBonus: { label: 'Bites on the windward bank', unit: '×', min: 1, max: 4, step: 0.05, hint: 'Carp, yellowfish and kurper where the wind blows food onto the bank.' },
+    windMin: { label: 'Wind for the windward bank', min: 0, max: 20, step: 0.1, hint: 'Wind strength needed (x3 = km/h; 2.7 is about 8 km/h).' },
+  },
   motion: {
     runSeconds: { label: 'Length of a run', unit: 's', min: 0.2, max: 10, step: 0.1, hint: 'How long each run lasts.' },
     reelSpeed: { label: 'Reel speed', unit: 'm/s', min: 0.2, max: 10, step: 0.1, hint: 'How fast the reel winds line in during a fight.' },
@@ -121,7 +128,7 @@ const ENGINE_FIELDS = {
     guestImportLimit: { label: 'Guest progress limit', unit: 'credits', min: 0, max: 1000000, step: 100, type: 'integer', hint: 'Most a guest can bring into a new account (credits plus gear value).' },
   },
 };
-const ENGINE_GROUP = { bites: 'Bites', strike: 'Strike', lures: 'Working lures', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
+const ENGINE_GROUP = { bites: 'Bites', strike: 'Strike', lures: 'Working lures', water: 'Reading the water', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
 
 // ─── Building the list ──────────────────────────────────────────────────────
 export const TUNABLES = [];

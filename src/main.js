@@ -4,8 +4,9 @@ import { createWater, updateWater, createSplashEffect } from './water.js';
 import { createPostPipeline } from './gfx/post.js';
 import { windUniforms } from './gfx/wind.js';
 import { createEnvironment, TIME_OF_DAY_PHASES } from './environment.js';
-import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm, rollTrophy, trophyWeightFor } from './fish.js';
-import { RODS, LINES, REELS, HOOKS, LURES, getGearById, rigCheck } from './gear.js';
+import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm, rollTrophy, trophyWeightFor, suitability } from './fish.js';
+import { rigFor } from './gfx/terminalTackle.js';
+import { RODS, LINES, REELS, HOOKS, LURES, GADGETS, getGearById, rigCheck } from './gear.js';
 import { diagnoseLoss } from './fightReport.js';
 import { castLossChance, soakLossChance } from './baitLoss.js';
 import { catchPayout } from './economy.js';
@@ -16,6 +17,7 @@ import { createCasting } from './casting.js';
 import { createMinigame } from './minigame.js';
 import { planTake, judgeStrike, takeExpired, takeLook } from './strike.js';
 import { retrieveFor, createActionTracker, scoreAction, actionBiteMultiplier } from './lureAction.js';
+import { readSpot, baitDepth, waterMultiplier, describeSpot, zoneName } from './waterReading.js';
 import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble, showLossReport } from './ui.js';
 import { randomTip } from './tips.js';
 import { fightStamina, fightStrength } from './fightMotion.js';
@@ -236,6 +238,13 @@ function startGame(locationId, startTimeOfDay) {
     onLanded: (point, inWater) => {
       // A soft bait like chicken liver can fly off on the cast.
       if (Math.random() < castLossChance(currentLure(), soundPower)) loseBait('flew off the hook on the cast');
+      // What you can tell about the spot once the rig settles: the depth
+      // (the lead touching down, or where the float cocks), the cover.
+      else if (inWater) setTimeout(() => {
+        const phase = casting.getState().phase;
+        if (phase !== 'waiting' && phase !== 'reeling') return;
+        hud.showToast(landingReport(point));
+      }, 700);
       if (inWater) audio.plop((currentLure().heavy ? 1.4 : 0.8) * hearingFalloff(point, 120));
       if (inWater && currentLure().groundbait) chumSystem.spawn(point, 'groundbait');
       // The distance counter shows how far that cast went for a moment.
@@ -617,7 +626,7 @@ function startGame(locationId, startTimeOfDay) {
     if (phase === 'idle' || phase === 'hanging' || phase === 'aiming') {
       // Where the aim ring sits: this cast's distance at the power so far.
       casting.getPredictedLanding(aimLanding);
-      hud.setDistance('Aim', flat(aimLanding));
+      hud.setDistance('Aim', flat(aimLanding), { extra: finderText(aimLanding) });
       return;
     }
     hud.setDistance(null);
@@ -736,9 +745,55 @@ function startGame(locationId, startTimeOfDay) {
     hud.showToast(`Your ${currentLure().name.toLowerCase()} ${how} — reel in and re-bait.`);
   }
 
+  // ── Reading the water (waterReading.js) ──
+  const floatDepth = () => save.settings?.floatDepth ?? 1.5;
+  const finderLevel = () => Math.max(0, ...(save.ownedGadgetIds || []).map((id) => getGearById(GADGETS, id)?.level || 0));
+  const spotAt = (p) => readSpot(dam, p.x, p.z, environment.getState());
+  function landingReport(point) {
+    const spot = spotAt(point);
+    const bait = baitDepth({ lure: currentLure(), floatDepthM: floatDepth(), waterDepthM: spot.depthM });
+    const d = `${spot.depthM.toFixed(1)} m`;
+    const rest = [zoneName(spot.zone), spot.dropOff ? 'on a drop-off' : null, spot.windward ? 'wind blowing in' : null].filter(Boolean).join(' · ');
+    let head;
+    if (rigFor(currentLure()) === 'float') head = bait.onBottom ? `Float lying flat — bait on the bottom in ${d}` : `Float at ${floatDepth().toFixed(1)} m in ${d} of water`;
+    else if (bait.onBottom) head = `Touched bottom: ${d}`;
+    else head = `${d} of water`;
+    return rest ? `${head} — ${rest}` : head;
+  }
+  // A fish finder: depth and cover where you aim (and fish showing, on the
+  // better one). Worked out again only when the aim moves.
+  let finderCache = { x: 1e9, z: 1e9, text: '' };
+  function finderText(p) {
+    const level = finderLevel();
+    if (!level) return '';
+    if (Math.hypot(p.x - finderCache.x, p.z - finderCache.z) < 0.7) return finderCache.text;
+    let text = '';
+    if (dam.isWater(p.x, p.z)) {
+      const spot = spotAt(p);
+      text = describeSpot(spot);
+      if (level >= 2) {
+        const env = environment.getState();
+        const habitat = { zone: dam.zoneAt(p.x, p.z).type, depthFactor: dam.depthFactorAt(p.x, p.z) };
+        let activity = 0;
+        for (const sp of localSpecies) {
+          const share = location.catchShare?.[sp.id] ?? 100 / localSpecies.length;
+          const best = { depth: 0, onBottom: true }; // as the fish would like it
+          activity += share * suitability(sp, { waterTempC: env.waterTempC, equippedLureId: sp.preferredLureIds[0], timeOfDay: env.timeOfDay, habitat, lureKind: 'bait' })
+            * waterMultiplier(sp.id, spot, best) / ENGINE.water.rightDepth;
+        }
+        const bars = activity >= 60 ? 3 : activity >= 35 ? 2 : activity >= 15 ? 1 : 0;
+        text += ` · fish ${'▮'.repeat(bars)}${'▯'.repeat(3 - bars)}`;
+      }
+    }
+    finderCache = { x: p.x, z: p.z, text };
+    return text;
+  }
+
   // What the fish see right now: the water, the bait or lure, the rig.
   function biteConditions() {
     const state = environment.getState();
+    const spot = readSpot(dam, casting.bobberPosition.x, casting.bobberPosition.z, state);
+    const bait = baitDepth({ lure: currentLure(), floatDepthM: floatDepth(), waterDepthM: spot.depthM });
     return {
       waterTempC: state.waterTempC, equippedLureId: activeLureId, timeOfDay: state.timeOfDay,
       habitat: casting.getBobberHabitat(), lureKind: currentLure().kind, chumBoost: chumSystem.boostAt(casting.bobberPosition),
@@ -746,7 +801,9 @@ function startGame(locationId, startTimeOfDay) {
       gearBite: (s) => (activeHook.biteBonus?.[s.id] ?? 1) * (activeLine.biteBonus?.[s.id] ?? 1)
         * (activeRod.biteBonus?.[s.id] ?? 1) * rig.biteFactor
         // A baitrunner only helps with bait: the fish runs off with it freely.
-        * (currentLure().kind === 'bait' ? (activeReel.biteBonus?.[s.id] ?? 1) : 1),
+        * (currentLure().kind === 'bait' ? (activeReel.biteBonus?.[s.id] ?? 1) : 1)
+        // The right depth, a drop-off, the windward bank.
+        * waterMultiplier(s.id, spot, bait),
     };
   }
 

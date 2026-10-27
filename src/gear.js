@@ -192,6 +192,22 @@ export const REELS = [
   ...COMBO_REELS,
 ];
 
+// Electronics: fish finders. Owning one is using it (the best you own).
+//   level 1  depth and what's on the bottom where you aim
+//   level 2  also how many fish are showing there
+export const GADGETS = [
+  {
+    id: 'gadget-deeper-start', name: 'Deeper START Castable Sonar', tier: 2, cost: 850, priceR: 1700, level: 1,
+    note: 'Cast it out, read it on your phone: depth, weed and drop-offs where you aim · ~R1,700 in SA shops',
+    sections: ['general', 'carp', 'bass', 'predator'],
+  },
+  {
+    id: 'gadget-garmin-striker', name: 'Garmin Striker Vivid 4cv', tier: 3, cost: 2000, priceR: 3999, level: 2,
+    note: 'Depth, structure and fish arches where you aim · ~R4,000 in SA shops',
+    sections: ['general', 'carp', 'bass', 'predator'],
+  },
+];
+
 // Rod-and-reel combos, sold as a pair: buying one gives you both.
 export const COMBOS = SHOP_COMBOS;
 

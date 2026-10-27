@@ -59,6 +59,7 @@ async function ownedGear(db, userId) {
     owned[kind] = rows.filter((g) => g.kind === kind).map((g) => g.item_id);
     if (!owned[kind].includes(STARTER[kind])) owned[kind].unshift(STARTER[kind]);
   }
+  owned.gadget = rows.filter((g) => g.kind === 'gadget').map((g) => g.item_id);
   return owned;
 }
 
@@ -79,6 +80,7 @@ export async function loadSave(db, userId) {
     const eq = state[`equipped_${kind}`];
     save[equippedField] = eq && owned[kind].includes(eq) ? eq : STARTER[kind];
   }
+  save.ownedGadgetIds = owned.gadget;
   return { save, version: state.version };
 }
 
