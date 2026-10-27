@@ -259,6 +259,8 @@ export const FISH_SPECIES = [
     // freshwater predator on fly (Vanderkloof, Vaal at Parys, Orange at
     // Upington), up to ~9kg on the Vaal. Streamers and spinners.
     id: 'largemouth-yellowfish',
+    // Protected in SA (near-threatened): catch and release only.
+    protected: true,
     name: 'Largemouth Yellowfish',
     rarity: 'rare',
     minWeightKg: 1,
@@ -277,6 +279,8 @@ export const FISH_SPECIES = [
     // endangered, catch-and-release only, spooky sight-fishing on light
     // tippet with nymphs.
     id: 'clanwilliam-yellowfish',
+    // Protected in SA (vulnerable, Olifants-Doring only): catch and release only.
+    protected: true,
     name: 'Clanwilliam Yellowfish',
     rarity: 'rare',
     minWeightKg: 0.5,

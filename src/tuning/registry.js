@@ -114,6 +114,20 @@ const ENGINE_FIELDS = {
     windBonus: { label: 'Bites on the windward bank', unit: '×', min: 1, max: 4, step: 0.05, hint: 'Carp, yellowfish and kurper where the wind blows food onto the bank.' },
     windMin: { label: 'Wind for the windward bank', min: 0, max: 20, step: 0.1, hint: 'Wind strength needed (x3 = km/h; 2.7 is about 8 km/h).' },
   },
+  landing: {
+    netMinKg: { label: 'Fish that need the net', unit: 'kg', min: 0, max: 20, step: 0.1, hint: 'This size and up must be netted; smaller fish are swung straight in.' },
+    snagFreeChance: { label: 'Snagged fish swims out', unit: 'per s', min: 0, max: 1, step: 0.01, hint: 'While you ease off, the chance each second a snagged fish frees itself.' },
+    snagEaseSeconds: { label: 'Ease off before it swims out', unit: 's', min: 0, max: 10, step: 0.5, hint: 'How long you must stop reeling before a snagged fish can swim out.' },
+    snagMaxSeconds: { label: 'Snag time before the line parts', unit: 's', min: 2, max: 60, step: 1, hint: 'Stuck in cover longer than this and it breaks off.' },
+    snagMinDistance: { label: 'No snags closer than', unit: 'm', min: 0, max: 30, step: 0.5, hint: 'Fish this close to you cannot get snagged.' },
+    coverReach: { label: 'Bolts for cover within', unit: 'm', min: 0, max: 50, step: 1, hint: 'How far a hooked fish will run to reach weed, reeds or timber.' },
+    steerLift: { label: 'Rod height to steer it off cover', min: 0, max: 1, step: 0.05, hint: 'Hold the reel with the rod at least this high to turn a fish away from cover.' },
+    keepBonus: { label: 'Keep: extra credits', unit: '×', min: 1, max: 3, step: 0.05, hint: 'A kept fish pays this much more than a released one. The server pays it.' },
+    releaseBoost: { label: 'Release: bites boost per fish', min: 0, max: 0.5, step: 0.01, hint: 'Each fish released at a dam raises bites there this session.' },
+    releaseBoostMax: { label: 'Release: most boost', min: 0, max: 2, step: 0.05, hint: 'The most that releasing can raise bites at one dam.' },
+    keepPenalty: { label: 'Keep: fewer bites per fish', min: 0, max: 0.5, step: 0.01, hint: 'Each fish kept lowers bites of that species at that dam this session.' },
+    keepPenaltyMax: { label: 'Keep: most drop', min: 0, max: 0.9, step: 0.05, hint: 'The most that keeping can lower one species bites at a dam.' },
+  },
   motion: {
     runSeconds: { label: 'Length of a run', unit: 's', min: 0.2, max: 10, step: 0.1, hint: 'How long each run lasts.' },
     reelSpeed: { label: 'Reel speed', unit: 'm/s', min: 0.2, max: 10, step: 0.1, hint: 'How fast the reel winds line in during a fight.' },
@@ -128,7 +142,7 @@ const ENGINE_FIELDS = {
     guestImportLimit: { label: 'Guest progress limit', unit: 'credits', min: 0, max: 1000000, step: 100, type: 'integer', hint: 'Most a guest can bring into a new account (credits plus gear value).' },
   },
 };
-const ENGINE_GROUP = { bites: 'Bites', strike: 'Strike', lures: 'Working lures', water: 'Reading the water', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
+const ENGINE_GROUP = { bites: 'Bites', strike: 'Strike', lures: 'Working lures', water: 'Reading the water', landing: 'Landing the fish', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
 
 // ─── Building the list ──────────────────────────────────────────────────────
 export const TUNABLES = [];

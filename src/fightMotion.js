@@ -75,7 +75,9 @@ const MIN_DISTANCE = 1.0; // reeled right in to the rod tip (as far as the water
 // (How fast the reel winds in: ENGINE.motion.reelSpeed.)
 
 // start/rod: {x, z}. isWater(x, z) keeps the fish off the bank.
-export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater = () => true, rng = Math.random, reelSpeed = ENGINE.motion.reelSpeed }) {
+// `coverAt(x, z)`: the kind of cover there ('reeds', 'timber'...) or null.
+// `seeksCover`: this fish bolts for cover when hooked (bass, carp, barbel).
+export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater = () => true, rng = Math.random, reelSpeed = ENGINE.motion.reelSpeed, coverAt = () => null, seeksCover = false }) {
   const range = (r) => r[0] + rng() * (r[1] - r[0]);
   let x = start.x, z = start.z;
   let heading = Math.atan2(z - rod.z, x - rod.x); // straight away from the angler
@@ -92,13 +94,52 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
   const state = {
     x, z, y: 0, depth, heading, speed: 0, jumping: false, jumpStarted: false, jumpLanded: false,
     running: true, takingLine: false, distance: Math.hypot(start.x - rod.x, start.z - rod.z),
+    headingForCover: null, snagged: null, freed: false,
   };
+  // Cover the fish is bolting for, and a snag it's stuck in.
+  let coverTarget = null; // { x, z, kind }
+  let snag = null; // { kind, ease }
+  const L = () => ENGINE.landing;
+  // The nearest cover within reach of the fish, not right at the angler's feet.
+  function findCover() {
+    let best = null;
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      for (let d = 2; d <= L().coverReach; d += 2) {
+        const cx = x + Math.cos(a) * d, cz = z + Math.sin(a) * d;
+        if (!isWater(cx, cz)) break;
+        const kind = coverAt(cx, cz);
+        if (kind && Math.hypot(cx - rod.x, cz - rod.z) > L().snagMinDistance) {
+          if (!best || d < best.d) best = { x: cx, z: cz, kind, d };
+          break;
+        }
+      }
+    }
+    return best;
+  }
 
   // `drag` is the reel's drag setting (share of the line's strength, a third
   // by default) and `slipping` whether the spool is giving line right now.
-  function update(dt, { progress = 0, holding = false, drag = 0.33, slipping = false } = {}) {
+  function update(dt, { progress = 0, holding = false, drag = 0.33, slipping = false, rodLift = 0 } = {}) {
     state.jumpStarted = false;
     state.jumpLanded = false;
+    state.freed = false;
+
+    // Stuck in a snag: it goes nowhere. Ease off (stop winding) and it may
+    // swim out on its own; keep hauling and it stays put.
+    if (snag) {
+      speed = 0;
+      snag.ease = holding ? 0 : snag.ease + dt;
+      if (snag.ease >= L().snagEaseSeconds && rng() < L().snagFreeChance * dt) {
+        snag = null;
+        coverTarget = null;
+        heading = Math.atan2(z - rod.z, x - rod.x) + (rng() * 2 - 1) * 1.2;
+        runLeft = 1;
+        state.freed = true;
+      }
+      Object.assign(state, { x, z, speed: 0, running: false, takingLine: false, snagged: snag ? snag.kind : null, headingForCover: null });
+      return state;
+    }
 
     // Runs: a fresh burst every few seconds. Under pressure it pulls away
     // from you; left alone it goes wherever it likes -- any direction.
@@ -108,6 +149,21 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
       runLeft = ENGINE.motion.runSeconds * (0.7 + rng() * 0.6);
       const away = Math.atan2(z - rod.z, x - rod.x);
       heading = holding ? away + (rng() * 2 - 1) * style.swing : rng() * Math.PI * 2;
+      // A fish that lives in cover makes for the nearest weed, reeds or timber.
+      coverTarget = null;
+      if (seeksCover && progress < 0.85 && rng() < 0.7) {
+        const c = findCover();
+        if (c) { coverTarget = c; heading = Math.atan2(c.z - z, c.x - x); }
+      }
+    }
+    // Rod held up: the pressure on its head turns it away from the cover --
+    // more so while you wind.
+    if (coverTarget && rodLift >= L().steerLift) {
+      const awayFromCover = Math.atan2(z - coverTarget.z, x - coverTarget.x);
+      let diff = Math.atan2(Math.sin(awayFromCover - heading), Math.cos(awayFromCover - heading));
+      heading += Math.sign(diff) * Math.min(Math.abs(diff), dt * (holding ? 1.6 : 1.0) * Math.min(1, rodLift + 0.3));
+      diff = Math.atan2(Math.sin(awayFromCover - heading), Math.cos(awayFromCover - heading));
+      if (Math.abs(diff) < 0.6) coverTarget = null;
     }
     const running = runLeft > 0;
     runLeft -= dt;
@@ -146,6 +202,11 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     }
     x = nx; z = nz;
     const distance = Math.hypot(x - rod.x, z - rod.z);
+    // Reached the cover: snagged.
+    if (seeksCover && !snag && distance > L().snagMinDistance) {
+      const kind = coverAt(x, z);
+      if (kind && (coverTarget || rng() < 0.3 * dt)) { snag = { kind, ease: 0 }; coverTarget = null; }
+    }
 
     // Depth: holds deep while strong, comes up as it tires.
     const wantDepth = style.depth * (1 - 0.7 * Math.min(1, progress));
@@ -181,6 +242,8 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
       pitch: jumping ? Math.cos((jumpT / jumpDur) * Math.PI) * 0.9 : 0,
       jumpDuration: jumpDur,
       distance,
+      snagged: snag ? snag.kind : null,
+      headingForCover: coverTarget ? coverTarget.kind : null,
     });
     return state;
   }

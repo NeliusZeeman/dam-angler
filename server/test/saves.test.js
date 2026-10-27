@@ -118,6 +118,24 @@ test('a fish finder is bought once and is yours on every device; the float depth
   assert.equal(s.settings.floatDepth, 2.3);
 });
 
+test('keep or release: keeping pays more, a protected fish is always released', async () => {
+  const p = await player();
+  const id1 = randomUUID(), id2 = randomUUID();
+  const released = await p.c.post('/api/me/catches', { id: id1, speciesId: 'catfish', locationId: 'jozini', weightKg: 6 });
+  const kept = await p.c.post('/api/me/catches', { id: id2, speciesId: 'catfish', locationId: 'jozini', weightKg: 6, kept: true });
+  const base = (id) => catchPayout({ species: species('catfish'), weightKg: 6, rod: RODS[0], line: LINES[0], hook: HOOKS[0], catchId: id });
+  assert.equal(released.body.payout, base(id1));
+  assert.equal(kept.body.payout, catchPayout({ species: species('catfish'), weightKg: 6, rod: RODS[0], line: LINES[0], hook: HOOKS[0], catchId: id2, kept: true }));
+  assert.ok(kept.body.payout > base(id2), 'a kept fish pays more');
+  const id3 = randomUUID();
+  const yellow = await p.c.post('/api/me/catches', { id: id3, speciesId: 'largemouth-yellowfish', locationId: 'vaal-barrage', weightKg: 3, kept: true });
+  assert.equal(yellow.status, 201);
+  const yellowBase = catchPayout({ species: species('largemouth-yellowfish'), weightKg: 3, rod: RODS[0], line: LINES[0], hook: HOOKS[0], catchId: id3 });
+  assert.equal(yellow.body.payout, yellowBase, 'a protected fish cannot be kept: no keep bonus');
+  const log = (await p.c.get('/api/me')).body.save.catchLog;
+  assert.equal(log.catfish.released, 1, 'one catfish released, one kept');
+});
+
 test('breadcrumbs cost 15 credits, and not without them', async () => {
   const p = await player();
   assert.equal((await p.c.post('/api/me/spend', { what: 'chum' })).status, 400);

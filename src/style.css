@@ -561,3 +561,14 @@ body.touch .shop-card button { min-height: 36px; }
 .hud-distance-extra { flex-basis: 100%; text-align: center; white-space: normal; }
 .tackle-sliders { display: grid; gap: 6px; align-content: start; }
 .tackle-sliders .tackle-drag { margin: 0; }
+
+/* Catch card: release or keep, and the protected-fish note. */
+.catch-choices { display: flex; gap: 8px; flex-wrap: wrap; }
+.catch-choices .catch-close { flex: 2 1 160px; }
+.catch-keep {
+  flex: 1 1 110px; font: inherit; font-weight: 700; padding: 10px 14px; border-radius: 10px; cursor: pointer;
+  background: transparent; color: #f3ece0; border: 1px solid rgba(255, 255, 255, 0.35);
+}
+.catch-keep:disabled { opacity: 0.4; cursor: not-allowed; }
+.catch-keep:focus-visible { outline: 2px solid #ffcf7a; outline-offset: 2px; }
+.catch-protected { margin: 0; font-size: 12.5px; color: #9fe0b0; }

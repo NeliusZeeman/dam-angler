@@ -53,6 +53,10 @@ export function diagnoseLoss(reason, info = {}, { rod, reel, line, hook, weightK
       ? { status: 'warn', text: 'Rod held high during the jump' }
       : { status: 'ok', text: 'Rod tip was down — it was the winding that did it' };
     tip = 'When it jumps, stop winding and drop the rod tip until it\'s back in the water. Circle and hair-rig hooks hold better.';
+  } else if (reason === 'snagged') {
+    title = 'Snagged — the line parted in the cover';
+    parts.line = { status: 'fail', text: 'Wrapped round the snag until it broke' };
+    tip = 'When it heads for cover, hold the rod up and wind to turn its head. If it gets in, stop winding for a few seconds — it often swims out.';
   } else if (reason === 'fish-escaped') {
     title = 'Slack line — it shook free';
     parts.line = { status: 'fail', text: 'Went slack too long; the hook dropped out' };

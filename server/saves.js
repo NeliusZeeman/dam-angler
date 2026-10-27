@@ -35,7 +35,8 @@ export async function createPlayer(db, userId) {
 async function catchLogFor(db, userId, imported = {}) {
   const { rows } = await db.query(
     `SELECT species_id, count(*)::int AS count, max(weight_kg)::float AS best,
-            count(*) FILTER (WHERE trophy)::int AS trophies
+            count(*) FILTER (WHERE trophy)::int AS trophies,
+            count(*) FILTER (WHERE NOT kept)::int AS released
        FROM catches WHERE user_id = $1 GROUP BY species_id`,
     [userId],
   );
@@ -47,6 +48,8 @@ async function catchLogFor(db, userId, imported = {}) {
     e.bestWeightKg = Math.max(e.bestWeightKg || 0, Number(r.best));
     const trophies = (e.trophies || 0) + r.trophies;
     if (trophies) e.trophies = trophies;
+    const released = (e.released || 0) + r.released;
+    if (released) e.released = released;
     log[r.species_id] = e;
   }
   return log;
@@ -128,15 +131,15 @@ export async function recordCatch(db, userId, raw, { pay = true } = {}) {
   const pick = (kind, sent) => [sent, state[`equipped_${kind}`], STARTER[kind]].find((id) => id && owned[kind].includes(id));
   const gear = raw?.gear && typeof raw.gear === 'object' ? raw.gear : {};
   const payout = catchPayout({
-    species: sp, weightKg: c.weightKg, trophy: c.trophy, catchId: c.id,
+    species: sp, weightKg: c.weightKg, trophy: c.trophy, catchId: c.id, kept: c.kept,
     rod: gearItem('rod', pick('rod', gear.rodId)), line: gearItem('line', pick('line', gear.lineId)),
     hook: gearItem('hook', pick('hook', gear.hookId)),
   });
   return inTx(db, async (tx) => {
     const { rows } = await tx.query(
-      `INSERT INTO catches (id, user_id, species_id, location_id, weight_kg, length_cm, trophy, payout, time_of_day, caught_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [c.id, userId, c.speciesId, c.locationId, c.weightKg, c.lengthCm, c.trophy, pay ? payout : 0, c.timeOfDay, c.caughtAt],
+      `INSERT INTO catches (id, user_id, species_id, location_id, weight_kg, length_cm, trophy, payout, time_of_day, caught_at, kept)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING RETURNING id`,
+      [c.id, userId, c.speciesId, c.locationId, c.weightKg, c.lengthCm, c.trophy, pay ? payout : 0, c.timeOfDay, c.caughtAt, c.kept],
     );
     const stored = rows.length > 0;
     const credits = stored && pay ? await changeCredits(tx, userId, payout, 'catch', c.id) : await creditsOf(tx, userId);

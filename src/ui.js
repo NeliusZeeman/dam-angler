@@ -211,7 +211,9 @@ let closeActiveCatchCard = null;
 
 // `lockMs`: the close button (and keys) stay inactive this long so a finger
 // or key still held from the fight can't dismiss the card unread.
-export function showCatchCard(container, { species, weightKg, lengthCm, payout, previousBestKg, count, locationName, timeLabel, trophy = false, damRecord = false, lockMs = 0, onClose = null }) {
+// `keepPayout` / `onChoice(kept)`: the Keep and Release buttons (closing any
+// other way releases it). A protected fish can only be released.
+export function showCatchCard(container, { species, weightKg, lengthCm, payout, keepPayout = null, previousBestKg, count, locationName, timeLabel, trophy = false, damRecord = false, lockMs = 0, onClose = null, onChoice = null }) {
   closeActiveCatchCard?.();
   const firstEver = count === 1;
   const personalBest = !firstEver && weightKg > previousBestKg;
@@ -236,13 +238,17 @@ export function showCatchCard(container, { species, weightKg, lengthCm, payout, 
         <p class="catch-kicker">Landed · <span class="catch-rarity" data-rarity="${species.rarity}">${RARITY_LABEL[species.rarity] || species.rarity}</span></p>
         <h2 class="catch-name">${species.name}</h2>
         <dl class="catch-stats">
-          <div><dt>Weight</dt><dd>${weightKg.toFixed(2)} kg</dd></div>
+          <div><dt>Weight</dt><dd class="catch-weigh">0.00 kg</dd></div>
           <div><dt>Length</dt><dd>${Math.round(lengthCm)} cm</dd></div>
-          <div><dt>Value</dt><dd>+${payout} cr</dd></div>
+          <div><dt>Value</dt><dd>+${payout} cr${keepPayout && keepPayout !== payout ? ` · kept +${keepPayout}` : ''}</dd></div>
           <div><dt>Your best</dt><dd>${Math.max(weightKg, previousBestKg).toFixed(2)} kg</dd></div>
         </dl>
         <p class="catch-where">Your ${ordinal(count)} ${species.name} · ${locationName}${timeLabel ? ` · ${timeLabel}` : ''}</p>
-        <button class="catch-close" type="button"><span class="catch-close-fill"></span><span class="catch-close-label">Keep fishing</span></button>
+        ${species.protected ? '<p class="catch-protected">Protected in South Africa — it goes back.</p>' : ''}
+        <div class="catch-choices">
+          <button class="catch-close" type="button"><span class="catch-close-fill"></span><span class="catch-close-label">Release it</span></button>
+          ${onChoice ? `<button class="catch-keep" type="button" ${species.protected ? 'disabled' : ''}>Keep it${keepPayout && !species.protected ? ` (+${keepPayout})` : ''}</button>` : ''}
+        </div>
       </div>
     </div>`;
   container.appendChild(wrap);
@@ -273,6 +279,18 @@ export function showCatchCard(container, { species, weightKg, lengthCm, payout, 
     }, lockMs);
   }
 
+  // The weigh-in: the scale ticks up to the weight.
+  const weighEl = wrap.querySelector('.catch-weigh');
+  const weighStart = performance.now();
+  (function tick() {
+    const t = Math.min(1, (performance.now() - weighStart) / 1100);
+    const eased = 1 - Math.pow(1 - t, 3);
+    weighEl.textContent = `${(weightKg * eased).toFixed(2)} kg`;
+    if (t < 1 && wrap.isConnected) requestAnimationFrame(tick);
+  })();
+  // In a background tab animation frames can stall: always end on the weight.
+  setTimeout(() => { weighEl.textContent = `${weightKg.toFixed(2)} kg`; }, 1200);
+
   let closed = false;
   function onKey(e) {
     if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') {
@@ -283,9 +301,10 @@ export function showCatchCard(container, { species, weightKg, lengthCm, payout, 
       if (!locked && !e.repeat) close();
     }
   }
-  function close() {
+  function close(kept = false) {
     if (closed) return;
     closed = true;
+    if (onChoice) onChoice(kept);
     if (closeActiveCatchCard === close) closeActiveCatchCard = null;
     window.removeEventListener('keydown', onKey, true);
     wrap.remove();
@@ -295,7 +314,11 @@ export function showCatchCard(container, { species, weightKg, lengthCm, payout, 
   window.addEventListener('keydown', onKey, true);
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (!locked) close();
+    if (!locked) close(false);
+  });
+  wrap.querySelector('.catch-keep')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!locked && !species.protected) close(true);
   });
   return close;
 }

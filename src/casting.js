@@ -51,6 +51,8 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   getFightInput = () => ({ progress: 0, holding: false }), onFishJump = null,
   // Fly rig: cast with false casts, and draw the thick coloured fly line.
   isFlyCast = () => false, getLineLook = () => null, onFlyStroke = null,
+  // Cover for a hooked fish to bolt into: (speciesId) => { coverAt, seeksCover }.
+  getFightCover = () => ({}),
   // What's on the end of the line (a LURES item), and whether the bait has
   // come off the hook.
   getLure = () => null, isBareHook = () => false }) {
@@ -354,6 +356,7 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
       rod: fightRod,
       style: fightStyleFor(speciesId),
       isWater: (x, z) => dam.isWater(x, z) && dam.waterDist(x, z) > 0.8,
+      ...getFightCover(speciesId),
     });
     wakeTimer = 0;
     if (biteCallback) biteCallback();
@@ -920,7 +923,10 @@ export function createCasting({ scene, camera, domElement, getRod, rodTip, water
   function getFightFish() {
     if (phase !== 'biting' || !fightMotion) return null;
     const s = fightMotion.state;
-    return { position: fightFish, heading: s.heading, pitch: s.pitch || 0, jumping: s.jumping, depth: s.depth, takingLine: s.takingLine };
+    return {
+      position: fightFish, heading: s.heading, pitch: s.pitch || 0, jumping: s.jumping, depth: s.depth, takingLine: s.takingLine,
+      running: s.running, snagged: s.snagged, headingForCover: s.headingForCover, freed: s.freed,
+    };
   }
 
   function updateAimFromPointer(clientX, clientY) {

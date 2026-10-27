@@ -11,6 +11,10 @@ export function createMinigame() {
   // Rod angle, -1 (tip down at the water) .. 0 (normal) .. 1 (held high).
   let rodLift = 0;
   let highInJump = false;
+  // Snagged in cover (set from the fish's motion), and the landing net.
+  let snagged = false;
+  let snagTime = 0;
+  let netReady = false;
   let slackTimer = 0;
   let runTimer = 0;
   let context = null;
@@ -50,8 +54,9 @@ export function createMinigame() {
   let rodOverloaded = 0; // seconds bent past its rating
   // `stamina` stretches the fight: 1 = a quick kurper, ~2-3 = a big carp or
   // barbel that takes a long time to tire (see fightMotion.fightStamina).
-  function start({ species, weightKg, rod, line, hook = null, reel = null, onSuccess, onFailure, canLand = () => true, stamina = 1, drag: startDrag = null }) {
+  function start({ species, weightKg, rod, line, hook = null, reel = null, onSuccess, onFailure, canLand = () => true, stamina = 1, drag: startDrag = null, needsNet = false }) {
     landingBlocked = false;
+    snagged = false; snagTime = 0; netReady = false;
     highInJump = false;
     if (startDrag !== null) setDrag(startDrag);
     slipping = false;
@@ -71,7 +76,7 @@ export function createMinigame() {
     strainedInAir = 0;
     hookStrain = 0;
     fishPulling = false;
-    context = { species, weightKg, rod, line, hook, reel, onSuccess, onFailure, canLand, stamina: Math.max(0.5, stamina) };
+    context = { species, weightKg, rod, line, hook, reel, onSuccess, onFailure, canLand, stamina: Math.max(0.5, stamina), needsNet };
   }
 
   function setDrag(value) {
@@ -89,6 +94,30 @@ export function createMinigame() {
 
   function setHolding(value) {
     holding = value;
+  }
+
+  // The fish is stuck in weed, reeds or timber (fightMotion decides).
+  function setSnagged(value) {
+    if (value && !snagged) snagTime = 0;
+    snagged = !!value;
+  }
+
+  // The landing net: only once the fish is beaten and at your feet. A calm
+  // fish goes in; a lively one sees the net and bolts. Returns
+  // 'netted' | 'bolted' | 'not-ready'.
+  function tryNet(calm) {
+    if (!active || !netReady) return 'not-ready';
+    if (calm) {
+      active = false;
+      netReady = false;
+      context.onSuccess();
+      return 'netted';
+    }
+    netReady = false;
+    progress = 0.75;
+    tension = Math.min(ENGINE.fight.snapAt * 0.85, tension + 0.35);
+    lastSpike = 0;
+    return 'bolted';
   }
 
   // Where the rod tip is: high pumps a fish in faster, low keeps a jumping
@@ -150,7 +179,15 @@ export function createMinigame() {
     const rodLocked = rodLoad > 1;
     slipping = false;
     lastSpike += deltaSeconds;
-    if (holding) {
+    if (snagged) {
+      // Stuck in cover: hauling only loads the line; easing off lets it
+      // swim out (fightMotion) -- but not forever.
+      snagTime += deltaSeconds;
+      if (holding) tension += 1.4 * deltaSeconds;
+      else tension += (0.35 - tension) * Math.min(1, deltaSeconds * 2);
+      slackTimer = 0;
+      if (snagTime >= ENGINE.landing.snagMaxSeconds) { fail('snagged'); return; }
+    } else if (holding) {
       // Winding against a fish, the line settles at the fish's pull as a
       // share of the line's breaking strain (softened by a good rod, reel
       // drag and hook). Strong line on a small fish: wind all day. Light
@@ -276,9 +313,13 @@ export function createMinigame() {
     if (progress >= 1) {
       progress = 1;
       if (context.canLand()) {
-        active = false;
         landingBlocked = false;
-        onSuccess();
+        // Big enough for the net: wait for the angler to net it.
+        if (context.needsNet) netReady = true;
+        else {
+          active = false;
+          onSuccess();
+        }
       } else {
         // All the line's in but the fish is still out in open water (you're
         // standing back from the edge): keep it on until you get to it.
@@ -287,12 +328,13 @@ export function createMinigame() {
     } else if (progress < 0.9) {
       // It took real line back -- no longer waiting at the edge.
       landingBlocked = false;
+      netReady = false;
     }
   }
 
   function getState() {
     return {
-      tension: Math.min(1, tension), active, progress, holding, rodLift, airborne: airborne > 0, landingBlocked, slack: slackTimer > 0.6,
+      tension: Math.min(1, tension), active, progress, holding, rodLift, airborne: airborne > 0, landingBlocked, slack: slackTimer > 0.6, snagged, netReady,
       drag, slipping, rodLoad, hookLoad, lineLoad, jolt: lastSpike < 0.35, stuckDrag: stuckDrag && lastSpike < 0.5,
     };
   }
@@ -301,5 +343,5 @@ export function createMinigame() {
     return active;
   }
 
-  return { start, update, getState, isActive, setHolding, setRodLift, setFishPulling, jump, setDrag, getDrag: () => drag };
+  return { start, update, getState, isActive, setHolding, setRodLift, setFishPulling, setSnagged, tryNet, jump, setDrag, getDrag: () => drag };
 }

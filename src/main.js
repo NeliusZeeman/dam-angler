@@ -225,6 +225,11 @@ function startGame(locationId, startTimeOfDay) {
     getCastMultiplier: () => (activeReel.castMultiplier || 1) * (activeLine.castMultiplier || 1)
       * (currentLure().heavy && activeRod.power === 'light' ? 0.72 : 1) * rig.castFactor,
     getCastDrag: () => currentLure().castDrag ?? null,
+    // Weed, reeds, pads and timber a hooked fish can bolt into.
+    getFightCover: (speciesId) => ({
+      seeksCover: !!FISH_SPECIES.find((f) => f.id === speciesId)?.habitat?.structure || ['common-carp', 'mirror-carp', 'catfish'].includes(speciesId),
+      coverAt: (x, z) => { const zn = dam.zoneAt(x, z); return zn.type === 'structure' ? zoneName(zn.kind) : null; },
+    }),
     getLure: () => currentLure(),
     isBareHook: () => bareHook,
     // A full fly rig casts the fly-fishing way: false casts that whip the
@@ -490,6 +495,7 @@ function startGame(locationId, startTimeOfDay) {
     }
     if (e.code === 'Space') {
       if (casting.getState().phase === 'take' && !e.repeat) casting.pressStart();
+      else if (minigame.getState().netReady && !e.repeat) tryNet();
       else minigame.setHolding(true);
       e.preventDefault();
     }
@@ -507,7 +513,19 @@ function startGame(locationId, startTimeOfDay) {
     rodRecoil = 0.28;
     twitchedThisFrame = true;
   });
-  casting.onFightHold((holding) => minigame.setHolding(holding));
+  casting.onFightHold((holding) => {
+    if (holding && minigame.getState().netReady) { tryNet(); return; }
+    minigame.setHolding(holding);
+  });
+  // The net: a calm fish (not running, not jumping) goes in; a lively one bolts.
+  function tryNet() {
+    const f = casting.getFightFish();
+    const result = minigame.tryNet(!!f && !f.running && !f.jumping);
+    if (result === 'bolted') {
+      audio.splash(0.8);
+      hud.showToast('It saw the net and bolted! Let it settle, then net it when it\u2019s calm.');
+    }
+  }
 
   casting.onBite(() => {
     const species = bitingSpecies;
@@ -534,6 +552,8 @@ function startGame(locationId, startTimeOfDay) {
       species, weightKg, rod: activeRod, line: activeLine, hook: activeHook, reel: activeReel,
       stamina: fightStamina(species.id, weightKg), // big fish (and trophies) fight long
       drag: save.drag,
+      // Big enough for the landing net; small ones are swung straight in.
+      needsNet: weightKg >= ENGINE.landing.netMinKg,
       // It's only a catch once it's at your feet: at the bank, or beside
       // the stand -- never while it's still out in open water.
       canLand: () => {
@@ -546,8 +566,9 @@ function startGame(locationId, startTimeOfDay) {
         // A trophy pays triple. The catch's id fixes the price wobble, so the
         // server (which pays out when you're online) comes to the same sum.
         const catchId = newCatchId();
-        const payout = catchPayout({ species, weightKg: Math.round(weightKg * 100) / 100, rod: activeRod, line: activeLine, hook: activeHook, trophy, catchId });
-        save.credits += payout;
+        const payArgs = { species, weightKg: Math.round(weightKg * 100) / 100, rod: activeRod, line: activeLine, hook: activeHook, trophy, catchId };
+        const payout = catchPayout(payArgs);
+        const keepPayout = catchPayout({ ...payArgs, kept: true });
         const entry = save.catchLog[species.id] || { count: 0, bestWeightKg: 0 };
         const previousBestKg = entry.bestWeightKg;
         entry.count += 1;
@@ -561,10 +582,20 @@ function startGame(locationId, startTimeOfDay) {
         const lengthCm = estimateLengthCm(species, weightKg);
         const damRecordBefore = cloud.cachedDamStats()?.dams?.[location.id]?.record;
         const damRecord = !!cloud.user() && !!cloud.cachedDamStats() && (!damRecordBefore || weightKg > damRecordBefore.weightKg);
-        cloud.queueCatch({
-          id: catchId, speciesId: species.id, locationId: location.id, weightKg: Math.round(weightKg * 100) / 100,
-          lengthCm, trophy, timeOfDay: phase, gear: { rodId: activeRod.id, lineId: activeLine.id, hookId: activeHook.id },
-        });
+        // Paid and sent once you choose: keep it or put it back.
+        const decide = (kept) => {
+          kept = kept && !species.protected;
+          save.credits += kept ? keepPayout : payout;
+          if (!kept) entry.released = (entry.released || 0) + 1;
+          if (kept) keptHere[species.id] = (keptHere[species.id] || 0) + 1;
+          else releasedHere += 1;
+          saveSave(save);
+          cloud.queueCatch({
+            id: catchId, speciesId: species.id, locationId: location.id, weightKg: Math.round(weightKg * 100) / 100,
+            lengthCm, trophy, timeOfDay: phase, kept, gear: { rodId: activeRod.id, lineId: activeLine.id, hookId: activeHook.id },
+          });
+          hud.showToast(kept ? `Kept — +${keepPayout} credits` : `Released — it swims off strong. +${payout} credits`);
+        };
         playerController.releasePointer();
         showCatchCard(appEl, {
           species, weightKg, payout, previousBestKg,
@@ -574,7 +605,9 @@ function startGame(locationId, startTimeOfDay) {
           locationName: location.name,
           timeLabel: phase.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()),
           trophy,
-          lockMs: 1500, // time to read the card before "Keep fishing" works
+          keepPayout,
+          onChoice: decide,
+          lockMs: 1500, // time to read the card before the buttons work
           onClose: () => touchControls?.setRodEnabled(true),
         });
         // The thumb is usually still on the rod button when the fish comes
@@ -789,6 +822,52 @@ function startGame(locationId, startTimeOfDay) {
     return text;
   }
 
+  // ── Landing the fish: snags, the net, keep or release ──
+  let releasedHere = 0;
+  const keptHere = {};
+  function damHealth(speciesId) {
+    const L = ENGINE.landing;
+    return (1 + Math.min(L.releaseBoostMax, releasedHere * L.releaseBoost))
+      * Math.max(1 - L.keepPenaltyMax, 1 - (keptHere[speciesId] || 0) * L.keepPenalty);
+  }
+  let lastCover = null, lastSnag = null, lastNetReady = false;
+  let landingNet = null;
+  function tickLanding() {
+    const f = casting.getFightFish();
+    const mg = minigame.getState();
+    minigame.setSnagged(!!f?.snagged);
+    if (f?.headingForCover && f.headingForCover !== lastCover) hud.showToast(`It's heading for the ${f.headingForCover}! Rod up — turn its head!`);
+    if (f?.snagged && f.snagged !== lastSnag) hud.showToast(`Snagged in the ${f.snagged} — stop winding and let it swim out`);
+    if (f?.freed) hud.showToast('It swam out of the snag — keep it coming!');
+    if (mg.active && mg.netReady && !lastNetReady) hud.showToast(`Net it! ${touchMode ? 'Tap' : 'Click'} when it's calm at the surface`);
+    lastCover = f?.headingForCover || null;
+    lastSnag = f?.snagged || null;
+    lastNetReady = mg.active && mg.netReady;
+    // The landing net, in the water by the fish while it's ready to net.
+    if (!landingNet) {
+      landingNet = new THREE.Group();
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.015, 6, 28), new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.6, roughness: 0.4 }));
+      rim.rotation.x = Math.PI / 2;
+      const mesh = new THREE.Mesh(new THREE.ConeGeometry(0.31, 0.4, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x1a2a22, wireframe: true, transparent: true, opacity: 0.6 }));
+      mesh.position.y = -0.2;
+      mesh.rotation.x = Math.PI;
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.6, 8), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 }));
+      handle.position.set(0.8, 0.45, 0);
+      handle.rotation.z = Math.PI / 2.6;
+      landingNet.add(rim, mesh, handle);
+      landingNet.visible = false;
+      scene.add(landingNet);
+    }
+    landingNet.visible = !!(f && mg.active && mg.netReady);
+    if (landingNet.visible) {
+      const me = playerController.getPosition();
+      const dx = me.x - f.position.x, dz = me.z - f.position.z;
+      const len = Math.hypot(dx, dz) || 1;
+      landingNet.position.set(f.position.x + (dx / len) * 0.5, 0.02, f.position.z + (dz / len) * 0.5);
+      landingNet.rotation.y = Math.atan2(dx, dz) + Math.PI / 2;
+    }
+  }
+
   // What the fish see right now: the water, the bait or lure, the rig.
   function biteConditions() {
     const state = environment.getState();
@@ -803,7 +882,9 @@ function startGame(locationId, startTimeOfDay) {
         // A baitrunner only helps with bait: the fish runs off with it freely.
         * (currentLure().kind === 'bait' ? (activeReel.biteBonus?.[s.id] ?? 1) : 1)
         // The right depth, a drop-off, the windward bank.
-        * waterMultiplier(s.id, spot, bait),
+        * waterMultiplier(s.id, spot, bait)
+        // Released fish keep the dam healthy; kept ones fish it out.
+        * damHealth(s.id),
     };
   }
 
@@ -991,6 +1072,7 @@ function startGame(locationId, startTimeOfDay) {
       minigame.setRodLift(fighting ? playerController.getRodLift() : 0);
       // A fish running away keeps the line tight against the drag.
       minigame.setFishPulling(!!casting.getFightFish()?.takingLine);
+      tickLanding();
       rollBitesIfWaiting(delta);
       tickTake(delta);
       tickLureAction(delta, elapsed);

@@ -139,6 +139,7 @@ export function cleanCatchLog(log) {
       count,
       bestWeightKg: Math.min(sp.maxWeightKg * TROPHY_FACTOR, Math.max(0, Number(e.bestWeightKg) || 0)),
       ...(e.trophies ? { trophies: Math.min(count, Math.max(0, Math.floor(Number(e.trophies)))) } : {}),
+      ...(e.released ? { released: Math.min(count, Math.max(0, Math.floor(Number(e.released)))) } : {}),
     };
   }
   return out;
@@ -166,5 +167,7 @@ export function cleanCatch(c) {
     // Whether it's a trophy is decided by its weight, not by what the game says.
     weightKg: Math.round(weightKg * 100) / 100, lengthCm, trophy: isTrophyWeight(sp, weightKg),
     timeOfDay: TIMES.has(c.timeOfDay) ? c.timeOfDay : null, caughtAt: caughtAt.toISOString(),
+    // Kept, not released -- a protected fish can't be kept.
+    kept: c.kept === true && !sp.protected,
   };
 }

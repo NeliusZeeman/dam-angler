@@ -59,6 +59,21 @@ const DEFAULTS = {
     windBonus: 1.3, // carp and yellowfish on the bank the wind blows onto
     windMin: 2.7, // wind needed for that (game units; x3 = km/h, so ~8 km/h)
   },
+  // Landing the fish: snags, the net, keep or release.
+  landing: {
+    netMinKg: 0.5, // fish this size and up need the net; smaller ones are swung in
+    snagFreeChance: 0.35, // per second, easing off, a snagged fish swims out
+    snagEaseSeconds: 2, // ...after you've eased off this long
+    snagMaxSeconds: 12, // stuck longer than this and the line parts
+    snagMinDistance: 6, // m -- no snags right at your feet
+    coverReach: 15, // m -- how far a fish will bolt for cover
+    steerLift: 0.2, // rod held at least this high (0..1) steers it off the cover
+    keepBonus: 1.2, // a kept fish pays this much more
+    releaseBoost: 0.05, // each fish released here: bites +5% this session
+    releaseBoostMax: 0.25,
+    keepPenalty: 0.1, // each fish kept: that species' bites -10% here this session
+    keepPenaltyMax: 0.3,
+  },
   motion: {
     runSeconds: 1.3,
     reelSpeed: 1.5, // m/s the reel winds in
