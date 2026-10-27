@@ -1,3 +1,4 @@
+import { renderSpeciesBook } from './goalsScreens.js';
 import { FISH_SPECIES } from './fish.js';
 import { windFromLabel } from './weather.js';
 import { assetTag } from './versionCheck.js';
@@ -188,14 +189,9 @@ export function showLossReport(container, report, seconds = 9) {
   setTimeout(() => { if (lossCard === card) card.remove(); }, seconds * 1000);
 }
 
-export function renderCatchLog(container, catchLog, { species = FISH_SPECIES, locationName = null } = {}) {
-  const rows = species.map((sp) => {
-    const entry = catchLog[sp.id] || { count: 0, bestWeightKg: 0 };
-    const trophies = entry.trophies ? ` · ${entry.trophies} ${entry.trophies > 1 ? "trophies" : "trophy"}` : '';
-    return `<div class="shop-row"><span>${sp.name}</span><span>${entry.count} caught, best ${entry.bestWeightKg.toFixed(2)}kg${trophies}</span></div>`;
-  }).join('');
-  const title = locationName ? `Catch Log — ${locationName}` : 'Catch Log';
-  container.innerHTML = `<button class="panel-close" data-close="log">Close</button><h3>${title}</h3>${rows}`;
+// The catch log is the Species Book now (goalsScreens.js).
+export function renderCatchLog(container, catchLog, options = {}) {
+  renderSpeciesBook(container, catchLog, options);
 }
 
 const RARITY_LABEL = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare' };

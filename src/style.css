@@ -572,3 +572,21 @@ body.touch .shop-card button { min-height: 36px; }
 .catch-keep:disabled { opacity: 0.4; cursor: not-allowed; }
 .catch-keep:focus-visible { outline: 2px solid #ffcf7a; outline-offset: 2px; }
 .catch-protected { margin: 0; font-size: 12.5px; color: #9fe0b0; }
+
+/* Species Book, Challenges, Competitions */
+.book-count { font-size: 13px; font-weight: 700; color: #ffcf7a; margin-left: 8px; }
+.book-card.unseen .card-img img { filter: brightness(0) opacity(0.35); }
+.book-card.unseen .card-name { opacity: 0.75; }
+.book-tag { display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; border-radius: 999px; background: rgba(127, 199, 160, 0.2); color: #9fe0b0; vertical-align: middle; }
+.muted-note { font-size: 12.5px; opacity: 0.75; margin: 4px 0 8px; line-height: 1.4; }
+.ch-bar { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.ch-bar i { display: block; height: 100%; background: linear-gradient(90deg, #7fc7a0, #ffcf7a); border-radius: 4px; }
+.comp { margin: 10px 0 16px; padding: 10px 12px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; background: rgba(255, 255, 255, 0.04); }
+.comp h4 { margin: 0 0 4px; font-size: 15px; }
+.comp .table-wrap { overflow-x: auto; }
+.comp-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.comp-table th, .comp-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.comp-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.7; }
+.comp-table td:last-child, .comp-table th:last-child { text-align: right; }
+.comp-table tr.me td { background: rgba(255, 207, 122, 0.12); color: #ffe08a; font-weight: 700; }
+.trophy { font-size: 12px; }

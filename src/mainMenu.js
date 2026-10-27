@@ -1,3 +1,4 @@
+import { renderChallenges, renderCompetitions } from './goalsScreens.js';
 import { getLocationById } from './locations.js';
 import { FISH_SPECIES } from './fish.js';
 import { saveSave } from './save.js';
@@ -101,7 +102,9 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
           ${hasGame ? `<button class="mm-btn mm-primary" data-go="continue" type="button">Continue<small>${where}</small></button>` : ''}
           <button class="mm-btn ${hasGame ? '' : 'mm-primary'}" data-go="new" type="button">New Game<small>Choose a dam and a time of day</small></button>
           <button class="mm-btn" data-go="tackle" type="button">Tackle Box<small>Rods, reels, line, rigs and bait</small></button>
-          <button class="mm-btn" data-go="log" type="button">Catch Log<small>Every species you've landed</small></button>
+          <button class="mm-btn" data-go="log" type="button">Species Book<small>Every SA species — caught, bests, where they live</small></button>
+          <button class="mm-btn" data-go="challenges" type="button">Challenges<small>Daily and weekly — earn credits</small></button>
+          <button class="mm-btn" data-go="comps" type="button">Competitions<small>Heaviest fish of the month, online</small></button>
           <button class="mm-btn" data-go="settings" type="button">Settings<small>Graphics and controls</small></button>
         </nav>
       </div>`;
@@ -145,6 +148,17 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
       tackleBox.close();
       logPanel.classList.add('hidden');
       showAccountPanel(overlay, { cloud, save, onChanged: () => { sessionEnded = false; onSettingsChanged('volume'); render(); } });
+      return;
+    }
+    if (target === 'challenges' || target === 'comps') {
+      tackleBox.close();
+      logPanel.classList.remove('hidden');
+      const wireClose = () => logPanel.querySelector('[data-close]')?.addEventListener('click', () => logPanel.classList.add('hidden'));
+      const done = target === 'challenges'
+        ? renderChallenges(logPanel, { save, cloud, saveSave, onCredits: () => render() })
+        : renderCompetitions(logPanel, { cloud });
+      wireClose();
+      done.then(wireClose);
       return;
     }
     if (target === 'log') {

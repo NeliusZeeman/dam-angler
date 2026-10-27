@@ -2,6 +2,7 @@
 // served by nginx in production (or by `staticDir` in development), except
 // the page itself (index.html), which is served from here so each visit gets
 // its own Content-Security-Policy nonce.
+import { challengeState, claimChallenge, competitionState } from './goals.js';
 import { readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -190,6 +191,17 @@ export function createApp({
   app.post('/api/me/spend', requireUser, async (req, res) => {
     if (!saveLimiter.hit(`u:${req.user.id}`)) throw slowDown();
     res.json(await spendCredits(db, req.user.id, String(body(req).what ?? '')));
+  });
+
+  // Challenges and competitions (server/goals.js).
+  app.get('/api/me/challenges', requireUser, async (req, res) => res.json({ challenges: await challengeState(db, req.user.id) }));
+  app.post('/api/me/challenges/claim', requireUser, async (req, res) => {
+    if (!saveLimiter.hit(`u:${req.user.id}`)) throw slowDown();
+    res.json(await claimChallenge(db, req.user.id, String(body(req).id ?? '').slice(0, 40)));
+  });
+  app.get('/api/me/competitions', requireUser, async (req, res) => {
+    if (!saveLimiter.hit(`u:${req.user.id}`)) throw slowDown();
+    res.json(await competitionState(db, req.user.id));
   });
 
   app.delete('/api/me', requireUser, async (req, res) => {

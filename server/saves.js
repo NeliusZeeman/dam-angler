@@ -42,6 +42,11 @@ async function catchLogFor(db, userId, imported = {}) {
   );
   const log = {};
   for (const [id, e] of Object.entries(imported || {})) log[id] = { ...e };
+  // Personal bests at each dam.
+  const byDam = (await db.query(
+    'SELECT species_id, location_id, max(weight_kg)::float AS best FROM catches WHERE user_id = $1 GROUP BY species_id, location_id',
+    [userId],
+  )).rows;
   for (const r of rows) {
     const e = log[r.species_id] || { count: 0, bestWeightKg: 0 };
     e.count += r.count;
@@ -51,6 +56,10 @@ async function catchLogFor(db, userId, imported = {}) {
     const released = (e.released || 0) + r.released;
     if (released) e.released = released;
     log[r.species_id] = e;
+  }
+  for (const r of byDam) {
+    if (!log[r.species_id]) continue;
+    log[r.species_id].bestByDam = { ...(log[r.species_id].bestByDam || {}), [r.location_id]: Number(r.best) };
   }
   return log;
 }
@@ -108,7 +117,7 @@ export async function writeSave(db, userId, rawSave, baseVersion) {
 
 // Adds (or takes) credits, never below zero. Returns the new balance, or
 // null if there weren't enough.
-async function changeCredits(tx, userId, amount, reason, ref) {
+export async function changeCredits(tx, userId, amount, reason, ref) {
   const { rows } = await tx.query(
     'UPDATE player_state SET credits = credits + $2 WHERE user_id = $1 AND credits + $2 >= 0 RETURNING credits',
     [userId, amount],
@@ -118,7 +127,7 @@ async function changeCredits(tx, userId, amount, reason, ref) {
   return rows[0].credits;
 }
 
-const creditsOf = async (db, userId) => (await db.query('SELECT credits FROM player_state WHERE user_id = $1', [userId])).rows[0]?.credits ?? 0;
+export const creditsOf = async (db, userId) => (await db.query('SELECT credits FROM player_state WHERE user_id = $1', [userId])).rows[0]?.credits ?? 0;
 
 // Stores a catch once and pays for it (sending the same id again changes
 // nothing). The server works out the payout from the fish and the gear it

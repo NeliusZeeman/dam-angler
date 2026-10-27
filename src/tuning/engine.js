@@ -83,6 +83,14 @@ const DEFAULTS = {
     gravity: 9.81,
     launchElevation: 0.55, // radians (~31°)
   },
+  // Things to chase (goals.js).
+  goals: {
+    dailyReward: 60, // credits for an everyday daily challenge (harder ones x1.2-1.5)
+    weeklyReward: 350, // for the weekly one
+    prize1: 1500, // monthly competition: 1st
+    prize2: 800,
+    prize3: 400,
+  },
   money: {
     chumCost: 15,
     guestImportLimit: 10_000,

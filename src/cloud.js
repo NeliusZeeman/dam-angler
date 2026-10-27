@@ -313,5 +313,27 @@ export function createCloud({
       return damCache?.data || null;
     },
     cachedDamStats: () => damCache?.data || null,
+
+    // Catches made as a guest on this device (for challenges).
+    guestCatches: () => read(GUEST_CATCHES_KEY, []),
+    // Challenges and competitions: anything waiting is sent first, so the
+    // server counts the fish you just caught.
+    async challenges() {
+      await flush();
+      const r = await call('GET', '/me/challenges');
+      if (r.status !== 200) throw fail(r);
+      return r.data.challenges;
+    },
+    async claimChallenge(id) {
+      const r = await call('POST', '/me/challenges/claim', { id });
+      if (r.status !== 200) throw fail(r);
+      return r.data;
+    },
+    async competitions() {
+      await flush();
+      const r = await call('GET', '/me/competitions');
+      if (r.status !== 200) throw fail(r);
+      return r.data;
+    },
   };
 }

@@ -137,12 +137,19 @@ const ENGINE_FIELDS = {
     gravity: { label: 'Gravity', unit: 'm/s²', min: 1, max: 20, step: 0.01, hint: 'Pulls the rig down in flight (lower = longer, floatier casts).' },
     launchElevation: { label: 'Launch angle', unit: 'rad', min: 0.1, max: 1.2, step: 0.01, hint: 'Angle the rig leaves the rod at (0.55 ≈ 31°, the best distance angle).' },
   },
+  goals: {
+    dailyReward: { label: 'Daily challenge reward', unit: 'credits', min: 0, max: 10000, step: 5, type: 'integer', hint: 'Credits for an everyday daily challenge; harder ones pay 1.2-1.5x.' },
+    weeklyReward: { label: 'Weekly challenge reward', unit: 'credits', min: 0, max: 50000, step: 10, type: 'integer', hint: 'Credits for the weekly challenge.' },
+    prize1: { label: 'Competition prize: 1st', unit: 'credits', min: 0, max: 100000, step: 50, type: 'integer', hint: 'Paid by the server when the month ends.' },
+    prize2: { label: 'Competition prize: 2nd', unit: 'credits', min: 0, max: 100000, step: 50, type: 'integer', hint: 'Paid by the server to the runner-up when the month ends.' },
+    prize3: { label: 'Competition prize: 3rd', unit: 'credits', min: 0, max: 100000, step: 50, type: 'integer', hint: 'Paid by the server to third place when the month ends.' },
+  },
   money: {
     chumCost: { label: 'Breadcrumbs price', unit: 'credits', min: 0, max: 10000, step: 1, type: 'integer', hint: 'Credits per throw of breadcrumbs.' },
     guestImportLimit: { label: 'Guest progress limit', unit: 'credits', min: 0, max: 1000000, step: 100, type: 'integer', hint: 'Most a guest can bring into a new account (credits plus gear value).' },
   },
 };
-const ENGINE_GROUP = { bites: 'Bites', strike: 'Strike', lures: 'Working lures', water: 'Reading the water', landing: 'Landing the fish', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
+const ENGINE_GROUP = { bites: 'Bites', strike: 'Strike', lures: 'Working lures', water: 'Reading the water', landing: 'Landing the fish', goals: 'Challenges & competitions', fight: 'Fight', motion: 'Hooked fish', cast: 'Casting', money: 'Money' };
 
 // ─── Building the list ──────────────────────────────────────────────────────
 export const TUNABLES = [];

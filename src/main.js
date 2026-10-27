@@ -18,6 +18,7 @@ import { createMinigame } from './minigame.js';
 import { planTake, judgeStrike, takeExpired, takeLook } from './strike.js';
 import { retrieveFor, createActionTracker, scoreAction, actionBiteMultiplier } from './lureAction.js';
 import { readSpot, baitDepth, waterMultiplier, describeSpot, zoneName } from './waterReading.js';
+import { challengesFor, progressOf } from './goals.js';
 import { createHUD, renderCatchLog, createActionBar, showCatchCard, createTipBubble, showLossReport } from './ui.js';
 import { randomTip } from './tips.js';
 import { fightStamina, fightStrength } from './fightMotion.js';
@@ -589,12 +590,18 @@ function startGame(locationId, startTimeOfDay) {
           if (!kept) entry.released = (entry.released || 0) + 1;
           if (kept) keptHere[species.id] = (keptHere[species.id] || 0) + 1;
           else releasedHere += 1;
+          entry.bestByDam = { ...(entry.bestByDam || {}), [location.id]: Math.max(entry.bestByDam?.[location.id] || 0, weightKg) };
+          const before = challengeSnapshot();
           saveSave(save);
           cloud.queueCatch({
             id: catchId, speciesId: species.id, locationId: location.id, weightKg: Math.round(weightKg * 100) / 100,
             lengthCm, trophy, timeOfDay: phase, kept, gear: { rodId: activeRod.id, lineId: activeLine.id, hookId: activeHook.id },
           });
-          hud.showToast(kept ? `Kept — +${keepPayout} credits` : `Released — it swims off strong. +${payout} credits`);
+          sessionCatches.push({ speciesId: species.id, weightKg, kept, locationId: location.id, timeOfDay: phase, trophy, caughtAt: new Date().toISOString() });
+          const finished = challengeSnapshot().filter((c) => c.progress >= c.need && !before.find((b) => b.id === c.id && b.progress >= b.need));
+          hud.showToast(finished.length
+            ? `Challenge done: ${finished[0].text}! Claim ${finished[0].reward} credits in Challenges`
+            : kept ? `Kept — +${keepPayout} credits` : `Released — it swims off strong. +${payout} credits`);
         };
         playerController.releasePointer();
         showCatchCard(appEl, {
@@ -820,6 +827,14 @@ function startGame(locationId, startTimeOfDay) {
     }
     finderCache = { x: p.x, z: p.z, text };
     return text;
+  }
+
+  // Challenge progress after a catch (online: this session's catches;
+  // guests: every catch kept on this device).
+  const sessionCatches = [];
+  function challengeSnapshot() {
+    const catches = cloud.user() ? sessionCatches : cloud.guestCatches();
+    return challengesFor().map((c) => ({ id: c.id, text: c.text, reward: c.reward, need: c.need, progress: progressOf(c, catches) }));
   }
 
   // ── Landing the fish: snags, the net, keep or release ──
