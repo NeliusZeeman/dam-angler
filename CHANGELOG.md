@@ -3,6 +3,14 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — A pixel budget for every screen (built locally, not live yet)
+
+- Each graphics setting draws at most a set number of pixels per frame, whatever the screen: Ultra/Ultra+ about 1920×1080 (2.1 million), High 1.6 million, Medium 1.2 million, phones and tablets 1 million, Low unchanged.
+  - Bigger screens (1440p, 4K, iPad Pro) get that picture stretched smoothly to fill them, instead of 2–4× the work. A 1080p screen is unchanged.
+  - Resizing the window or turning a phone keeps it within the budget.
+  - Auto-sharpness still steps down below it if the frame rate drops.
+- F3 now also shows the size actually drawn (e.g. 1932×1086) (`main.js` `maxPixels`, `sharpnessFor`).
+
 ## v2 — Faster High/Ultra on phones (built locally, not live yet)
 
 - Phones and tablets (iPhone, Android) keep the same look on High, Ultra and Ultra+ but on a phone budget:

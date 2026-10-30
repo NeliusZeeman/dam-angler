@@ -141,21 +141,29 @@ function resolveQuality() {
 }
 // What each graphics setting draws. Ultra loads slowest and wants a good
 // graphics card; Low suits phones.
+// maxPixels: the most pixels it draws each frame, whatever the screen --
+// a 4K monitor or an iPad draws about a 1080p picture, stretched smoothly
+// to fill it, instead of 2-4x the work.
 const GRAPHICS = {
-  low: { pixelRatio: 1, reflection: 0.33, rays: 0, softShadows: false, samples: 2 },
-  medium: { pixelRatio: 1.25, reflection: 0.4, rays: 1, softShadows: true, samples: 4 },
-  high: { pixelRatio: 1.5, reflection: 0.5, rays: 1, softShadows: true, samples: 4 },
-  ultra: { pixelRatio: 2, reflection: 0.75, rays: 1, softShadows: true, samples: 8 },
+  low: { pixelRatio: 1, reflection: 0.33, rays: 0, softShadows: false, samples: 2, maxPixels: Infinity },
+  medium: { pixelRatio: 1.25, reflection: 0.4, rays: 1, softShadows: true, samples: 4, maxPixels: 1.2e6 },
+  high: { pixelRatio: 1.5, reflection: 0.5, rays: 1, softShadows: true, samples: 4, maxPixels: 1.6e6 },
+  ultra: { pixelRatio: 2, reflection: 0.75, rays: 1, softShadows: true, samples: 8, maxPixels: 2.1e6 },
   // WebGPU: everything Ultra has, plus refraction and true depth in the
   // water, ambient occlusion and edge smoothing (see gfx/gpu/).
-  ultraplus: { pixelRatio: 2, reflection: 0.6, rays: 1, softShadows: true, samples: 0, webgpu: true },
+  ultraplus: { pixelRatio: 2, reflection: 0.6, rays: 1, softShadows: true, samples: 0, webgpu: true, maxPixels: 2.1e6 },
 };
+// The sharpness that keeps this window inside the setting's pixel budget.
+function sharpnessFor(gfx) {
+  const area = Math.max(1, (window.innerWidth || 1) * (window.innerHeight || 1));
+  return Math.max(0.5, Math.min(window.devicePixelRatio || 1, gfx.pixelRatio, Math.sqrt(gfx.maxPixels / area)));
+}
 // Phones and tablets: a phone's screen is small and its pixels tiny, so it
 // looks just as sharp drawn at 1.5x instead of 2-3x, with 4x edge smoothing
 // rather than 8x and a lighter water reflection -- several times less work
 // for the graphics chip (scene.js trims the grass and shadows to match).
 const handheld = isSmallOrMobileScreen();
-const PHONE_CAPS = { pixelRatio: 1.5, reflection: 0.45, samples: 4 };
+const PHONE_CAPS = { pixelRatio: 1.5, reflection: 0.45, samples: 4, maxPixels: 1e6 };
 function graphicsFor(quality) {
   const g = GRAPHICS[quality];
   if (!handheld || quality === 'low') return g;
@@ -164,6 +172,7 @@ function graphicsFor(quality) {
     pixelRatio: Math.min(g.pixelRatio, PHONE_CAPS.pixelRatio),
     reflection: Math.min(g.reflection, PHONE_CAPS.reflection),
     samples: Math.min(g.samples, PHONE_CAPS.samples),
+    maxPixels: Math.min(g.maxPixels, PHONE_CAPS.maxPixels),
   };
 }
 
@@ -247,7 +256,7 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
 
   const renderer = gpuRenderer || new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   const gfx = graphicsFor(quality);
-  let pixelRatio = Math.min(window.devicePixelRatio || 1, gfx.pixelRatio);
+  let pixelRatio = sharpnessFor(gfx);
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   // Tone mapping and sRGB output happen in the post pipeline's final pass.
@@ -1364,8 +1373,17 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
   // fewer pixels (down to half); with steady headroom it creeps back up to
   // the setting's full sharpness. Watched over 1.5 s windows so a single
   // hitch (a splash, a new spot coming into view) doesn't trigger it.
-  const fullRatio = pixelRatio;
-  const minRatio = Math.max(0.5, fullRatio * 0.5);
+  let fullRatio = pixelRatio;
+  let minRatio = Math.max(0.5, fullRatio * 0.5);
+  // A bigger or smaller window (or turning a phone) moves the pixel budget's
+  // sharpness: keep the picture inside it.
+  window.addEventListener('resize', () => {
+    if (!window.innerWidth || !window.innerHeight) return;
+    const was = fullRatio;
+    fullRatio = sharpnessFor(gfx);
+    minRatio = Math.min(fullRatio, Math.max(0.5, fullRatio * 0.5));
+    if (fullRatio !== was) setRatio(pixelRatio * (fullRatio / was));
+  });
   let perfWindow = 0, perfFrames = 0, perfSkip = 60, calmWindows = 0, slowWindows = 0;
   let lastFrameMs = 16.7;
   function setRatio(r) {
@@ -1427,7 +1445,7 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
   function updatePerfBox(now) {
     if (perfBox.hidden || now - perfShownAt < 0.5) return;
     perfShownAt = now;
-    perfBox.textContent = `${Math.round(1000 / lastFrameMs)} fps · ${lastFrameMs.toFixed(1)} ms · sharpness ${Math.round((pixelRatio / fullRatio) * 100)}% · ${quality}\n${gpuName}`;
+    perfBox.textContent = `${Math.round(1000 / lastFrameMs)} fps · ${lastFrameMs.toFixed(1)} ms · sharpness ${Math.round((pixelRatio / fullRatio) * 100)}% · ${Math.round(window.innerWidth * pixelRatio)}×${Math.round(window.innerHeight * pixelRatio)} · ${quality}\n${gpuName}`;
   }
   window.addEventListener('keydown', (e) => {
     if (e.code === 'F3') {
