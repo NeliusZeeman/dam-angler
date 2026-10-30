@@ -132,13 +132,23 @@ function openMainMenu() {
 // Settings "auto" = light graphics on phones and small tablets, full on
 // everything else. ?quality=low|medium|high|ultra|ultraplus in the URL
 // overrides.
-const QUALITIES = ['low', 'medium', 'high', 'ultra', 'ultraplus'];
+// The graphics engine is its own setting (settings.engine: 'webgl' or
+// 'webgpu', with any detail level); the old 'ultraplus' quality still means
+// Ultra on WebGPU.
+const QUALITIES = ['low', 'medium', 'high', 'ultra'];
+function qualitySetting() {
+  return new URLSearchParams(window.location.search).get('quality') || save.settings.quality || 'auto';
+}
 function resolveQuality() {
-  const urlQuality = new URLSearchParams(window.location.search).get('quality');
-  const setting = urlQuality || save.settings.quality || 'auto';
+  const setting = qualitySetting();
   if (setting === 'auto') return isSmallOrMobileScreen() ? 'low' : 'high';
+  if (setting === 'ultraplus') return 'ultra';
   return QUALITIES.includes(setting) ? setting : 'high';
 }
+const wantsWebGpu = () => save.settings.engine === 'webgpu' || qualitySetting() === 'ultraplus';
+// Resolution: 'auto' follows the pixel budget and the frame rate; the
+// others are a fixed share of the screen's own sharpness.
+const RESOLUTIONS = { high: 1, medium: 0.75, low: 0.5 };
 // What each graphics setting draws. Ultra loads slowest and wants a good
 // graphics card; Low suits phones.
 // maxPixels: the most pixels it draws each frame, whatever the screen --
@@ -153,26 +163,38 @@ const GRAPHICS = {
   // water, ambient occlusion and edge smoothing (see gfx/gpu/).
   ultraplus: { pixelRatio: 2, reflection: 0.6, rays: 1, softShadows: true, samples: 0, webgpu: true, maxPixels: 2.1e6 },
 };
-// The sharpness that keeps this window inside the setting's pixel budget.
+// The sharpness to draw at: a fixed Resolution setting's share of the
+// screen's own sharpness, or on Auto the most that keeps this window inside
+// the setting's pixel budget.
 function sharpnessFor(gfx) {
+  const screen = Math.min(window.devicePixelRatio || 1, 3);
+  const fixed = RESOLUTIONS[save.settings.resolution];
+  if (fixed) return Math.max(0.4, screen * fixed);
   const area = Math.max(1, (window.innerWidth || 1) * (window.innerHeight || 1));
-  return Math.max(0.5, Math.min(window.devicePixelRatio || 1, gfx.pixelRatio, Math.sqrt(gfx.maxPixels / area)));
+  return Math.max(0.5, Math.min(screen, gfx.pixelRatio, Math.sqrt(gfx.maxPixels / area)));
 }
-// Phones and tablets: a phone's screen is small and its pixels tiny, so it
-// looks just as sharp drawn at 1.5x instead of 2-3x, with 4x edge smoothing
-// rather than 8x and a lighter water reflection -- several times less work
-// for the graphics chip (scene.js trims the grass and shadows to match).
+// Phones and tablets: 4x edge smoothing rather than 8x and a lighter water
+// reflection (scene.js trims the grass and shadows to match), and a pixel
+// budget per setting. A phone's screen is 3x sharp, so drawing at 1.5x
+// shows as soft -- the top settings draw at 2-2.25x, about 1.6-2 million
+// pixels on an iPhone (still far less than the 3 million it has).
 const handheld = isSmallOrMobileScreen();
-const PHONE_CAPS = { pixelRatio: 1.5, reflection: 0.45, samples: 4, maxPixels: 1e6 };
+const PHONE_CAPS = {
+  medium: { pixelRatio: 1.25, maxPixels: 0.8e6 },
+  high: { pixelRatio: 1.75, maxPixels: 1.3e6 },
+  ultra: { pixelRatio: 2, maxPixels: 1.7e6 },
+  ultraplus: { pixelRatio: 2.25, maxPixels: 2.1e6 },
+};
 function graphicsFor(quality) {
   const g = GRAPHICS[quality];
-  if (!handheld || quality === 'low') return g;
+  const cap = handheld && PHONE_CAPS[quality];
+  if (!cap) return g;
   return {
     ...g,
-    pixelRatio: Math.min(g.pixelRatio, PHONE_CAPS.pixelRatio),
-    reflection: Math.min(g.reflection, PHONE_CAPS.reflection),
-    samples: Math.min(g.samples, PHONE_CAPS.samples),
-    maxPixels: Math.min(g.maxPixels, PHONE_CAPS.maxPixels),
+    pixelRatio: cap.pixelRatio,
+    reflection: Math.min(g.reflection, 0.45),
+    samples: Math.min(g.samples, 4),
+    maxPixels: cap.maxPixels,
   };
 }
 
@@ -188,13 +210,14 @@ function preloadFishImages(speciesList) {
   else setTimeout(load, 3000);
 }
 
-// Ultra+ needs WebGPU: fetch its build and start its renderer first, and
-// fall back to Ultra (WebGL) if this browser or graphics card can't.
+// The WebGPU engine: fetch its build and start its renderer first, and fall
+// back to the standard one (WebGL) if this browser or graphics card can't.
+// Ultra on WebGPU is Ultra+ (its richer water, shadows and edges).
 async function startGame(locationId, startTimeOfDay, pegId = null) {
   gameRunning = true;
   let quality = resolveQuality();
   let gpuRenderer = null;
-  if (GRAPHICS[quality].webgpu) {
+  if (wantsWebGpu()) {
     if (await webgpuAvailable() && await loadGpu()) {
       try {
         gpuRenderer = new GPU.W.WebGPURenderer({ antialias: false });
@@ -206,9 +229,9 @@ async function startGame(locationId, startTimeOfDay, pegId = null) {
         gpuRenderer = null;
       }
     }
-    if (!gpuRenderer) quality = 'ultra';
   }
   GPU.on = !!gpuRenderer;
+  if (GPU.on && quality === 'ultra') quality = 'ultraplus';
   // The Blender-made fish for this water (Low keeps the light built-in ones).
   // and the photo-scanned scenery (sceneryAssets.js).
   if (quality !== 'low') {
@@ -224,7 +247,7 @@ async function startGame(locationId, startTimeOfDay, pegId = null) {
     const boatKinds = kinds.length ? [...kinds, boatKindFor(kinds)] : [];
     await Promise.all([loadFishModels(loc.speciesIds), loadScenery(loc), people, loadBoatModels(boatKinds)]);
   }
-  const fellBack = GRAPHICS[resolveQuality()].webgpu && !GPU.on;
+  const fellBack = wantsWebGpu() && !GPU.on;
   startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, fellBack);
 }
 
@@ -268,7 +291,9 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
   renderer.shadowMap.type = THREE.PCFShadowMap;
   appEl.appendChild(renderer.domElement);
   const post = GPU.on
-    ? GPU.post.createGpuPost(renderer, scene, camera)
+    // (No FXAA on phones: it softens the whole picture, and a phone's tiny
+    // pixels hide jagged edges anyway.)
+    ? GPU.post.createGpuPost(renderer, scene, camera, { smoothing: !handheld })
     : createPostPipeline(renderer, { samples: gfx.samples });
   post.setRaysScale(gfx.rays);
   water.setReflectionScale(gfx.reflection);
@@ -564,7 +589,7 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
     saveSave(save);
   }
   const hud = createHUD(appEl, { showHints: save.settings.showHints, touch: touchMode, onDrag: changeDrag });
-  if (gpuFellBack) hud.showToast("This browser can't do WebGPU, so you're on Ultra graphics.");
+  if (gpuFellBack) hud.showToast("This browser can't do WebGPU, so you're on the standard graphics engine.");
   hud.setDrag(save.drag, activeLine.breakKg);
   minigame.setDrag(save.drag);
 
@@ -1373,15 +1398,18 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
   // fewer pixels (down to half); with steady headroom it creeps back up to
   // the setting's full sharpness. Watched over 1.5 s windows so a single
   // hitch (a splash, a new spot coming into view) doesn't trigger it.
+  // On a phone it never drops below three quarters: below that a small,
+  // close-up screen shows the blur.
+  const lowest = handheld ? 0.75 : 0.5;
   let fullRatio = pixelRatio;
-  let minRatio = Math.max(0.5, fullRatio * 0.5);
+  let minRatio = Math.max(0.5, fullRatio * lowest);
   // A bigger or smaller window (or turning a phone) moves the pixel budget's
   // sharpness: keep the picture inside it.
   window.addEventListener('resize', () => {
     if (!window.innerWidth || !window.innerHeight) return;
     const was = fullRatio;
     fullRatio = sharpnessFor(gfx);
-    minRatio = Math.min(fullRatio, Math.max(0.5, fullRatio * 0.5));
+    minRatio = Math.min(fullRatio, Math.max(0.5, fullRatio * lowest));
     if (fullRatio !== was) setRatio(pixelRatio * (fullRatio / was));
   });
   let perfWindow = 0, perfFrames = 0, perfSkip = 60, calmWindows = 0, slowWindows = 0;
@@ -1394,7 +1422,8 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
   }
   function adaptQuality(delta) {
     lastFrameMs = lastFrameMs * 0.9 + delta * 1000 * 0.1;
-    if (quality === 'low') return;
+    // Low, and a fixed Resolution setting, stay as they are.
+    if (quality === 'low' || RESOLUTIONS[save.settings.resolution]) return;
     if (perfSkip > 0) { perfSkip--; return; } // startup and right after a change
     perfWindow += delta;
     perfFrames++;

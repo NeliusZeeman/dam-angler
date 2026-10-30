@@ -84,6 +84,8 @@ export function checkLoginName(login) {
 // Only the settings the game has, with sane values.
 const SETTING_RULES = {
   quality: (v) => (['auto', 'ultraplus', 'ultra', 'high', 'medium', 'low'].includes(v) ? v : undefined),
+  engine: (v) => (['webgl', 'webgpu'].includes(v) ? v : undefined),
+  resolution: (v) => (['auto', 'high', 'medium', 'low'].includes(v) ? v : undefined),
   showHints: (v) => (typeof v === 'boolean' ? v : undefined),
   turnSpeed: (v) => (Number.isFinite(v) ? Math.min(3, Math.max(0.2, v)) : undefined),
   volume: (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined),

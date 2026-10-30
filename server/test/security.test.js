@@ -85,6 +85,17 @@ test('saves: made-up settings and impossible numbers are cleaned or refused', as
   const gpu = await c.put('/api/me/save', { save: { credits: 5, settings: { quality: 'ultraplus' } }, baseVersion: put.body.version });
   assert.equal(gpu.status, 200);
   assert.equal((await c.get('/api/me')).body.save.settings.quality, 'ultraplus');
+  // So are the graphics engine and resolution; nonsense values are dropped.
+  const eng = await c.put('/api/me/save', { save: { credits: 5, settings: { engine: 'webgpu', resolution: 'medium' } }, baseVersion: gpu.body.version });
+  assert.equal(eng.status, 200);
+  const st = (await c.get('/api/me')).body.save.settings;
+  assert.equal(st.engine, 'webgpu');
+  assert.equal(st.resolution, 'medium');
+  const junk = await c.put('/api/me/save', { save: { credits: 5, settings: { engine: 'directx', resolution: '8k' } }, baseVersion: eng.body.version });
+  assert.equal(junk.status, 200);
+  const st2 = (await c.get('/api/me')).body.save.settings;
+  assert.equal(st2.engine, undefined);
+  assert.equal(st2.resolution, undefined);
 });
 
 test('catches: fish must live at that spot, and nobody can flood the records', async () => {

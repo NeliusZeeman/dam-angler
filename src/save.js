@@ -22,7 +22,9 @@ export const DEFAULT_SAVE = {
   drag: 0.33, // reel drag, share of the line's breaking strain (a third is the rule of thumb)
   catchLog: {},
   settings: {
-    quality: 'auto', // 'auto' (low on phones/small tablets) | 'ultraplus' (WebGPU) | 'ultra' | 'high' | 'medium' | 'low'
+    quality: 'auto', // 'auto' (low on phones/small tablets) | 'ultra' | 'high' | 'medium' | 'low'
+    engine: 'webgl', // 'webgl' | 'webgpu' (falls back to webgl where it can't run)
+    resolution: 'auto', // 'auto' (pixel budget + frame rate) | 'high' | 'medium' | 'low' (share of the screen's sharpness)
     showHints: true, // the controls reminder along the top bar
     turnSpeed: 1, // multiplier on Q/E, edge-of-screen and right-drag turning
     volume: 0.7, // 0 = sound off .. 1 = loud
@@ -36,6 +38,8 @@ const OWNED_FIELDS = { rod: 'ownedRodIds', line: 'ownedLineIds', reel: 'ownedRee
 // still get its default, and saves from before the starter kits get them.
 export function normalizeSave(raw = {}) {
   const save = { ...DEFAULT_SAVE, ...raw, settings: { ...DEFAULT_SAVE.settings, ...(raw.settings || {}) } };
+  // The old "Ultra+" setting is Ultra on the WebGPU engine.
+  if (save.settings.quality === 'ultraplus') save.settings = { ...save.settings, quality: 'ultra', engine: 'webgpu' };
   for (const [kind, field] of Object.entries(OWNED_FIELDS)) {
     const owned = Array.isArray(save[field]) ? save[field] : [];
     save[field] = [...owned, ...STARTER_ITEMS[kind].filter((id) => !owned.includes(id))];

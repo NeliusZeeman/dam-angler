@@ -3,6 +3,22 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Pick the engine and resolution yourself (built locally, not live yet)
+
+- Settings now has three separate graphics choices:
+  - **Graphics detail**: Auto / Ultra / High / Medium / Low.
+  - **Graphics engine** (new): Standard (WebGL) or WebGPU. WebGPU works with any detail level; with Ultra it's the old "Ultra+". If the browser can't run it, the game falls back to Standard.
+  - **Resolution** (new): Auto (pixel budget plus auto-sharpness, as before), High (the screen's full sharpness), Medium (¾) or Low (½). The fixed ones never change on their own.
+- Old saves set to "Ultra+" become Ultra + WebGPU. The server keeps both new settings and drops nonsense values (`main.js` `wantsWebGpu`, `RESOLUTIONS`; `save.js`; `server/validate.js`).
+
+## v2 — Sharper on phones (built locally, not live yet)
+
+- Phones looked soft on the top settings: they were drawn at 1.5× on a 3× screen, and auto-sharpness could halve that again. Each setting now has its own phone sharpness:
+  - Medium 1.25×, High 1.75×, Ultra 2×, Ultra+ 2.25×;
+  - on an iPhone that's about 1.6–2 million pixels, still less than the screen's 3 million;
+  - auto-sharpness never drops below ¾ on a phone.
+- Ultra+ on phones skips FXAA edge smoothing, which softened the whole picture; a phone's tiny pixels hide jagged edges anyway (`main.js` `PHONE_CAPS`).
+
 ## v2 — A pixel budget for every screen (built locally, not live yet)
 
 - Each graphics setting draws at most a set number of pixels per frame, whatever the screen: Ultra/Ultra+ about 1920×1080 (2.1 million), High 1.6 million, Medium 1.2 million, phones and tablets 1 million, Low unchanged.

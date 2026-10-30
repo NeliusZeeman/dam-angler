@@ -18,9 +18,19 @@ const TIME_LABELS = {
 
 const SETTINGS = [
   {
-    key: 'quality', label: 'Graphics',
-    hint: 'Auto picks Low on phones and small tablets. Ultra+ uses WebGPU (Chrome, Edge, newer Safari): water you can see into, softer contact shadows and smoother edges — the best look, for a good graphics card; without WebGPU it falls back to Ultra. Low is smoothest on phones and older PCs. Takes effect on the next dam you load.',
-    options: [{ value: 'auto', label: 'Auto' }, { value: 'ultraplus', label: 'Ultra+ (WebGPU)' }, { value: 'ultra', label: 'Ultra' }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }],
+    key: 'quality', label: 'Graphics detail',
+    hint: 'How much is drawn: grass, trees, shadows, people, reflections. Auto picks Low on phones and small tablets. Takes effect on the next dam you load.',
+    options: [{ value: 'auto', label: 'Auto' }, { value: 'ultra', label: 'Ultra' }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }],
+  },
+  {
+    key: 'engine', label: 'Graphics engine',
+    hint: 'WebGPU (Chrome, Edge, newer Safari) is the newer engine: with Ultra it adds water you can see into, softer contact shadows and smoother edges. If the browser can\'t do it, the game uses Standard. Takes effect on the next dam you load.',
+    options: [{ value: 'webgl', label: 'Standard' }, { value: 'webgpu', label: 'WebGPU' }],
+  },
+  {
+    key: 'resolution', label: 'Resolution',
+    hint: 'How sharp the picture is drawn. Auto keeps it smooth: about 1080p on big screens, and it softens a little when the game slows. High is the screen\'s full sharpness (slowest), Medium three quarters, Low half (fastest). Takes effect on the next dam you load.',
+    options: [{ value: 'auto', label: 'Auto' }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }],
   },
   {
     key: 'showHints', label: 'Control hints',
