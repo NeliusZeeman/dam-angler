@@ -24,9 +24,10 @@ let clips = null; // name -> AnimationClip
 let walkSpeed = {};
 const bases = new Map(); // name -> gltf scene
 
-async function loadOne(name) {
+async function loadOne(name, maxTexture) {
   if (bases.has(name)) return;
   const gltf = await loader.loadAsync(`assets/people/${name}.glb${assetTag()}`);
+  const shrunk = new Set();
   gltf.scene.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true;
@@ -36,9 +37,31 @@ async function loadOne(name) {
     o.frustumCulled = false;
     const m = o.material;
     if (m && m.alphaTest > 0) m.side = THREE.DoubleSide;
+    if (maxTexture && m) {
+      for (const [key, max] of [['map', maxTexture], ['normalMap', maxTexture / 2]]) {
+        if (m[key] && !shrunk.has(m[key])) { shrink(m[key], max); shrunk.add(m[key]); }
+      }
+    }
     if (m?.map && /-head$/.test(m.name)) skinGlow(m);
   });
   bases.set(name, gltf.scene);
+}
+
+// Phones: a person's pictures are 2048 px (about 45 MB of graphics memory
+// each), and an iPhone's browser quietly drops pictures once it runs short
+// -- leaving everyone plain white. Drawn smaller they still look right at a
+// phone's size.
+function shrink(tex, max) {
+  const img = tex.image;
+  if (!img || !(img.width > max)) return;
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = max;
+    c.getContext('2d').drawImage(img, 0, 0, max, max);
+    tex.image = c;
+    tex.needsUpdate = true;
+    img.close?.();
+  } catch { /* keep the full-size picture */ }
 }
 
 // Light through skin: a face lit from behind or in the shade of a boat's
@@ -69,7 +92,8 @@ export function setPeopleLight(light) {
 }
 
 // Loads the motions and these people; gives up quietly after `timeoutMs`.
-export async function loadPeople(names = PEOPLE, timeoutMs = 15000) {
+// maxTexture: the largest picture size to keep (phones), or 0 for full size.
+export async function loadPeople(names = PEOPLE, timeoutMs = 15000, { maxTexture = 0 } = {}) {
   try {
     if (!loader) {
       const [{ GLTFLoader }, SkeletonUtils] = await Promise.all([
@@ -88,7 +112,7 @@ export async function loadPeople(names = PEOPLE, timeoutMs = 15000) {
         clips = Object.fromEntries(m.animations.map((c) => [c.name, c]));
         walkSpeed = info.walkSpeed || {};
       }
-      await Promise.allSettled(names.map((n) => loadOne(n).catch((err) => console.warn(`Person ${n} not loaded:`, err?.message || err))));
+      await Promise.allSettled(names.map((n) => loadOne(n, maxTexture).catch((err) => console.warn(`Person ${n} not loaded:`, err?.message || err))));
     })();
     await Promise.race([work, new Promise((resolve) => setTimeout(resolve, timeoutMs))]);
   } catch (err) {

@@ -11,6 +11,7 @@ Each entry names the commit it shipped in (see `git log`).
   - 2048 shadows instead of 4096;
   - half the grass, 60% of the bank weeds, normal leaf density and at most 5 campers.
 - Auto-sharpness still steps down further if the frame rate drops (`main.js` `graphicsFor`, `scene.js` `handheld`).
+- **No more white "ghost" people on iPhone**: each person's pictures were 2048 px (about 45 MB of graphics memory per person). An iPhone's browser drops pictures once it runs short, which left people plain white. On phones they're now shrunk to 1024 px (normal maps 512), and 5 different people load instead of 10 (`people.js` `shrink`, `loadPeople({ maxTexture })`).
 
 ## v2 — Camp people fixes (built locally, not live yet)
 

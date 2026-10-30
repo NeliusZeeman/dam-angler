@@ -205,7 +205,11 @@ async function startGame(locationId, startTimeOfDay, pegId = null) {
   if (quality !== 'low') {
     const loc = getLocationById(locationId);
     // The campsite people, where the dam has camps (Medium brings fewer).
-    const people = spotsFor(locationId) ? loadPeople(quality === 'medium' ? ['man-shorts', 'man-vest', 'woman-green', 'man-check', 'boy'] : PEOPLE) : null;
+    // Phones bring fewer of them, with smaller pictures (graphics memory).
+    const fewer = quality === 'medium' || handheld;
+    const people = spotsFor(locationId)
+      ? loadPeople(fewer ? ['man-shorts', 'man-vest', 'woman-green', 'man-check', 'boy'] : PEOPLE, 15000, { maxTexture: handheld ? 1024 : 0 })
+      : null;
     // The Blender boats on this water, and your own.
     const kinds = spotsFor(locationId)?.boats || [];
     const boatKinds = kinds.length ? [...kinds, boatKindFor(kinds)] : [];
