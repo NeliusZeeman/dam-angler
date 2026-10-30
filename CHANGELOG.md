@@ -3,6 +3,20 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Install as an app (built locally, not live yet)
+
+- **Install as app** button on the title screen.
+  - iPhone/iPad: it shows the steps (Share, then Add to Home Screen, then Add); Apple allows no install button.
+  - Android, Chrome and Edge: it opens the install prompt.
+  - It hides once the game runs as an installed app.
+- App name and home-screen icon (`manifest.json`; a bass leaping at sunset, made by `python tools/make-icons.py` -> `assets/icons/`). Runs full screen.
+- **Game kept on the device** (`sw.js`, `src/install.js`):
+  - the code is stored on first launch, and each dam's pictures and models the first time you fish it;
+  - after that it starts fast and loads dams from the device, even offline;
+  - the page and `version.json` come fresh when online, so updates arrive as before, and an old copy is dropped when a new one is kept;
+  - server calls (`/api/`: saves, catches, shop, records) are never stored, always live.
+- Test: `test/install.test.js`.
+
 ## v2 — Pick the engine and resolution yourself (built locally, not live yet)
 
 - Settings now has three separate graphics choices:

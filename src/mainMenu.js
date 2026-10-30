@@ -7,6 +7,7 @@ import { levelInfo, pointsFromLog } from './levels.js';
 import { renderCatchLog } from './ui.js';
 import { buildLabel } from './versionCheck.js';
 import { showAccountPanel } from './accountPanel.js';
+import { installMode, promptInstall, onInstallChange } from './install.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const SYNC_LABELS = { synced: 'Saved online', saving: 'Saving…', offline: 'Saved on this device — will sync', loggedOut: 'Please log in again' };
@@ -118,7 +119,24 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
           <button class="mm-btn" data-go="challenges" type="button">Challenges<small>Daily and weekly — earn credits</small></button>
           <button class="mm-btn" data-go="comps" type="button">Competitions<small>Heaviest fish of the month, online</small></button>
           <button class="mm-btn" data-go="settings" type="button">Settings<small>Graphics and controls</small></button>
+          ${installMode() ? '<button class="mm-btn mm-install" data-go="install" type="button">Install as app<small>Home screen icon, full screen, starts fast</small></button>' : ''}
         </nav>
+      </div>`;
+  }
+
+  // iPhone and iPad: Safari installs from the Share menu only.
+  function installHtml() {
+    return `
+      <div class="mm-card">
+        <h2 class="mm-heading">Install on iPhone or iPad</h2>
+        <ol class="mm-steps">
+          <li>Open this page in <strong>Safari</strong>.</li>
+          <li>Tap the <strong>Share</strong> button <span class="mm-share" aria-hidden="true">⬆︎</span> — the square with an arrow, at the bottom of the screen (top right on iPad).</li>
+          <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+          <li>Tap <strong>Add</strong>. Dam Angler is now on your home screen.</li>
+        </ol>
+        <p class="mm-note">Open it from that icon: it runs full screen, and keeps the game on your phone so it starts fast and each dam loads from the phone after your first visit. Saves, catches and the shop still go online.</p>
+        <button class="mm-btn mm-back" data-go="home" type="button">Back</button>
       </div>`;
   }
 
@@ -141,7 +159,7 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
 
   function render() {
     overlay.querySelector('.mm-card')?.remove();
-    overlay.insertAdjacentHTML('afterbegin', view === 'settings' ? settingsHtml() : homeHtml());
+    overlay.insertAdjacentHTML('afterbegin', view === 'settings' ? settingsHtml() : view === 'install' ? installHtml() : homeHtml());
     overlay.querySelectorAll('[data-go]').forEach((btn) => btn.addEventListener('click', () => go(btn.dataset.go)));
     overlay.querySelectorAll('.mm-seg-btn').forEach((btn) => btn.addEventListener('click', () => {
       const setting = SETTINGS.find((s) => s.key === btn.dataset.key);
@@ -154,6 +172,7 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
 
   function go(target) {
     if (target === 'continue') { close(); onContinue(); return; }
+    if (target === 'install' && installMode() === 'prompt') { promptInstall().then(() => render()); return; }
     if (target === 'new') { close(); onNewGame(); return; }
     if (target === 'tackle') { logPanel.classList.add('hidden'); tackleBox.toggle(); return; }
     if (target === 'account') {
@@ -186,5 +205,7 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
     render();
   }
 
+  // The browser's install offer can arrive after the menu is up.
+  onInstallChange(() => { if (view === 'home' && overlay.isConnected) render(); });
   render();
 }

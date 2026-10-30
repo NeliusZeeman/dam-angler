@@ -1,6 +1,6 @@
 {
-  "version": "5fc0480c99",
-  "built": "2026-10-30T12:27:32.595Z",
+  "version": "8db17c29d1",
+  "built": "2026-10-30T12:40:48.383Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
@@ -50,6 +50,7 @@
     "src/gfx/wind.js",
     "src/goals.js",
     "src/goalsScreens.js",
+    "src/install.js",
     "src/levels.js",
     "src/locations.js",
     "src/lureAction.js",

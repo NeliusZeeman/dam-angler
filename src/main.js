@@ -6,6 +6,7 @@ import { windUniforms } from './gfx/wind.js';
 import { GPU, loadGpu, webgpuAvailable } from './gfx/gpu.js';
 import { loadFishModels } from './fishModels.js';
 import { loadScenery } from './sceneryAssets.js';
+import { keepOffline } from './install.js';
 import { loadPeople, PEOPLE, setPeopleLight } from './people.js';
 import { createEnvironment, TIME_OF_DAY_PHASES } from './environment.js';
 import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm, rollTrophy, trophyWeightFor, suitability } from './fish.js';
@@ -75,6 +76,8 @@ if (fromServer?.save) replaceSave(save, fromServer.save);
 
 const touchMode = isTouchDevice();
 document.body.classList.toggle('touch', touchMode);
+// The game kept on the device, for the installed app (install.js, sw.js).
+keepOffline();
 
 // Every launch opens on the title screen.
 openMainMenu();
