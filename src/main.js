@@ -150,6 +150,22 @@ const GRAPHICS = {
   // water, ambient occlusion and edge smoothing (see gfx/gpu/).
   ultraplus: { pixelRatio: 2, reflection: 0.6, rays: 1, softShadows: true, samples: 0, webgpu: true },
 };
+// Phones and tablets: a phone's screen is small and its pixels tiny, so it
+// looks just as sharp drawn at 1.5x instead of 2-3x, with 4x edge smoothing
+// rather than 8x and a lighter water reflection -- several times less work
+// for the graphics chip (scene.js trims the grass and shadows to match).
+const handheld = isSmallOrMobileScreen();
+const PHONE_CAPS = { pixelRatio: 1.5, reflection: 0.45, samples: 4 };
+function graphicsFor(quality) {
+  const g = GRAPHICS[quality];
+  if (!handheld || quality === 'low') return g;
+  return {
+    ...g,
+    pixelRatio: Math.min(g.pixelRatio, PHONE_CAPS.pixelRatio),
+    reflection: Math.min(g.reflection, PHONE_CAPS.reflection),
+    samples: Math.min(g.samples, PHONE_CAPS.samples),
+  };
+}
 
 // Warm the browser cache with this dam's fish pictures so the catch card
 // shows its photo instantly. Small WebP first; PNG only if there's no WebP.
@@ -211,7 +227,7 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
   const dam = createDam(location.dam, seedFromString(firstPeg ? location.id : `${location.id}:${location.pegId}`));
 
   preloadFishImages(localSpecies);
-  const world = createScene({ location, dam, quality });
+  const world = createScene({ location, dam, quality, handheld });
   const { scene, camera } = world;
   const waterLook = location.scenery?.water || {};
   const water = createWater(scene, dam, {
@@ -226,7 +242,7 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
   const environment = createEnvironment({ startTimeOfDay, tempOffset: location.tempOffset ?? 0 });
 
   const renderer = gpuRenderer || new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  const gfx = GRAPHICS[quality];
+  const gfx = graphicsFor(quality);
   let pixelRatio = Math.min(window.devicePixelRatio || 1, gfx.pixelRatio);
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);

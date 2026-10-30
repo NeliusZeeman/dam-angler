@@ -20,7 +20,10 @@ const GROUND_SEASON = {
   spring: 0xeefcd8,
 };
 
-export function createScene({ location, dam, quality = 'high' }) {
+// handheld: a phone or tablet. The same look, on a phone's budget: one
+// step down in shadow detail, about half the grass and bank weeds, fewer
+// leaves and campers -- the counts that cost most on a phone's graphics.
+export function createScene({ location, dam, quality = 'high', handheld = false }) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xcfeeff, 40, 220);
 
@@ -44,7 +47,8 @@ export function createScene({ location, dam, quality = 'high' }) {
 
   const sunLight = new THREE.DirectionalLight(0xfff2d0, 3);
   sunLight.castShadow = true;
-  const shadowSize = { low: 1024, medium: 2048, high: 2048, ultra: 4096, ultraplus: 4096 }[quality] ?? 2048;
+  const shadowSize = Math.min(handheld ? 2048 : 4096, { low: 1024, medium: 2048, high: 2048, ultra: 4096, ultraplus: 4096 }[quality] ?? 2048);
+  const phone = handheld ? 0.5 : 1; // share of the grass and weeds on a phone
   sunLight.shadow.mapSize.set(shadowSize, shadowSize);
   const S = quality === 'ultra' || quality === 'ultraplus' ? 48 : 34;
   Object.assign(sunLight.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near: 1, far: 240 });
@@ -59,15 +63,15 @@ export function createScene({ location, dam, quality = 'high' }) {
   // A camp on the bank at spots that have one (pegs.js).
   const camp = location.camp ? createCamp(scene, {
     dam, terrain, spec: { ...location.camp, x: dam.spawn.x + location.camp.x }, seed: seedFromString(location.id + (location.pegId || '')),
-    location, maxPeople: { medium: 4, high: 6, ultra: 8, ultraplus: 8 }[quality] ?? 6,
+    location, maxPeople: Math.min(handheld ? 5 : 8, { medium: 4, high: 6, ultra: 8, ultraplus: 8 }[quality] ?? 6),
   }) : null;
   const keepClear = camp ? (x, z) => props.exclude(x, z) || camp.exclude(x, z) : props.exclude;
   // Real shrubs, weeds, stumps and logs (photo-scanned) on the bank.
-  createDressing(scene, { dam, terrain, location, exclude: keepClear, density: { medium: 0.5, high: 0.7, ultra: 1, ultraplus: 1.2 }[quality] ?? 0.7 });
+  createDressing(scene, { dam, terrain, location, exclude: keepClear, density: ({ medium: 0.5, high: 0.7, ultra: 1, ultraplus: 1.2 }[quality] ?? 0.7) * (handheld ? 0.6 : 1) });
   const grass = createGrass(scene, {
-    dam, terrain, location, exclude: keepClear, bladeCount: { low: 30000, medium: 60000, high: 95000, ultra: 160000, ultraplus: 200000 }[quality] ?? 95000,
+    dam, terrain, location, exclude: keepClear, bladeCount: Math.round(({ low: 30000, medium: 60000, high: 95000, ultra: 160000, ultraplus: 200000 }[quality] ?? 95000) * (quality === 'low' ? 1 : phone)),
   });
-  const trees = createTrees(scene, { dam, terrain, location, avoid: camp?.area, leafDensity: { low: 0.6, medium: 0.85, high: 1, ultra: 1.35, ultraplus: 1.35 }[quality] ?? 1 });
+  const trees = createTrees(scene, { dam, terrain, location, avoid: camp?.area, leafDensity: Math.min(handheld ? 1 : 2, { low: 0.6, medium: 0.85, high: 1, ultra: 1.35, ultraplus: 1.35 }[quality] ?? 1) });
   createShoreline(scene, { dam, location });
   const wildlife = createWildlife(scene, { dam, location });
   const mist = createMist(scene, dam);

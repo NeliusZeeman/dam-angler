@@ -3,6 +3,15 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Faster High/Ultra on phones (built locally, not live yet)
+
+- Phones and tablets (iPhone, Android) keep the same look on High, Ultra and Ultra+ but on a phone budget:
+  - drawn at 1.5× sharpness at most (an iPhone was drawing up to 2×, on a 3× screen);
+  - 4× edge smoothing instead of 8×, and a lighter water reflection;
+  - 2048 shadows instead of 4096;
+  - half the grass, 60% of the bank weeds, normal leaf density and at most 5 campers.
+- Auto-sharpness still steps down further if the frame rate drops (`main.js` `graphicsFor`, `scene.js` `handheld`).
+
 ## v2 — Camp people fixes (built locally, not live yet)
 
 - **Chairs the right way round**: the scanned plastic chairs were turned 180°, so campers sat facing the backrest (`camp.js` `SCAN_CHAIR_TURN` is now 0).
