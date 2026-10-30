@@ -8,10 +8,12 @@
 // each written to credit_log. Whatever credits or gear a save claims are
 // ignored -- a save only carries what's rigged, the drag, the spot and the
 // settings.
-import { GEAR, GEAR_FIELDS, STARTER, HttpError, cleanSave, cleanCatch, cleanCatchLog, isKnownGear, speciesById } from './validate.js';
+import { GEAR, GEAR_FIELDS, STARTER, STARTER_ITEMS, HttpError, cleanSave, cleanCatch, cleanCatchLog, isKnownGear, speciesById } from './validate.js';
 import { catchPayout } from '../src/economy.js';
 import { ENGINE } from '../src/tuning/engine.js';
 import { COMBOS } from '../src/gear.js';
+import { pointsFromLog, levelFor, gearLevel, boatPoints } from '../src/levels.js';
+import { boatRodAt, boatBonus } from '../src/boatRods.js';
 
 const inTx = (db, fn) => (db.transaction ? db.transaction(fn) : fn(db));
 const gearItem = (kind, id) => GEAR[kind]?.find((i) => i.id === id);
@@ -25,8 +27,10 @@ export const GUEST_IMPORT_LIMIT = 10_000;
 // A brand-new player: starter gear, no credits.
 export async function createPlayer(db, userId) {
   await db.query('INSERT INTO player_state (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [userId]);
-  for (const [kind, id] of Object.entries(STARTER)) {
-    await db.query('INSERT INTO player_gear (user_id, kind, item_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [userId, kind, id]);
+  for (const [kind, ids] of Object.entries(STARTER_ITEMS)) {
+    for (const id of ids) {
+      await db.query('INSERT INTO player_gear (user_id, kind, item_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [userId, kind, id]);
+    }
   }
 }
 
@@ -36,8 +40,16 @@ async function catchLogFor(db, userId, imported = {}) {
   const { rows } = await db.query(
     `SELECT species_id, count(*)::int AS count, max(weight_kg)::float AS best,
             count(*) FILTER (WHERE trophy)::int AS trophies,
-            count(*) FILTER (WHERE NOT kept)::int AS released
-       FROM catches WHERE user_id = $1 GROUP BY species_id`,
+            count(*) FILTER (WHERE NOT kept)::int AS released,
+            count(*) FILTER (WHERE boss)::int AS bosses,
+            sum(weight_kg)::float AS total_kg,
+            sum(boat_pts)::int AS boat_pts,
+            count(*) FILTER (WHERE prev_best IS NOT NULL AND weight_kg > prev_best)::int AS pbs
+       FROM (SELECT species_id, weight_kg, trophy, kept, boss, boat_pts,
+                    max(weight_kg) OVER (PARTITION BY species_id ORDER BY caught_at, id
+                                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS prev_best
+               FROM catches WHERE user_id = $1) c
+      GROUP BY species_id`,
     [userId],
   );
   const log = {};
@@ -49,12 +61,23 @@ async function catchLogFor(db, userId, imported = {}) {
   )).rows;
   for (const r of rows) {
     const e = log[r.species_id] || { count: 0, bestWeightKg: 0 };
+    // Weight carried over from guest play (an old log without a total is
+    // estimated), before this player's own catches are added in.
+    const carriedKg = e.count > 0 ? (Number.isFinite(e.totalKg) ? e.totalKg : e.count * (e.bestWeightKg || 0) * 0.5) : 0;
     e.count += r.count;
     e.bestWeightKg = Math.max(e.bestWeightKg || 0, Number(r.best));
     const trophies = (e.trophies || 0) + r.trophies;
     if (trophies) e.trophies = trophies;
     const released = (e.released || 0) + r.released;
     if (released) e.released = released;
+    // Level points: weight landed, personal bests, bosses.
+    e.totalKg = Math.round((carriedKg + Number(r.total_kg || 0)) * 100) / 100;
+    const pbs = (e.pbs || 0) + r.pbs;
+    if (pbs) e.pbs = pbs;
+    const bosses = (e.bosses || 0) + r.bosses;
+    if (bosses) e.bosses = bosses;
+    const boatPts = (e.boatPts || 0) + (r.boat_pts || 0);
+    if (boatPts) e.boatPts = boatPts;
     log[r.species_id] = e;
   }
   for (const r of byDam) {
@@ -68,8 +91,9 @@ async function ownedGear(db, userId) {
   const rows = (await db.query('SELECT kind, item_id FROM player_gear WHERE user_id = $1 ORDER BY acquired_at, item_id', [userId])).rows;
   const owned = {};
   for (const kind of Object.keys(GEAR_FIELDS)) {
-    owned[kind] = rows.filter((g) => g.kind === kind).map((g) => g.item_id);
-    if (!owned[kind].includes(STARTER[kind])) owned[kind].unshift(STARTER[kind]);
+    // The starter kits are free: owned even by players from before them.
+    const bought = rows.filter((g) => g.kind === kind && !STARTER_ITEMS[kind].includes(g.item_id)).map((g) => g.item_id);
+    owned[kind] = [...STARTER_ITEMS[kind], ...bought];
   }
   owned.gadget = rows.filter((g) => g.kind === 'gadget').map((g) => g.item_id);
   return owned;
@@ -86,6 +110,7 @@ export async function loadSave(db, userId) {
     drag: state.drag ?? 0.33,
     settings: state.settings || {},
     catchLog: await catchLogFor(db, userId, state.imported_log),
+    compPlaces: await compPlacesOf(db, userId),
   };
   for (const [kind, [ownedField, equippedField]] of Object.entries(GEAR_FIELDS)) {
     save[ownedField] = owned[kind];
@@ -132,6 +157,19 @@ export const creditsOf = async (db, userId) => (await db.query('SELECT credits F
 // Stores a catch once and pays for it (sending the same id again changes
 // nothing). The server works out the payout from the fish and the gear it
 // was caught on -- gear the player really owns.
+// Places won in monthly competitions (1st, 2nd, 3rd) -- level points.
+async function compPlacesOf(db, userId) {
+  return (await db.query('SELECT rank FROM comp_awards WHERE user_id = $1', [userId])).rows.map((r) => r.rank);
+}
+
+// The angler's level, worked out from their catches -- the same sum the game
+// does, so gear can't be bought before its level.
+export async function levelOf(db, userId) {
+  const state = (await db.query('SELECT imported_log FROM player_state WHERE user_id = $1', [userId])).rows[0];
+  const log = await catchLogFor(db, userId, state?.imported_log);
+  return levelFor(pointsFromLog(log, await compPlacesOf(db, userId)));
+}
+
 export async function recordCatch(db, userId, raw, { pay = true } = {}) {
   const c = cleanCatch(raw);
   const sp = speciesById(c.speciesId);
@@ -139,16 +177,22 @@ export async function recordCatch(db, userId, raw, { pay = true } = {}) {
   const state = (await db.query('SELECT equipped_rod, equipped_line, equipped_hook FROM player_state WHERE user_id = $1', [userId])).rows[0] || {};
   const pick = (kind, sent) => [sent, state[`equipped_${kind}`], STARTER[kind]].find((id) => id && owned[kind].includes(id));
   const gear = raw?.gear && typeof raw.gear === 'object' ? raw.gear : {};
+  // One of the boat's own rods (only on water where you'd have that boat):
+  // its rod, line and hook, and the bonus on the fish it's rigged for.
+  const boatRod = boatRodAt(gear.boatRodId, c.locationId);
+  const bonus = boatBonus(boatRod, sp.id);
   const payout = catchPayout({
-    species: sp, weightKg: c.weightKg, trophy: c.trophy, catchId: c.id, kept: c.kept,
-    rod: gearItem('rod', pick('rod', gear.rodId)), line: gearItem('line', pick('line', gear.lineId)),
-    hook: gearItem('hook', pick('hook', gear.hookId)),
+    species: sp, weightKg: c.weightKg, trophy: c.trophy, catchId: c.id, kept: c.kept, bonus,
+    rod: boatRod ? boatRod.rod : gearItem('rod', pick('rod', gear.rodId)),
+    line: boatRod ? boatRod.line : gearItem('line', pick('line', gear.lineId)),
+    hook: boatRod ? boatRod.hook : gearItem('hook', pick('hook', gear.hookId)),
   });
+  const boatPts = boatPoints({ weightKg: c.weightKg, trophy: c.trophy, boss: c.boss }, bonus);
   return inTx(db, async (tx) => {
     const { rows } = await tx.query(
-      `INSERT INTO catches (id, user_id, species_id, location_id, weight_kg, length_cm, trophy, payout, time_of_day, caught_at, kept)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [c.id, userId, c.speciesId, c.locationId, c.weightKg, c.lengthCm, c.trophy, pay ? payout : 0, c.timeOfDay, c.caughtAt, c.kept],
+      `INSERT INTO catches (id, user_id, species_id, location_id, weight_kg, length_cm, trophy, payout, time_of_day, caught_at, kept, boss, boat_pts)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (id) DO NOTHING RETURNING id`,
+      [c.id, userId, c.speciesId, c.locationId, c.weightKg, c.lengthCm, c.trophy, pay ? payout : 0, c.timeOfDay, c.caughtAt, c.kept, c.boss, boatPts],
     );
     const stored = rows.length > 0;
     const credits = stored && pay ? await changeCredits(tx, userId, payout, 'catch', c.id) : await creditsOf(tx, userId);
@@ -167,6 +211,7 @@ export async function buyItem(db, userId, kind, itemId) {
     if (!have && item.inShop === false) throw new HttpError(400, `The ${item.name} isn't in the shop any more.`);
     // A combo's own rod or reel only comes with the combo.
     if (!have && item.comboOnly) throw new HttpError(400, `The ${item.name} only comes as part of its combo.`);
+    if (!have && gearLevel(item) > await levelOf(tx, userId)) throw new HttpError(400, `The ${item.name} needs level ${gearLevel(item)}.`);
     if (have || item.cost === 0) {
       if (!have) await tx.query('INSERT INTO player_gear (user_id, kind, item_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [userId, kind, itemId]);
       return { credits: await creditsOf(tx, userId), bought: false };
@@ -191,6 +236,7 @@ export async function buyCombo(db, userId, comboId) {
     }
     if (owned === parts.length) return { credits: await creditsOf(tx, userId), bought: false };
     if (combo.inShop === false) throw new HttpError(400, `The ${combo.name} isn't in the shop any more.`);
+    if (gearLevel(combo) > await levelOf(tx, userId)) throw new HttpError(400, `The ${combo.name} needs level ${gearLevel(combo)}.`);
     const credits = await changeCredits(tx, userId, -combo.cost, 'buy', `combo:${comboId}`);
     if (credits === null) throw new HttpError(400, `Not enough credits for the ${combo.name} (${combo.cost}).`);
     for (const [kind, id] of parts) {
@@ -222,7 +268,7 @@ export async function importGuest(db, userId, { guestSave, guestCatches } = {}) 
     if (s) {
       let budget = ENGINE.money.guestImportLimit;
       const wanted = [];
-      for (const [kind, ids] of Object.entries(s.gear)) for (const id of ids) if (id !== STARTER[kind]) wanted.push({ kind, id, cost: gearItem(kind, id).cost });
+      for (const [kind, ids] of Object.entries(s.gear)) for (const id of ids) if (!STARTER_ITEMS[kind]?.includes(id)) wanted.push({ kind, id, cost: gearItem(kind, id).cost });
       wanted.sort((a, b) => a.cost - b.cost);
       await inTx(db, async (tx) => {
         for (const g of wanted) {

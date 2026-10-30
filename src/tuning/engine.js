@@ -19,11 +19,20 @@ const DEFAULTS = {
     slackLimitSeconds: 4,
     slackThreshold: 0.06,
     defaultDrag: 0.33,
-    haulOver: 0.35,
+    haulOver: 0.14, // winding against a slipping drag loads the line only a little past it
+    lungeOver: 0.15, // ...winding while it runs and takes line jolts it much further
+    stickChance: 0.1, // how often a cheap, jerky drag sticks on a lunge
+    lineWear: 0.06, // how fast hard-loaded line frays under a fish heavier than its rating (per second at full load)
+    hookStrainSeconds: 3.5, // hauling harder than the hook holds for this long before it can open
+    hookOpenRate: 0.12, // ...then this x the overload, per second, it opens
+    shockFactor: 1.5, // the most a fish can load the line, x its steady pull (a lunge, a head-shake)
+    tireRelief: 0.6, // a beaten fish pulls this much less than a fresh one
+    slipGain: 0.15, // winding while the spool slips gains only this share of line
+    wearFrom: 0.6, // line loaded past this share of its strength starts to fray
     dragTension: 0.28,
     dragTire: 0.45,
     jumpStrain: 0.25,
-    throwChancePerSecond: 0.8,
+    throwChancePerSecond: 0.3,
     landReach: 4.2, // metres from you a fish must be to land it
   },
   // The take and the strike (strike.js): how long you have to strike
@@ -64,9 +73,11 @@ const DEFAULTS = {
     netMinKg: 0.5, // fish this size and up need the net; smaller ones are swung in
     snagFreeChance: 0.35, // per second, easing off, a snagged fish swims out
     snagEaseSeconds: 2, // ...after you've eased off this long
-    snagMaxSeconds: 12, // stuck longer than this and the line parts
+    snagMaxSeconds: 20, // stuck longer than this and the line parts
     snagMinDistance: 6, // m -- no snags right at your feet
     coverReach: 15, // m -- how far a fish will bolt for cover
+    coverChance: 0.3, // chance a run heads for the nearest cover
+    straySnagChance: 0.08, // per second, a fish swimming over cover tangles in it anyway
     steerLift: 0.2, // rod held at least this high (0..1) steers it off the cover
     keepBonus: 1.2, // a kept fish pays this much more
     releaseBoost: 0.05, // each fish released here: bites +5% this session
@@ -90,6 +101,31 @@ const DEFAULTS = {
     prize1: 1500, // monthly competition: 1st
     prize2: 800,
     prize3: 400,
+  },
+  // Levels (levels.js): points for what you land, the level they make,
+  // gear unlocked by level, bigger fish biting as you climb.
+  levels: {
+    perKg: 10, // points per kg landed
+    firstSpecies: 50, // your first of a species
+    personalBest: 20, // beating your best of a species
+    trophy: 150, // a 1-in-300 trophy
+    release: 3, // putting one back
+    comp1: 400, // monthly competition: 1st
+    comp2: 250,
+    comp3: 120,
+    curveBase: 60, // points to reach level L: curveBase * (L-1)^curvePower
+    curvePower: 1.8,
+    maxLevel: 30,
+    gearFreeCost: 60, // gear up to this price needs no level
+    gearLevelsPerDoubling: 2.5, // each doubling of price above that: this many levels
+    sizeSkewStart: 2.1, // a beginner mostly hooks small fish (higher = smaller)
+    sizeSkewPerLevel: 0.07, // ...and it eases each level
+    sizeSkewMin: 0.45, // at the top, big fish are common
+    sizeCapStart: 0.3, // a level-1 angler's fish run up to this share of the species' size range
+    sizeCapPerLevel: 0.035, // ...and the cap opens this much per level (full range at ~21)
+    bossChance: 0.04, // share of bites that are a BOSS for your level (1 in 25)
+    bossReach: 0.35, // a boss runs up to this much of the size range past your cap
+    boss: 120, // points for landing a boss
   },
   money: {
     chumCost: 15,

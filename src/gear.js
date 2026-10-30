@@ -227,7 +227,7 @@ export const COMBOS = SHOP_COMBOS;
 export const HOOKS = [
   {
     id: 'hook-small', name: 'Size 10 Fine-Wire Hook', cost: 0, tensionBonus: 0, speciesBonus: {}, isWireTrace: false,
-    strengthKg: 2.5, holdBonus: 0, biteBonus: { 'mozambique-tilapia': 1.2, 'banded-tilapia': 1.3, mudfish: 1.1 },
+    strengthKg: 3.2, holdBonus: 0, biteBonus: { 'mozambique-tilapia': 1.2, 'banded-tilapia': 1.3, mudfish: 1.1 },
     note: 'Small mouths — kurper love it. Straightens on a big fish',
   },
   {
@@ -427,6 +427,41 @@ const SECTIONS_OF = {
 export function sectionsFor(item) {
   return SECTIONS_OF[item.id] || item.sections || ['general'];
 }
+
+// Free starter kits, one for each kind of fishing, from the cheapest real
+// gear SA shops sell for it: everybody owns them from the start, and the
+// tackle box rigs a whole kit with one tap.
+export const STARTER_KITS = [
+  {
+    id: 'general', label: 'General starter', blurb: 'Fibreglass rod, small hook and bread — kurper and a bit of everything.',
+    rod: 'rod-starter', reel: 'reel-starter', line: 'line-starter', hooks: ['hook-small'], lures: ['bread-bait', 'dough-bait'],
+  },
+  {
+    id: 'bass', label: 'Bass starter', blurb: 'Spinning rod, light fluorocarbon, weedless hooks, a soft plastic and a spinnerbait.',
+    rod: 'rod-sensation-rapid-spin', reel: 'reel-spinning', line: 'line-fluoro-10', hooks: ['hook-offset-worm'], lures: ['soft-plastic', 'spinner'],
+  },
+  {
+    id: 'carp', label: 'Carp starter', blurb: '3.66 m carp rod, budget baitrunner, carp mono, hair rigs, mielies and a mieliebom.',
+    rod: 'rod-adrenalin-eco-tech', reel: 'reel-adrenalin-q3000', line: 'line-carp-15', hooks: ['hook-carp-hair'], lures: ['mielies', 'mieliebom'],
+  },
+  {
+    id: 'fly', label: 'Fly starter', blurb: '5-weight fly rod and reel, floating line, a nymph and a dry fly.',
+    rod: 'rod-fly', reel: 'reel-fly', line: 'line-fly-float', hooks: [], lures: ['fly-nymph', 'fly-dry'],
+  },
+  {
+    id: 'predator', label: 'Barbel & tiger starter', blurb: 'Big-fish rod and reel, 9 kg mono, circle hooks, a wire trace, chicken liver and sardine.',
+    rod: 'rod-adrenalin-big-fish', reel: 'reel-adrenalin-big-fish', line: 'line-mono-20', hooks: ['hook-circle', 'hook-wire-trace'], lures: ['chicken-liver', 'sardine'],
+  },
+];
+
+// Every item in the starter kits, by kind of gear.
+export const STARTER_ITEMS = {
+  rod: [...new Set(STARTER_KITS.map((k) => k.rod))],
+  reel: [...new Set(STARTER_KITS.map((k) => k.reel))],
+  line: [...new Set(STARTER_KITS.map((k) => k.line))],
+  hook: [...new Set(STARTER_KITS.flatMap((k) => k.hooks))],
+  lure: [...new Set(STARTER_KITS.flatMap((k) => k.lures))],
+};
 
 // Does this rig belong together? Wrong pairings still work, just badly:
 // a fly weighs nothing, so without a fly rod and fly line it drops at your

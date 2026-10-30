@@ -1,4 +1,5 @@
 import * as THREE from '../../vendor/three.module.js';
+import { GPU } from './gpu.js';
 
 // One wind field shared by every swaying thing (grass, reeds, willow strands,
 // leaves), so a gust visibly rolls across the whole dam at once.
@@ -38,6 +39,24 @@ export function updateWind(elapsedSeconds, deltaSeconds, windSpeed, dirX, dirZ) 
   windUniforms.uTime.value = elapsedSeconds;
 }
 
+// WebGPU: an instanced mesh's swaying material reads each instance's root
+// position and height (xyz, w) from an `aRoot` attribute on its own copy of
+// the geometry. Call once its instance matrices are set. (WebGL reads the
+// instance matrix directly and needs nothing.)
+const rootMatrix = new THREE.Matrix4();
+export function prepareWindInstances(mesh) {
+  if (!GPU.on) return;
+  const count = mesh.instanceMatrix.count;
+  const root = new Float32Array(count * 4);
+  const e = rootMatrix.elements;
+  for (let i = 0; i < count; i++) {
+    mesh.getMatrixAt(i, rootMatrix);
+    root.set([e[12], e[13], e[14], Math.hypot(e[4], e[5], e[6])], i * 4);
+  }
+  mesh.geometry = mesh.geometry.clone();
+  mesh.geometry.setAttribute('aRoot', new THREE.InstancedBufferAttribute(root, 4));
+}
+
 // Adds the wind field to a built-in material. For instanced meshes the sway is
 // applied in world space after the instance transform, scaled by each
 // instance's height; for merged world-space meshes `aSway` (0 root .. 1 tip)
@@ -45,6 +64,10 @@ export function updateWind(elapsedSeconds, deltaSeconds, windSpeed, dirX, dirZ) 
 export function addWindToMaterial(material, { instanced = false, amount = 1, cutout = false } = {}) {
   const amountUniform = { value: amount };
   material.userData.windAmount = amountUniform;
+  if (GPU.on) {
+    GPU.nodes.windNodes(material, windUniforms, amountUniform, { instanced, cutout });
+    return material;
+  }
   // Same onBeforeCompile source for every variant, so the cache key must
   // tell them apart or three.js would reuse the wrong compiled program.
   material.customProgramCacheKey = () => `wind-${instanced ? 'inst' : 'merged'}-${cutout ? 'cut' : 'solid'}`;

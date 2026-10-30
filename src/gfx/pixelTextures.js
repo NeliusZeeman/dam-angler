@@ -490,3 +490,30 @@ export function fishSkinTexture(p) {
   });
   return toTexture(canvas, { repeat: false });
 }
+
+// The relief of the scales, on the same grid the skin paints them: each
+// scale domes up from where it tucks under the one ahead and drops off at
+// its free edge. Scaleless skin (barbel) gets a fine leathery grain.
+export function fishScaleBumpTexture(p) {
+  const W = 512, H = 256;
+  const canvas = pixelCanvas(W, H, (x, y, out) => {
+    const u = x / W;
+    const v = 1 - y / H;
+    let h = 0.5;
+    if (p.scales) {
+      const sx = v * p.scales;
+      const row = Math.floor(sx);
+      const sy = u * p.scales * 2.2 + (row % 2) * 0.5;
+      const fx = sx - row, fy = sy - Math.floor(sy);
+      const edge = Math.hypot(fx - 0.15, (fy - 0.5) * 0.9);
+      // Rises toward the free edge, then a sharp step down into the outline.
+      h = 0.25 + 0.6 * smoothstep(0.0, 0.5, edge) * (1 - smoothstep(0.5, 0.58, edge));
+    } else {
+      h = 0.4 + fbm(u * 40, v * 20, { octaves: 3, period: [40, 20], seed: p.seed + 9 }) * 0.25;
+    }
+    h += (hash2i(x, y, p.seed + 5) - 0.5) * 0.05;
+    const g = Math.max(0, Math.min(255, h * 255));
+    out[0] = out[1] = out[2] = g;
+  });
+  return toTexture(canvas, { repeat: false, srgb: false });
+}

@@ -43,6 +43,8 @@ uniform sampler2D tScene, tB0, tB1, tB2, tB3;
 uniform float uExposure, uBloom, uFlare, uVignette, uGrain, uTime, uSaturation;
 uniform vec3 uGrade;
 uniform vec2 uRes;
+uniform vec2 uSunUV;
+uniform float uRays;
 varying vec2 vUv;
 
 vec3 RRTAndODTFit(vec3 v) {
@@ -83,7 +85,26 @@ void main() {
     flare += texture2D(tB3, o).rgb * w * tint;
   }
 
-  hdr = (hdr + bloom * uBloom + flare * uFlare) * uGrade;
+  // Sun rays: march from each pixel toward the sun through the bright
+  // buffer, so light streams out round the edges of trees, the far hills
+  // and the haze -- and only near the sun, so the water's glitter doesn't
+  // throw rays of its own.
+  vec3 rays = vec3(0.0);
+  if (uRays > 0.001) {
+    vec2 stepUV = (uSunUV - vUv) / 24.0;
+    vec2 c = vUv;
+    float decay = 1.0;
+    float aspect = uRes.x / uRes.y;
+    for (int i = 0; i < 24; i++) {
+      c += stepUV;
+      float near = 1.0 - smoothstep(0.0, 0.5, length((c - uSunUV) * vec2(aspect, 1.0)));
+      rays += min(texture2D(tB1, clamp(c, 0.0, 1.0)).rgb, vec3(6.0)) * near * decay;
+      decay *= 0.955;
+    }
+    rays *= uRays * 0.2 / 24.0;
+  }
+
+  hdr = (hdr + bloom * uBloom + flare * uFlare + rays) * uGrade;
   vec3 c = acesFilmic(hdr * uExposure);
   float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = mix(vec3(lum), c, uSaturation);
@@ -97,7 +118,7 @@ void main() {
 }
 `;
 
-export function createPostPipeline(renderer) {
+export function createPostPipeline(renderer, { samples = 4 } = {}) {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
   quad.frustumCulled = false;
@@ -105,7 +126,7 @@ export function createPostPipeline(renderer) {
   quadScene.add(quad);
 
   const rtOpts = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
-  const sceneRT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4, depthBuffer: true });
+  const sceneRT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples, depthBuffer: true });
   const levels = [0, 1, 2, 3].map(() => ({ a: new THREE.WebGLRenderTarget(1, 1, rtOpts), b: new THREE.WebGLRenderTarget(1, 1, rtOpts) }));
 
   const brightMat = new THREE.ShaderMaterial({
@@ -125,6 +146,7 @@ export function createPostPipeline(renderer) {
       uVignette: { value: 0.55 }, uGrain: { value: 0.025 }, uTime: { value: 0 },
       uSaturation: { value: 1.08 }, uGrade: { value: new THREE.Color(1, 1, 1) },
       uRes: { value: new THREE.Vector2(1, 1) },
+      uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uRays: { value: 0 },
     },
     vertexShader: fullscreenVertex, fragmentShader: compositeFragment, depthTest: false, depthWrite: false,
   });
@@ -159,7 +181,23 @@ export function createPostPipeline(renderer) {
   }
 
   const srcSize = new THREE.Vector2();
+  const sunPos = new THREE.Vector3(), camFwd = new THREE.Vector3();
+  let raysWanted = 0, raysScale = 1;
+  const sunDir = new THREE.Vector3(0, 1, 0);
+  // Where the sun sits on screen; rays fade as it leaves the view.
+  function aimRays(camera3d) {
+    const u = compositeMat.uniforms;
+    camera3d.getWorldDirection(camFwd);
+    const facing = camFwd.dot(sunDir);
+    if (raysWanted <= 0 || facing <= 0.05) { u.uRays.value = 0; return; }
+    sunPos.copy(camera3d.position).addScaledVector(sunDir, 1000).project(camera3d);
+    const sx = sunPos.x * 0.5 + 0.5, sy = sunPos.y * 0.5 + 0.5;
+    u.uSunUV.value.set(sx, sy);
+    const off = Math.max(Math.abs(sx - 0.5), Math.abs(sy - 0.5)) - 0.5;
+    u.uRays.value = raysWanted * raysScale * Math.max(0, 1 - off / 0.35) * Math.min(1, facing * 3);
+  }
   function render(scene, camera3d) {
+    aimRays(camera3d);
     renderer.setRenderTarget(sceneRT);
     renderer.render(scene, camera3d);
 
@@ -187,7 +225,11 @@ export function createPostPipeline(renderer) {
     u.uGrade.value.setRGB(1, 1, 1).lerp(atmos.grade, 0.6);
     u.uVignette.value = 0.45 + atmos.nightness * 0.3;
     u.uTime.value = elapsed;
+    // Strongest low in the sky, through morning and evening haze.
+    sunDir.copy(atmos.sunDir);
+    raysWanted = atmos.sunVis * (0.25 + 0.55 * (1 - Math.min(1, Math.max(0, sunDir.y) * 2.2)));
   }
 
-  return { render, setSize, setLook };
+  // Sun-ray strength (0 = off; the low graphics setting can turn them off).
+  return { render, setSize, setLook, setRaysScale: (k) => { raysScale = k; } };
 }

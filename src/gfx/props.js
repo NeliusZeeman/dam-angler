@@ -1,6 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { makeRng, seedFromString } from './noise.js';
 import { woodTexture, glowTexture } from './pixelTextures.js';
+import { scanTexture } from '../sceneryAssets.js';
 import { DECK_Y } from '../dam.js';
 
 
@@ -84,8 +85,15 @@ function buildJetty(builder, frame, rng, { fromOff, toOff, width, deckY, postBot
 
 export function createProps(scene, { dam, terrain, location }) {
   const rng = makeRng(seedFromString(location.id) + 626);
-  const woodMap = woodTexture();
-  const woodMat = new THREE.MeshStandardMaterial({ map: woodMap, vertexColors: true, roughness: 0.88 });
+  // Weathered photo-scanned planks when loaded (sceneryAssets.js): each
+  // board shows a strip of the scan, so its grain runs along the board.
+  const planks = scanTexture('planks');
+  const strip = (t) => { const c = t.clone(); c.repeat.set(0.3, 1); c.needsUpdate = true; return c; };
+  const woodMap = planks ? strip(planks.map) : woodTexture();
+  const woodMat = planks
+    // (brightened: the boards' own tones darken it as well as the scan)
+    ? new THREE.MeshStandardMaterial({ map: woodMap, normalMap: strip(planks.normalMap), roughnessMap: strip(planks.roughnessMap), vertexColors: true, roughness: 1, color: new THREE.Color(1.6, 1.6, 1.6) })
+    : new THREE.MeshStandardMaterial({ map: woodMap, vertexColors: true, roughness: 0.88 });
   const jetty = new PieceBuilder();
   const bedAt = (p) => terrain.heightAt(p.x, p.z);
 

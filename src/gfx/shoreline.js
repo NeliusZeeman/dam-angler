@@ -1,6 +1,6 @@
 import * as THREE from '../../vendor/three.module.js';
 import { makeRng, seedFromString } from './noise.js';
-import { addWindToMaterial } from './wind.js';
+import { addWindToMaterial, prepareWindInstances } from './wind.js';
 import { lilyPadTexture } from './pixelTextures.js';
 
 // A reed leaf 1 unit tall: long, tapering, arching outward.
@@ -176,6 +176,7 @@ export function createShoreline(scene, { dam, location }) {
     const v = rng();
     reeds.setColorAt(i, color.setRGB(0.85 + v * 0.3, 0.9 + v * 0.2, 0.75 + v * 0.2));
   });
+  prepareWindInstances(reeds);
   reeds.castShadow = true;
   reeds.receiveShadow = true;
   reeds.frustumCulled = false;
@@ -191,6 +192,7 @@ export function createShoreline(scene, { dam, location }) {
     cattails.setMatrixAt(i, dummy.matrix);
   });
   cattails.count = tails.length;
+  prepareWindInstances(cattails);
   cattails.castShadow = true;
   cattails.frustumCulled = false;
   scene.add(cattails);

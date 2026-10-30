@@ -12,7 +12,8 @@ function haul() {
   const mg = createMinigame();
   let result = null;
   mg.start({ species: carp, weightKg: 7, rod: RODS[0], line: LINES[0], hook: HOOKS[0], onSuccess: () => { result = 'landed'; }, onFailure: (r) => { result = r; } });
-  for (let i = 0; i < 1200 && mg.isActive(); i++) { mg.setHolding(true); mg.update(0.05); }
+  // Wound flat-out, through its runs too.
+  for (let i = 0; i < 1200 && mg.isActive(); i++) { mg.setFishPulling(i % 80 < 30); mg.setHolding(true); mg.update(0.05); }
   return result;
 }
 
@@ -25,7 +26,7 @@ function haul() {
 {
   // The snap point is read live: raise it out of reach and hauling can't snap the line.
   // Fights are random (a hook can also pull out first), so give it a few goes.
-  const breaks = Array.from({ length: 8 }, haul).some((r) => r === 'line-snapped' || r === 'hook-straightened');
+  const breaks = Array.from({ length: 30 }, haul).some((r) => r === 'line-snapped' || r === 'hook-straightened');
   assert.equal(breaks, true, 'built-in: hauling a 7 kg carp on starter gear breaks something');
   ENGINE.fight.snapAt = 5;
   ENGINE.fight.haulOver = 0.35;

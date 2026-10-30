@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<base href="/">
+<title>People in game</title>
+<!-- The campsite people through the game's own src/people.js: poses, held
+     things and arm reaching. ?who=man-shorts&base=sit&upper=drink&hold=beer&t=5 -->
+<script type="importmap">{ "imports": { "three": "/vendor/three.module.js" } }</script>
+<style>body { margin: 0; background: #8aa; } canvas { display: block; }</style>
+</head>
+<body>
+<script type="module">
+import * as THREE from '/vendor/three.module.js';
+import { loadPeople, makePerson } from '/src/people.js';
+
+const q = new URLSearchParams(location.search);
+const who = (q.get('who') || 'man-shorts').split(',');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9fb8c4);
+scene.add(new THREE.HemisphereLight(0xdfefff, 0x6a5a40, 1.4));
+const sun = new THREE.DirectionalLight(0xfff2dd, 2.2);
+sun.position.set(3, 5, 4);
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({ color: 0x7a7050 }));
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+const camera = new THREE.PerspectiveCamera(Number(q.get('fov') || 35), innerWidth / innerHeight, 0.05, 100);
+camera.position.set(Number(q.get('cx') || 0), Number(q.get('cy') || 1.4), Number(q.get('cz') || 3.2));
+camera.lookAt(0, Number(q.get('ly') || 1.0), 0);
+
+await loadPeople(who);
+const people = [];
+who.forEach((name, i) => {
+  const p = makePerson(name);
+  p.root.position.x = (i - (who.length - 1) / 2) * 0.9;
+  p.root.rotation.y = Number(q.get('turn') || 0);
+  scene.add(p.root);
+  p.pose(q.get('base') || 'idle', { upper: q.get('upper') || null, fade: 0 });
+  p.mixer._actions.forEach((a) => { a.time = 0; });
+  if (q.get('hold')) p.hold(q.get('hold'), q.get('side') || 'R');
+  people.push(p);
+});
+const t = Number(q.get('t') || 1);
+for (let k = 0; k < Math.round(t * 30); k++) people.forEach((p) => p.update(1 / 30));
+// ?reach=x,y,z : both hands to that point (relative to the person).
+if (q.get('reach')) {
+  const [x, y, z] = q.get('reach').split(',').map(Number);
+  for (const p of people) {
+    const target = new THREE.Vector3(x, y, z).applyMatrix4(p.root.matrixWorld);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.03), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+    ball.position.copy(target);
+    scene.add(ball);
+    p.reach('R', target, new THREE.Vector3(0.6, 0.8, -0.4).applyMatrix4(p.root.matrixWorld));
+    p.reach('L', target.clone().add(new THREE.Vector3(0, -0.15, 0)), new THREE.Vector3(-0.6, 0.8, -0.4).applyMatrix4(p.root.matrixWorld));
+  }
+}
+renderer.render(scene, camera);
+window.__people = people; window.__THREE = THREE;
+document.title = 'ready';
+</script>
+</body>
+</html>

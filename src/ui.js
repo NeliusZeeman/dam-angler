@@ -11,6 +11,7 @@ export function createHUD(container, { showHints = true, touch = false, onDrag =
   bar.className = 'hud-bar';
   bar.innerHTML = `
     <span id="hud-credits"></span>
+    <span id="hud-level"><b></b><i><u></u></i></span>
     <span id="hud-season"></span>
     <span id="hud-time"></span>
     <span id="hud-wind"></span>
@@ -140,11 +141,17 @@ export function createHUD(container, { showHints = true, touch = false, onDrag =
     bareHook: `Bait's off the hook — hold ${press} to reel in and re-bait`,
   };
 
-  function update({ credits, season, timeOfDay, waterTempC, windSpeed, windDirX = 1, windDirZ = 0, rodName, lineName, reelName, hookName, lureName, castingPhase, tension, power, working = false, lureInWater = true, bareHook = false }) {
+  function update({ credits, level = null, season, timeOfDay, waterTempC, windSpeed, windDirX = 1, windDirZ = 0, rodName, lineName, reelName, hookName, lureName, castingPhase, tension, power, working = false, lureInWater = true, bareHook = false }) {
     if (bareHook && (castingPhase === 'waiting' || castingPhase === 'reeling')) castingPhase = 'bareHook';
     else if (working && castingPhase === 'waiting') castingPhase = 'working';
     else if (castingPhase === 'waiting' && !lureInWater) castingPhase = 'onBank';
     document.getElementById('hud-credits').textContent = `Credits: ${credits}`;
+    if (level) {
+      const el = document.getElementById('hud-level');
+      el.querySelector('b').textContent = `Level ${level.level}`;
+      el.querySelector('u').style.width = `${Math.round(level.share * 100)}%`;
+      el.title = level.top ? `${level.points} XP -- top level` : `${level.points} / ${level.to} XP to level ${level.level + 1}`;
+    }
     document.getElementById('hud-season').textContent = `${season} — ${waterTempC.toFixed(1)}°C`;
     const timeEl = document.getElementById('hud-time');
     timeEl.textContent = TIME_LABELS[timeOfDay] || timeOfDay;
@@ -209,13 +216,14 @@ let closeActiveCatchCard = null;
 // or key still held from the fight can't dismiss the card unread.
 // `keepPayout` / `onChoice(kept)`: the Keep and Release buttons (closing any
 // other way releases it). A protected fish can only be released.
-export function showCatchCard(container, { species, weightKg, lengthCm, payout, keepPayout = null, previousBestKg, count, locationName, timeLabel, trophy = false, damRecord = false, lockMs = 0, onClose = null, onChoice = null }) {
+export function showCatchCard(container, { species, weightKg, lengthCm, payout, keepPayout = null, previousBestKg, count, locationName, timeLabel, trophy = false, boss = false, damRecord = false, lockMs = 0, onClose = null, onChoice = null }) {
   closeActiveCatchCard?.();
   const firstEver = count === 1;
   const personalBest = !firstEver && weightKg > previousBestKg;
   const badge = trophy && damRecord ? 'TROPHY — and a new dam record!'
     : trophy ? 'TROPHY — the big one! (x3 value)'
-      : damRecord ? 'New dam record! Biggest fish ever landed here'
+      : boss ? 'BOSS beaten! A real test for your level'
+        : damRecord ? 'New dam record! Biggest fish ever landed here'
         : firstEver ? 'First one!' : personalBest ? 'New personal best!' : '';
 
   const wrap = document.createElement('div');

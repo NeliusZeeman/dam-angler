@@ -1,7 +1,9 @@
 import * as THREE from '../vendor/three.module.js';
-import { fishSkinTexture, finRayTexture } from './gfx/pixelTextures.js';
+import { fishSkinTexture, fishScaleBumpTexture, finRayTexture } from './gfx/pixelTextures.js';
 import { mergeGeometries } from './gfx/terrain.js';
 import { FISH_SPECIES } from './fish.js';
+import { GPU } from './gfx/gpu.js';
+import { fishModel } from './fishModels.js';
 
 // Each species: size, body proportions, fin layout and a skin recipe that
 // fishSkinTexture paints pixel by pixel (back/belly colours, scale pattern,
@@ -11,7 +13,7 @@ import { FISH_SPECIES } from './fish.js';
 //         'tiger'   short tall dorsal plus a little adipose fin
 //         'catfish' low dorsal and anal fins running most of the body
 //   tail: 'forked' | 'notched' | 'round'
-const SPECIES_LOOK = {
+export const SPECIES_LOOK = {
   'mozambique-tilapia': {
     scale: 1.0, shape: [1, 1.05, 0.55], fin: 0x5f6a6a, metal: 0.15, fins: 'perch', tail: 'notched',
     skin: { back: [70, 86, 92], belly: [205, 212, 206], scales: 26, scaleContrast: 0.25, bars: { count: 14, strength: 0.16 }, seed: 1 },
@@ -307,6 +309,14 @@ function skinFor(speciesId) {
   }
   return skinCache.get(speciesId);
 }
+const bumpCache = new Map();
+function scaleBumpFor(speciesId) {
+  if (!bumpCache.has(speciesId)) {
+    const look = SPECIES_LOOK[speciesId] || SPECIES_LOOK['mozambique-tilapia'];
+    bumpCache.set(speciesId, fishScaleBumpTexture(look.skin));
+  }
+  return bumpCache.get(speciesId);
+}
 let finTexture = null;
 
 // Geometry is built once per species and shared by every fish of that
@@ -324,6 +334,7 @@ function speciesParts(speciesId) {
 // bending body and fins together, so nothing hinges apart. Uniforms are per
 // fish; the program is shared by every fish.
 function applySwim(material, swim) {
+  if (GPU.on) { GPU.nodes.swimNodes(material, swim); return; }
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, swim);
     shader.vertexShader = shader.vertexShader
@@ -345,10 +356,14 @@ export function setFishSwim(mesh, phase, amp = 1) {
 }
 
 // detail=false (the ambient swarm) skips eyes, teeth and whiskers -- they're
-// only visible on the close-up catch.
-export function createFishMesh(speciesId, { detail = true } = {}) {
+// only visible on the close-up catch. builtIn=true ignores the Blender model
+// (for comparing the two).
+export function createFishMesh(speciesId, { detail = true, builtIn = false } = {}) {
   const { look, bodyGeo, finGeo } = speciesParts(speciesId);
   const [len, depth] = look.shape;
+  // The Blender model, when it's loaded (fishModels.js): its vertex colour
+  // shades the mouth, gill slit and eye sockets on top of the skin.
+  const model = builtIn ? null : fishModel(speciesId);
   if (!finTexture) finTexture = finRayTexture();
 
   const swim = {
@@ -360,7 +375,16 @@ export function createFishMesh(speciesId, { detail = true } = {}) {
   };
   swim.baseAmp = swim.uSwimAmp.value;
 
-  const bodyMat = new THREE.MeshStandardMaterial({ map: skinFor(speciesId), roughness: 0.32, metalness: look.metal });
+  // Close up (the fish on the line, in the net, in your hands) the skin is
+  // wet: raised scales under a glossy coat of slime, and the silvery fish
+  // shimmer with a hint of rainbow. The far-off swarm keeps it cheap.
+  const bodyMat = detail
+    ? new THREE.MeshPhysicalMaterial({
+      map: skinFor(speciesId), bumpMap: scaleBumpFor(speciesId), bumpScale: look.skin?.scales ? 0.45 : 0.25,
+      roughness: 0.42, metalness: look.metal, clearcoat: 0.85, clearcoatRoughness: 0.12, vertexColors: !!model,
+      iridescence: look.metal >= 0.3 ? 0.35 : 0.08, iridescenceIOR: 1.6, iridescenceThicknessRange: [180, 420],
+    })
+    : new THREE.MeshStandardMaterial({ map: skinFor(speciesId), roughness: 0.32, metalness: look.metal, vertexColors: !!model?.bodyLow?.attributes.color });
   const finMat = new THREE.MeshStandardMaterial({
     map: finTexture, color: look.fin, roughness: 0.55, side: THREE.DoubleSide, alphaTest: 0.5,
   });
@@ -368,11 +392,27 @@ export function createFishMesh(speciesId, { detail = true } = {}) {
   applySwim(finMat, swim);
 
   const group = new THREE.Group();
-  group.add(new THREE.Mesh(bodyGeo, bodyMat));
-  group.add(new THREE.Mesh(finGeo, finMat));
+  group.add(new THREE.Mesh(model ? (detail ? model.body : model.bodyLow || model.body) : bodyGeo, bodyMat));
+  group.add(new THREE.Mesh(model ? model.fins : finGeo, finMat));
   group.userData.swim = swim;
   group.scale.setScalar(look.scale);
   if (!detail) return group;
+
+  if (model) {
+    // Wet eyes with their iris and pupil, and the whiskers and teeth, all
+    // shaped in Blender; they bend with the swimming body.
+    if (model.eyes) {
+      const eyeMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.03 });
+      applySwim(eyeMat, swim);
+      group.add(new THREE.Mesh(model.eyes, eyeMat));
+    }
+    if (model.extras) {
+      const extraMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 });
+      applySwim(extraMat, swim);
+      group.add(new THREE.Mesh(model.extras, extraMat));
+    }
+    return group;
+  }
 
   // Eyes sit in the side of the head, just proud of the skin.
   const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xd9c36a, roughness: 0.2 });

@@ -2,9 +2,10 @@
 // data (the same fish, gear and spots the game uses), so nothing unknown or
 // impossible gets into the database.
 import { FISH_SPECIES } from '../src/fish.js';
-import { RODS, LINES, REELS, HOOKS, LURES, GADGETS } from '../src/gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, GADGETS, STARTER_ITEMS } from '../src/gear.js';
 import { LOCATIONS } from '../src/locations.js';
 import { isTrophyWeight } from '../src/economy.js';
+import { ENGINE } from '../src/tuning/engine.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -24,8 +25,10 @@ export const GEAR_FIELDS = {
   hook: ['ownedHookIds', 'equippedHookId'],
   lure: ['ownedLureIds', 'equippedLureId'],
 };
-// What every player starts with (the free items).
+// What a new player has rigged, and every free item they own (the starter
+// kits: general, bass, carp, fly, barbel & tiger).
 export const STARTER = { rod: 'rod-starter', line: 'line-starter', reel: 'reel-starter', hook: 'hook-small', lure: 'bread-bait' };
+export { STARTER_ITEMS };
 
 const GEAR_IDS = Object.fromEntries(Object.entries(GEAR).map(([k, list]) => [k, new Set(list.map((i) => i.id))]));
 const SPECIES = new Map(FISH_SPECIES.map((s) => [s.id, s]));
@@ -80,12 +83,14 @@ export function checkLoginName(login) {
 
 // Only the settings the game has, with sane values.
 const SETTING_RULES = {
-  quality: (v) => (['auto', 'high', 'low'].includes(v) ? v : undefined),
+  quality: (v) => (['auto', 'ultraplus', 'ultra', 'high', 'medium', 'low'].includes(v) ? v : undefined),
   showHints: (v) => (typeof v === 'boolean' ? v : undefined),
   turnSpeed: (v) => (Number.isFinite(v) ? Math.min(3, Math.max(0.2, v)) : undefined),
   volume: (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined),
   lastVolume: (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined),
   floatDepth: (v) => (Number.isFinite(v) ? Math.min(4, Math.max(0.3, Math.round(v * 10) / 10)) : undefined),
+  // The fishing spot last picked on a dam (pegs.js id).
+  peg: (v) => (typeof v === 'string' && /^[a-z0-9-]{0,40}$/.test(v) ? v : undefined),
 };
 export function cleanSettings(settings) {
   const out = {};
@@ -108,7 +113,7 @@ export function cleanSave(save) {
   if (credits > MAX_CREDITS) throw bad('That many credits isn\'t possible.');
   const out = { credits: Math.floor(credits), gear: {}, equipped: {} };
   for (const [kind, [ownedField, equippedField]] of Object.entries(GEAR_FIELDS)) {
-    const owned = new Set([STARTER[kind]]);
+    const owned = new Set(STARTER_ITEMS[kind]);
     for (const id of Array.isArray(save[ownedField]) ? save[ownedField] : []) {
       if (isKnownGear(kind, id)) owned.add(id);
     }
@@ -140,6 +145,12 @@ export function cleanCatchLog(log) {
       bestWeightKg: Math.min(sp.maxWeightKg * TROPHY_FACTOR, Math.max(0, Number(e.bestWeightKg) || 0)),
       ...(e.trophies ? { trophies: Math.min(count, Math.max(0, Math.floor(Number(e.trophies)))) } : {}),
       ...(e.released ? { released: Math.min(count, Math.max(0, Math.floor(Number(e.released)))) } : {}),
+      // Level points: weight landed, personal bests, bosses.
+      ...(Number(e.totalKg) > 0 ? { totalKg: Math.min(count * sp.maxWeightKg, Math.round(Number(e.totalKg) * 100) / 100) } : {}),
+      ...(e.pbs ? { pbs: Math.min(count - 1, Math.max(0, Math.floor(Number(e.pbs)))) } : {}),
+      ...(e.bosses ? { bosses: Math.min(Math.ceil(count * 0.2), Math.max(0, Math.floor(Number(e.bosses)))) } : {}),
+      // Boat-rod bonus points: at most half of what that weight is worth.
+      ...(e.boatPts ? { boatPts: Math.min(Math.round(count * sp.maxWeightKg * ENGINE.levels.perKg * 0.5), Math.max(0, Math.floor(Number(e.boatPts)))) } : {}),
     };
   }
   return out;
@@ -166,6 +177,9 @@ export function cleanCatch(c) {
     id: c.id.toLowerCase(), speciesId: sp.id, locationId: c.locationId,
     // Whether it's a trophy is decided by its weight, not by what the game says.
     weightKg: Math.round(weightKg * 100) / 100, lengthCm, trophy: isTrophyWeight(sp, weightKg),
+    // A boss has to be a real lump for the species, not a tiddler with a flag.
+    boss: c.boss === true && !isTrophyWeight(sp, weightKg)
+      && (weightKg - sp.minWeightKg) / Math.max(0.01, sp.maxWeightKg - sp.minWeightKg) >= ENGINE.levels.sizeCapStart * 0.8,
     timeOfDay: TIMES.has(c.timeOfDay) ? c.timeOfDay : null, caughtAt: caughtAt.toISOString(),
     // Kept, not released -- a protected fish can't be kept.
     kept: c.kept === true && !sp.protected,

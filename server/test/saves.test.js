@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { newTestDb, startTestServer } from './helpers.js';
 import { catchPayout } from '../../src/economy.js';
 import { FISH_SPECIES } from '../../src/fish.js';
-import { RODS, LINES, HOOKS, COMBOS } from '../../src/gear.js';
+import { RODS, LINES, HOOKS, COMBOS, STARTER_ITEMS } from '../../src/gear.js';
 import { GUEST_IMPORT_LIMIT } from '../saves.js';
 
 let db, srv;
@@ -54,7 +54,7 @@ test('a save can\'t set credits or hand out gear', async () => {
   assert.equal(r.status, 200);
   const s = (await p.c.get('/api/me')).body.save;
   assert.equal(s.credits, 0, 'credits stay what the server says');
-  assert.deepEqual(s.ownedRodIds, ['rod-starter'], 'no free rod');
+  assert.deepEqual(s.ownedRodIds, STARTER_ITEMS.rod, 'no free rod beyond the starter kits');
   assert.equal(s.equippedRodId, 'rod-starter', 'can\'t rig what you don\'t own');
   // The rest of the save does come through, on every device.
   assert.equal(s.locationId, 'jozini');
@@ -67,8 +67,10 @@ test('buying: the real price, only with enough credits, and the gear is yours on
   const p = await player();
   const broke = await p.c.post('/api/me/buy', { kind: 'rod', itemId: 'rod-spinning' });
   assert.equal(broke.status, 400);
-  assert.match(broke.body.error, /Not enough credits/);
-  const credits = await earn(p.c, 3);
+  // A brand-new angler: the spinning rod is above their level.
+  assert.match(broke.body.error, /needs level/);
+  // Landing fish earns the credits and the level for it.
+  const credits = await earn(p.c, 10);
   const buy = await p.c.post('/api/me/buy', { kind: 'rod', itemId: 'rod-spinning' });
   assert.equal(buy.status, 200);
   assert.equal(buy.body.credits, credits - byId(RODS, 'rod-spinning').cost);
@@ -89,7 +91,7 @@ test('a combo: one price for the rod and reel, and its parts aren\'t sold on the
   const p = await player();
   const combo = COMBOS.find((c) => c.id === 'combo-okuma-fin-chaser');
   assert.equal((await p.c.post('/api/me/buy', { kind: 'combo', itemId: combo.id })).status, 400, 'not without the credits');
-  const credits = await earn(p.c, 2);
+  const credits = await earn(p.c, 10);
   const lone = await p.c.post('/api/me/buy', { kind: 'rod', itemId: combo.rodId });
   assert.equal(lone.status, 400);
   assert.match(lone.body.error, /combo/);
@@ -213,7 +215,7 @@ test('a guest who signs up keeps their progress — up to the import limit', asy
 
   // A "guest" claiming a fortune gets the limit's worth, not the fortune.
   const greedy = await player({ guestSave: { ...guestSave, credits: 9_000_000, ownedRodIds: RODS.map((r) => r.id) } });
-  const gearValue = greedy.save.ownedRodIds.reduce((sum, id) => sum + byId(RODS, id).cost, 0);
+  const gearValue = greedy.save.ownedRodIds.filter((id) => !STARTER_ITEMS.rod.includes(id)).reduce((sum, id) => sum + byId(RODS, id).cost, 0);
   assert.ok(gearValue + greedy.save.credits <= GUEST_IMPORT_LIMIT, `imported ${gearValue} of gear + ${greedy.save.credits} credits`);
   assert.ok(greedy.save.credits < 9_000_000);
 });
@@ -223,4 +225,27 @@ test('you must be logged in to save, buy or spend', async () => {
   assert.equal((await c.put('/api/me/save', { save: rig, baseVersion: 0 })).status, 401);
   assert.equal((await c.post('/api/me/buy', { kind: 'rod', itemId: 'rod-spinning' })).status, 401);
   assert.equal((await c.post('/api/me/spend', { what: 'chum' })).status, 401);
+});
+
+test('a boat rod pays its bonus on what it\'s rigged for — only on water with that boat', async () => {
+  const { boatRodById, BOAT_ROD_BONUS } = await import('../../src/boatRods.js');
+  const { boatPoints } = await import('../../src/levels.js');
+  const p = await player();
+  const tiger = boatRodById('boat-rod-tiger');
+  const id = randomUUID();
+  const r = await p.c.post('/api/me/catches', { id, speciesId: 'tigerfish', locationId: 'jozini', weightKg: 4, gear: { boatRodId: tiger.id } });
+  assert.equal(r.status, 201);
+  const expected = catchPayout({ species: species('tigerfish'), weightKg: 4, rod: tiger.rod, line: tiger.line, hook: tiger.hook, catchId: id, bonus: BOAT_ROD_BONUS });
+  assert.equal(r.body.payout, expected);
+  // Not rigged for carp: the boat rod, no bonus.
+  const id2 = randomUUID();
+  const carp = await p.c.post('/api/me/catches', { id: id2, speciesId: 'common-carp', locationId: 'jozini', weightKg: 4, gear: { boatRodId: tiger.id } });
+  assert.equal(carp.body.payout, catchPayout({ species: species('common-carp'), weightKg: 4, rod: tiger.rod, line: tiger.line, hook: tiger.hook, catchId: id2 }));
+  // A tiger boat's rod at a bass-boat dam: your own gear, no bonus.
+  const id3 = randomUUID();
+  const off = await p.c.post('/api/me/catches', { id: id3, speciesId: 'common-carp', locationId: 'hartbeespoort', weightKg: 4, gear: { boatRodId: tiger.id } });
+  assert.equal(off.body.payout, catchPayout({ species: species('common-carp'), weightKg: 4, rod: RODS[0], line: LINES[0], hook: HOOKS[0], catchId: id3 }));
+  // The bonus level points are in the catch log.
+  const me = await p.c.get('/api/me');
+  assert.equal(me.body.save.catchLog.tigerfish.boatPts, boatPoints({ weightKg: 4 }, BOAT_ROD_BONUS));
 });

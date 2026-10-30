@@ -2,6 +2,7 @@ import { LOCATIONS } from './locations.js';
 import { FISH_SPECIES, activityAt } from './fish.js';
 import { TIME_OF_DAY_PHASES } from './environment.js';
 import { PROVINCES, spotTags } from './regions.js';
+import { spotsFor } from './pegs.js';
 
 const TIME_LABELS = {
   morning: 'Morning', midMorning: 'Mid-Morning', midday: 'Midday', afternoon: 'Afternoon',
@@ -46,7 +47,7 @@ function waterFeel(loc) {
 }
 
 // New Game: province -> dams or rivers -> fishing spot -> time of day.
-export function showStartMenu(container, onConfirm, { onBack = null, initialLocationId = null, damStats = null } = {}) {
+export function showStartMenu(container, onConfirm, { onBack = null, initialLocationId = null, initialPegId = null, damStats = null } = {}) {
   // Always starts at the provinces; the one you last fished is marked.
   const initial = LOCATIONS.find((l) => l.id === initialLocationId);
   const lastProvince = initial?.province || null;
@@ -55,6 +56,39 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
   let selectedLocationId = initial?.id || null;
   let selectedTime = 'morning';
   let filter = 'all';
+  // The fishing spot on a dam that has a map (pegs.js).
+  let selectedPeg = initialPegId || null;
+  const pegFor = (locId) => {
+    const spots = spotsFor(locId);
+    if (!spots) return null;
+    return spots.pegs.find((p) => p.id === selectedPeg) ? selectedPeg : spots.pegs[0].id;
+  };
+
+  // A sketch map of the dam with its fishing spots, and the spot list.
+  function mapHtml(loc) {
+    const spots = spotsFor(loc.id);
+    if (!spots) return '';
+    const peg = pegFor(loc.id);
+    const outline = spots.map.map(([x, y]) => `${x},${y}`).join(' ');
+    const labels = (spots.mapLabels || []).map((l) => `<text x="${l.x}" y="${l.y}" class="map-label">${l.text}</text>`).join('');
+    const markers = spots.pegs.map((p, i) => `
+      <g class="map-peg${p.id === peg ? ' selected' : ''}" data-peg="${p.id}">
+        <circle cx="${p.map[0]}" cy="${p.map[1]}" r="${p.id === peg ? 4.2 : 3.4}"></circle>
+        <text x="${p.map[0]}" y="${p.map[1] + 1.4}">${i + 1}</text>
+      </g>`).join('');
+    const list = spots.pegs.map((p, i) => {
+      const tags = [p.camp ? '⛺ Campsite' : '', p.slipway ? '🚤 Slipway' : '', p.moored ? 'Moored boats' : ''].filter(Boolean)
+        .map((t) => `<span class="spot-tag">${t}</span>`).join('');
+      return `<button class="peg-card${p.id === peg ? ' selected' : ''}" data-peg="${p.id}" type="button">
+        <b>${i + 1}. ${p.name}</b>${tags ? `<div class="spot-tags">${tags}</div>` : ''}<p>${p.blurb}</p></button>`;
+    }).join('');
+    return `<div class="peg-picker">
+      <div class="peg-map"><svg viewBox="0 0 100 74" role="img" aria-label="Sketch map of ${loc.name}">
+        <polygon points="${outline}" class="map-water"></polygon>${labels}${markers}
+      </svg><small>Sketch map — not to scale. ${spots.boatNote}</small></div>
+      <div class="peg-list">${list}</div>
+    </div>`;
+  }
   // Public dam records from the server (when online).
   let stats = null;
   damStats?.().then((s) => { if (s) { stats = s; if (step === 'spots') render(); } });
@@ -139,6 +173,7 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
       <div class="start-times start-filters">${chips}</div>
       <div class="start-locations">${cards}</div>
       <div class="start-footer">
+        ${chosen ? mapHtml(chosen) : ''}
         <h2>${chosen ? `${chosen.name} — what time is it?` : 'Pick a spot, then the time of day'}</h2>
         <div class="start-times">${timeButtons}</div>
         <button class="start-go" type="button" ${chosen ? '' : 'disabled'}>Start Fishing</button>
@@ -175,6 +210,10 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
       selectedLocationId = card.dataset.loc;
       render();
     }));
+    overlay.querySelectorAll('[data-peg]').forEach((el) => el.addEventListener('click', () => {
+      selectedPeg = el.dataset.peg;
+      render();
+    }));
     overlay.querySelectorAll('[data-time]').forEach((btn) => btn.addEventListener('click', () => {
       selectedTime = btn.dataset.time;
       render();
@@ -182,7 +221,7 @@ export function showStartMenu(container, onConfirm, { onBack = null, initialLoca
     overlay.querySelector('.start-go')?.addEventListener('click', () => {
       if (!selectedLocationId) return;
       overlay.remove();
-      onConfirm({ locationId: selectedLocationId, timeOfDay: selectedTime });
+      onConfirm({ locationId: selectedLocationId, timeOfDay: selectedTime, pegId: pegFor(selectedLocationId) });
     });
   }
 

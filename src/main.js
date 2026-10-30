@@ -1,8 +1,12 @@
 import * as THREE from '../vendor/three.module.js';
 import { createScene, createPlayerRod } from './scene.js';
-import { createWater, updateWater, createSplashEffect } from './water.js';
+import { createWater, updateWater, createSplashEffect, waterSurfaceY } from './water.js';
 import { createPostPipeline } from './gfx/post.js';
 import { windUniforms } from './gfx/wind.js';
+import { GPU, loadGpu, webgpuAvailable } from './gfx/gpu.js';
+import { loadFishModels } from './fishModels.js';
+import { loadScenery } from './sceneryAssets.js';
+import { loadPeople, PEOPLE } from './people.js';
 import { createEnvironment, TIME_OF_DAY_PHASES } from './environment.js';
 import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm, rollTrophy, trophyWeightFor, suitability } from './fish.js';
 import { rigFor } from './gfx/terminalTackle.js';
@@ -24,6 +28,13 @@ import { randomTip } from './tips.js';
 import { fightStamina, fightStrength } from './fightMotion.js';
 import { createTouchControls, isTouchDevice, isSmallOrMobileScreen } from './touchControls.js';
 import { createTackleBox } from './tackleBox.js';
+import { createLandingNet } from './gfx/landingNet.js';
+import { createBoats, createPlayerBoat } from './gfx/boats.js';
+import { loadBoatModels } from './gfx/boatModels.js';
+import { createBoatDrive, boatKindFor, mooringFor } from './boatDrive.js';
+import { withPeg, spotsFor } from './pegs.js';
+import { boatRodsFor, boatBonus, BOAT_ROD_BONUS } from './boatRods.js';
+import { pointsFromLog, pointsForCatch, boatPoints, levelInfo, sizeSkew, sizeCap, rollBoss, bossWeightFor } from './levels.js';
 import { createFishSwarm, updateFishSwarm, createCatchReveal, createFishMesh, setFishSwim } from './fish3d.js';
 import { createPlayerController } from './player.js';
 import { getLocationById } from './locations.js';
@@ -106,25 +117,39 @@ function openMainMenu() {
     save,
     cloud,
     sessionEnded: fromServer?.loggedOut,
-    onContinue: () => { enterImmersive(); startGame(save.locationId, save.startTimeOfDay || 'morning'); },
-    onNewGame: () => showStartMenu(appEl, ({ locationId, timeOfDay }) => {
+    onContinue: () => { enterImmersive(); startGame(save.locationId, save.startTimeOfDay || 'morning', save.settings?.peg); },
+    onNewGame: () => showStartMenu(appEl, ({ locationId, timeOfDay, pegId }) => {
       enterImmersive();
       save.locationId = locationId;
       save.startTimeOfDay = timeOfDay;
+      save.settings = { ...(save.settings || {}), peg: pegId || '' };
       saveSave(save);
-      startGame(locationId, timeOfDay);
-    }, { onBack: openMainMenu, initialLocationId: save.locationId, damStats: () => cloud.damStats() }),
+      startGame(locationId, timeOfDay, pegId);
+    }, { onBack: openMainMenu, initialLocationId: save.locationId, initialPegId: save.settings?.peg, damStats: () => cloud.damStats() }),
   });
 }
 
 // Settings "auto" = light graphics on phones and small tablets, full on
-// everything else. ?quality=low|high in the URL overrides.
+// everything else. ?quality=low|medium|high|ultra|ultraplus in the URL
+// overrides.
+const QUALITIES = ['low', 'medium', 'high', 'ultra', 'ultraplus'];
 function resolveQuality() {
   const urlQuality = new URLSearchParams(window.location.search).get('quality');
   const setting = urlQuality || save.settings.quality || 'auto';
   if (setting === 'auto') return isSmallOrMobileScreen() ? 'low' : 'high';
-  return setting === 'low' ? 'low' : 'high';
+  return QUALITIES.includes(setting) ? setting : 'high';
 }
+// What each graphics setting draws. Ultra loads slowest and wants a good
+// graphics card; Low suits phones.
+const GRAPHICS = {
+  low: { pixelRatio: 1, reflection: 0.33, rays: 0, softShadows: false, samples: 2 },
+  medium: { pixelRatio: 1.25, reflection: 0.4, rays: 1, softShadows: true, samples: 4 },
+  high: { pixelRatio: 1.5, reflection: 0.5, rays: 1, softShadows: true, samples: 4 },
+  ultra: { pixelRatio: 2, reflection: 0.75, rays: 1, softShadows: true, samples: 8 },
+  // WebGPU: everything Ultra has, plus refraction and true depth in the
+  // water, ambient occlusion and edge smoothing (see gfx/gpu/).
+  ultraplus: { pixelRatio: 2, reflection: 0.6, rays: 1, softShadows: true, samples: 0, webgpu: true },
+};
 
 // Warm the browser cache with this dam's fish pictures so the catch card
 // shows its photo instantly. Small WebP first; PNG only if there's no WebP.
@@ -138,15 +163,53 @@ function preloadFishImages(speciesList) {
   else setTimeout(load, 3000);
 }
 
-function startGame(locationId, startTimeOfDay) {
+// Ultra+ needs WebGPU: fetch its build and start its renderer first, and
+// fall back to Ultra (WebGL) if this browser or graphics card can't.
+async function startGame(locationId, startTimeOfDay, pegId = null) {
   gameRunning = true;
-  const location = getLocationById(locationId);
+  let quality = resolveQuality();
+  let gpuRenderer = null;
+  if (GRAPHICS[quality].webgpu) {
+    if (await webgpuAvailable() && await loadGpu()) {
+      try {
+        gpuRenderer = new GPU.W.WebGPURenderer({ antialias: false });
+        await gpuRenderer.init();
+        if (!gpuRenderer.backend?.isWebGPUBackend) throw new Error('no WebGPU backend');
+      } catch (err) {
+        console.warn('WebGPU renderer failed, using WebGL:', err);
+        gpuRenderer?.dispose?.();
+        gpuRenderer = null;
+      }
+    }
+    if (!gpuRenderer) quality = 'ultra';
+  }
+  GPU.on = !!gpuRenderer;
+  // The Blender-made fish for this water (Low keeps the light built-in ones).
+  // and the photo-scanned scenery (sceneryAssets.js).
+  if (quality !== 'low') {
+    const loc = getLocationById(locationId);
+    // The campsite people, where the dam has camps (Medium brings fewer).
+    const people = spotsFor(locationId) ? loadPeople(quality === 'medium' ? ['man-shorts', 'man-vest', 'woman-green', 'man-check', 'boy'] : PEOPLE) : null;
+    // The Blender boats on this water, and your own.
+    const kinds = spotsFor(locationId)?.boats || [];
+    const boatKinds = kinds.length ? [...kinds, boatKindFor(kinds)] : [];
+    await Promise.all([loadFishModels(loc.speciesIds), loadScenery(loc), people, loadBoatModels(boatKinds)]);
+  }
+  const fellBack = GRAPHICS[resolveQuality()].webgpu && !GPU.on;
+  startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, fellBack);
+}
+
+function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, gpuFellBack = false) {
+  // The dam as it is at the chosen fishing spot (pegs.js).
+  const location = withPeg(getLocationById(locationId), pegId);
   cloud.damStats(); // this spot's record, for "New dam record!"
   const localSpecies = FISH_SPECIES.filter((s) => location.speciesIds.includes(s.id));
   // We fish the open dam itself, from its bank and angling stands.
-  const dam = createDam(location.dam, seedFromString(location.id));
+  // Each spot is its own stretch of bank (the dam's first spot keeps the
+  // original layout).
+  const firstPeg = !location.peg || location.peg === spotsFor(location.id)?.pegs[0];
+  const dam = createDam(location.dam, seedFromString(firstPeg ? location.id : `${location.id}:${location.pegId}`));
 
-  const quality = resolveQuality();
   preloadFishImages(localSpecies);
   const world = createScene({ location, dam, quality });
   const { scene, camera } = world;
@@ -162,23 +225,212 @@ function startGame(locationId, startTimeOfDay) {
   // Lowveld and Karoo water warm.
   const environment = createEnvironment({ startTimeOfDay, tempOffset: location.tempOffset ?? 0 });
 
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  let pixelRatio = Math.min(window.devicePixelRatio || 1, quality === 'low' ? 1 : 1.5);
+  const renderer = gpuRenderer || new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  const gfx = GRAPHICS[quality];
+  let pixelRatio = Math.min(window.devicePixelRatio || 1, gfx.pixelRatio);
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   // Tone mapping and sRGB output happen in the post pipeline's final pass.
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
-  // Soft shadows cost a lot of fill-rate on phone GPUs.
-  renderer.shadowMap.type = quality === 'low' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+  // Filtered shadows; how soft the edges are is the sun's shadow.radius
+  // (scene.js), kept small on phone GPUs.
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   appEl.appendChild(renderer.domElement);
-  const post = createPostPipeline(renderer);
-  if (quality === 'low') water.setReflectionScale(0.33);
+  const post = GPU.on
+    ? GPU.post.createGpuPost(renderer, scene, camera)
+    : createPostPipeline(renderer, { samples: gfx.samples });
+  post.setRaysScale(gfx.rays);
+  water.setReflectionScale(gfx.reflection);
 
-  const playerController = createPlayerController({ camera, domElement: renderer.domElement, dam, turnSpeed: save.settings.turnSpeed });
+  let waterClock = 0; // the frame's elapsed seconds, for the boat riding the waves
+  const playerController = createPlayerController({
+    camera, domElement: renderer.domElement, dam, turnSpeed: save.settings.turnSpeed,
+    waterY: (x, z) => waterSurfaceY(x, z, waterClock),
+  });
 
-  const splashEffect = createSplashEffect(scene);
+  const splashEffect = createSplashEffect(scene, water);
+  // The anglers at the camp and on the boats splash and ripple the water,
+  // and you hear about what they land when you're nearby.
+  const lifeHooks = {
+    ripple: (x, z, strength) => water.addRipple(x, z, strength),
+    // Splashes out of sight would only use up the splash pool.
+    splash: (point, strength) => { if (point.distanceTo(camera.position) < 150) splashEffect.spawn(point, strength); },
+    onCatch: ({ species, weightKg, x, z, boat = false }) => {
+      const me = playerController.getPosition();
+      if (Math.hypot(me.x - x, me.z - z) < 90) hud.showToast(`An angler ${boat ? 'on a boat nearby' : 'at the camp'} has landed a ${weightKg.toFixed(1)} kg ${species.name.toLowerCase()} — and slipped it back.`);
+    },
+  };
+  // Boats on dams that allow them, a slipway and moored boats at spots with one.
+  const boats = location.boats ? createBoats(scene, {
+    dam, kinds: location.boats, moored: location.moored, slipway: location.slipway, water,
+    spawn: dam.spawn, seed: seedFromString(location.id + (location.pegId || '')), terrain: world.terrain,
+    speciesIds: location.speciesIds,
+  }) : null;
+  world.camp?.life?.setHooks(lifeHooks);
+  boats?.setHooks(lifeHooks);
+  // Your own boat, where boats are allowed: tied up off the slipway or
+  // beside your spot. G (or the Boat button) gets in and out.
+  const myBoatKind = boatKindFor(location.boats);
+  const myBoat = myBoatKind ? createBoatDrive({
+    dam, kind: myBoatKind,
+    ...mooringFor(dam, { slipwayX: location.slipway ? dam.spawn.x + location.slipway.x : null }),
+  }) : null;
+  const myBoatMesh = myBoat ? createPlayerBoat(scene, myBoatKind, water) : null;
+  // The boat buttons: in and out (G), helm or deck (H), the rod rack (R).
+  const boatBar = document.createElement('div');
+  boatBar.className = 'boat-bar';
+  appEl.appendChild(boatBar);
+  const boatButton = (onClick) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'boat-btn hidden';
+    b.addEventListener('click', onClick);
+    boatBar.appendChild(b);
+    return b;
+  };
+  const rackBtn = boatButton(() => toggleRack());
+  const deckBtn = boatButton(() => toggleDeck());
+  const boatBtn = boatButton(() => toggleBoat());
+  const showBoatButton = (b, label) => {
+    if (b.textContent !== label) b.textContent = label;
+    b.classList.toggle('hidden', !label);
+  };
+  function toggleBoat() {
+    if (!myBoat) return;
+    const phase = casting.getState().phase;
+    if (playerController.inBoat()) {
+      const spot = myBoat.landingSpot();
+      if (!spot) { hud.showToast('Too far out — pull in close to the bank or a stand to step ashore.'); return; }
+      if (Math.abs(myBoat.state.speed) > 0.5) { hud.showToast('Slow down first.'); return; }
+      if (phase !== 'idle') { hud.showToast('Reel in first.'); return; }
+      playerController.leaveBoat(spot);
+      rackPanel.hide();
+      // The boat rods stay on the boat.
+      if (boatRod) {
+        boatRod = null;
+        applyGear();
+        hud.showToast(`Ashore. The boat rod stays in the rack — back on your own ${activeRod.name.split(' (')[0]}.`);
+      } else hud.showToast('Ashore. The boat stays tied up here.');
+      return;
+    }
+    if (phase !== 'idle') { hud.showToast('Reel in first.'); return; }
+    const me = playerController.getPosition();
+    if (!myBoat.canBoardFrom(me.x, me.z)) return;
+    playerController.enterBoat(myBoat);
+    hud.showToast(touchMode
+      ? `In the ${myBoat.spec.label}: the stick drives. ${myBoat.spec.deck ? '"Walk the deck" drops anchor — the boat\'s own rods are in the rack at the stern.' : 'The kayak\'s own rods are behind your seat ("Boat rods").'}`
+      : myBoat.spec.deck
+        ? `In the ${myBoat.spec.label}: W/S throttle, A/D steer, Shift full speed. H drops anchor and lets you walk the deck — the boat's own rods are in the rack at the stern (R). G to step ashore near the bank.`
+        : `In the ${myBoat.spec.label}: W/S paddle, A/D steer. The kayak's own rods are behind your seat (R). Cast anywhere — the anchor drops while your line is out. G to step ashore near the bank.`);
+  }
+  // Leave the helm and walk the deck (anchor down), or take the helm again.
+  function toggleDeck() {
+    if (!myBoat?.spec.deck || !playerController.inBoat()) return;
+    if (playerController.onDeck()) {
+      playerController.setOnDeck(false);
+      rackPanel.hide();
+      hud.showToast('At the helm. W/S throttle, A/D steer.');
+      return;
+    }
+    if (Math.abs(myBoat.state.speed) > 0.8) { hud.showToast('Slow down first.'); return; }
+    playerController.setOnDeck(true);
+    hud.showToast(touchMode
+      ? 'Anchor down. Walk the deck with the stick — the rod rack is at the stern.'
+      : 'Anchor down. Walk the deck with W/A/S/D — the rod rack is at the stern (R). H to take the helm.');
+  }
+  // Within reach of the boat's rods: on deck by the rack, or in a kayak.
+  const atRack = () => {
+    if (!myBoat || !playerController.inBoat()) return false;
+    const d = playerController.onDeck();
+    return myBoat.spec.deck ? !!d && myBoat.atRack(d.x, d.z) : true;
+  };
+  function toggleRack() {
+    if (rackPanel.isOpen()) { rackPanel.hide(); return; }
+    if (!atRack()) return;
+    playerController.releasePointer();
+    rackPanel.show();
+  }
+  // The boat buttons show when you're beside the boat or in it.
+  function updateBoat(delta, elapsed) {
+    if (!myBoat) return;
+    const onDeck = !!playerController.onDeck();
+    playerController.setBoatHeld(casting.getState().phase !== 'idle');
+    myBoatMesh.update(myBoat, elapsed, delta);
+    const me = playerController.getPosition();
+    const inBoat = !!playerController.inBoat();
+    const near = !inBoat && myBoat.canBoardFrom(me.x, me.z);
+    showBoatButton(boatBtn, inBoat ? (myBoat.landingSpot() ? 'Step ashore (G)' : '') : near ? 'Get in the boat (G)' : '');
+    showBoatButton(deckBtn, inBoat && myBoat.spec.deck ? (onDeck ? 'Take the helm (H)' : 'Walk the deck (H)') : '');
+    const reach = atRack();
+    showBoatButton(rackBtn, reach ? 'Boat rods (R)' : '');
+    if (!reach && rackPanel.isOpen()) rackPanel.hide();
+  }
+  // The rack of boat rods, each rigged for one kind of fish (boatRods.js).
+  const rackPanel = createRackPanel();
+  function createRackPanel() {
+    const el = document.createElement('div');
+    el.className = 'rack-panel hidden';
+    appEl.appendChild(el);
+    const speciesName = (id) => FISH_SPECIES.find((f) => f.id === id)?.name || id;
+    const bonusPct = Math.round((BOAT_ROD_BONUS - 1) * 100);
+    function render() {
+      const own = getGearById(RODS, save.equippedRodId) || RODS[0];
+      const short = (item) => item.name.split(' (')[0];
+      const cards = boatRodsFor(myBoatKind).map((b) => {
+        const using = boatRod?.id === b.id;
+        // The rod in your hands: pick which of its baits goes on.
+        const baits = using
+          ? `<div class="rack-baits">${b.baits.map((l) => `<button type="button" class="rack-bait${l.id === boatBait.id ? ' on' : ''}" data-bait="${l.id}">${short(l)}</button>`).join('')}</div>`
+          : `<div class="rack-gear">Baits: ${b.baits.map(short).join(', ')}</div>`;
+        return `<div class="rack-card${using ? ' using' : ''}">
+          <div class="rack-name">${b.name.replace('Boat Rod: ', '')}</div>
+          <div class="rack-for">For ${b.targets.map(speciesName).join(', ')}: +${bonusPct}% credits and XP</div>
+          <div class="rack-blurb">${b.blurb}</div>
+          <div class="rack-gear">${short(b.reel)} · ${short(b.line)} · ${short(b.hook)} · up to ${b.rod.maxKg} kg</div>
+          ${baits}
+          <button type="button" data-rod="${b.id}" ${using ? 'disabled' : ''}>${using ? 'In your hands' : 'Take this rod'}</button>
+        </div>`;
+      }).join('');
+      el.innerHTML = `<div class="rack-head"><h3>The ${myBoat.spec.label}'s rods</h3><button type="button" class="rack-close" aria-label="Close">×</button></div>
+        <p class="rack-note">Each comes fully rigged — reel, line, hook and its own baits. They stay on the boat: step ashore and you're back on your own rod and rig.</p>
+        <div class="rack-list">${cards}
+          <div class="rack-card${boatRod ? '' : ' using'}">
+            <div class="rack-name">Your own rod</div>
+            <div class="rack-blurb">${own.name}</div>
+            <button type="button" data-rod="" ${boatRod ? '' : 'disabled'}>${boatRod ? 'Use my own rod' : 'In your hands'}</button>
+          </div>
+        </div>`;
+    }
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.rack-close')) { hide(); return; }
+      const baitBtn = e.target.closest('button[data-bait]');
+      const btn = e.target.closest('button[data-rod]');
+      if (!btn && !baitBtn) return;
+      if (casting.getState().phase !== 'idle') { hud.showToast('Reel in first.'); return; }
+      if (baitBtn) {
+        boatBait = boatRod.baits.find((l) => l.id === baitBtn.dataset.bait) || boatBait;
+        applyGear();
+        render();
+        return;
+      }
+      const id = btn.dataset.rod;
+      boatRod = id ? boatRodsFor(myBoatKind).find((b) => b.id === id) : null;
+      boatBait = boatRod?.baits[0] || null;
+      applyGear();
+      hud.showToast(boatRod
+        ? `${boatRod.name.replace('Boat Rod: ', '')} in hand, ${boatBait.name.split(' (')[0]} on — ${boatRod.targets.map(speciesName).join(', ')} pay +${bonusPct}%.`
+        : `Back on your own ${activeRod.name.split(' (')[0]}.`);
+      hide();
+    });
+    const hide = () => el.classList.add('hidden');
+    return {
+      show: () => { render(); el.classList.remove('hidden'); },
+      hide,
+      isOpen: () => !el.classList.contains('hidden'),
+    };
+  }
   const fishSwarm = createFishSwarm(scene, localSpecies.map((s) => s.id), 24, dam);
   const catchReveal = createCatchReveal(scene, (point, strength) => splashEffect.spawn(point, strength));
   const chumSystem = createChumSystem(scene);
@@ -199,6 +451,10 @@ function startGame(locationId, startTimeOfDay) {
   let activeReel = getGearById(REELS, save.equippedReelId) || REELS[0];
   let activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
   let activeLureId = save.equippedLureId || LURES[0].id;
+  // One of the boat's own rods in your hands (boatRods.js), or null, and the
+  // bait on it. Its whole rig stands in for yours; your save never changes.
+  let boatRod = null;
+  let boatBait = null;
   function currentLure() { return getGearById(LURES, activeLureId) || LURES[0]; }
   // Whether the rod, reel, line and bait belong together (see gear.js).
   let rig = null;
@@ -279,16 +535,22 @@ function startGame(locationId, startTimeOfDay) {
     saveSave(save);
   }
   const hud = createHUD(appEl, { showHints: save.settings.showHints, touch: touchMode, onDrag: changeDrag });
+  if (gpuFellBack) hud.showToast("This browser can't do WebGPU, so you're on Ultra graphics.");
   hud.setDrag(save.drag, activeLine.breakKg);
   minigame.setDrag(save.drag);
 
   function onSaveChanged() {
     saveSave(save);
-    activeRod = getGearById(RODS, save.equippedRodId) || RODS[0];
-    activeLine = getGearById(LINES, save.equippedLineId) || LINES[0];
-    activeReel = getGearById(REELS, save.equippedReelId) || REELS[0];
-    activeHook = getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
-    activeLureId = save.equippedLureId || LURES[0].id;
+    applyGear();
+  }
+  // What's in your hands: your rigged gear from the save, or a boat rod's
+  // whole rig -- rod, reel, line, hook and bait -- while you hold one.
+  function applyGear() {
+    activeRod = boatRod?.rod || getGearById(RODS, save.equippedRodId) || RODS[0];
+    activeLine = boatRod?.line || getGearById(LINES, save.equippedLineId) || LINES[0];
+    activeReel = boatRod?.reel || getGearById(REELS, save.equippedReelId) || REELS[0];
+    activeHook = boatRod?.hook || getGearById(HOOKS, save.equippedHookId) || HOOKS[0];
+    activeLureId = boatRod ? boatBait.id : save.equippedLureId || LURES[0].id;
     refreshRig();
     playerRod.setRod(activeRod, activeReel);
     if (typeof save.drag === 'number') {
@@ -298,7 +560,7 @@ function startGame(locationId, startTimeOfDay) {
   }
   playerRod.setRod(activeRod, activeReel);
 
-  const rawTackleBox = createTackleBox({ container: appEl, save, onSaveChanged, onBuy: (kind, id) => cloud.queueBuy(kind, id) });
+  const rawTackleBox = createTackleBox({ container: appEl, save, onSaveChanged, onBuy: (kind, id) => cloud.queueBuy(kind, id), getLevel: () => myLevel().level });
 
   // Menus need the mouse pointer: hand it back whenever a panel opens.
   function freeMouseIfPanelOpen() {
@@ -483,6 +745,9 @@ function startGame(locationId, startTimeOfDay) {
     if (e.code === 'KeyL') { changeFishingSpot(); }
     if (e.code === 'KeyF') { throwChum(); }
     if (e.code === 'KeyT') { showTip(); }
+    if (e.code === 'KeyG') { toggleBoat(); }
+    if (e.code === 'KeyH') { toggleDeck(); }
+    if (e.code === 'KeyR') { toggleRack(); }
     if (e.code === 'BracketLeft' || e.code === 'Minus' || e.code === 'NumpadSubtract') changeDrag(-1);
     if (e.code === 'BracketRight' || e.code === 'Equal' || e.code === 'NumpadAdd') changeDrag(1);
     if (e.code === 'KeyM') {
@@ -521,7 +786,10 @@ function startGame(locationId, startTimeOfDay) {
   // The net: a calm fish (not running, not jumping) goes in; a lively one bolts.
   function tryNet() {
     const f = casting.getFightFish();
+    const inNet = fightFishMesh && createFishMesh(fightFishMesh.userData.speciesId);
+    if (inNet) inNet.scale.copy(fightFishMesh.scale);
     const result = minigame.tryNet(!!f && !f.running && !f.jumping);
+    if (result === 'netted') landingNet.scoop(inNet);
     if (result === 'bolted') {
       audio.splash(0.8);
       hud.showToast('It saw the net and bolted! Let it settle, then net it when it\u2019s calm.');
@@ -544,8 +812,16 @@ function startGame(locationId, startTimeOfDay) {
     // About 1 bite in 300 is the big one: a trophy far over the usual size.
     const trophy = forceTrophy || rollTrophy();
     forceTrophy = false;
-    const weightKg = trophy ? trophyWeightFor(species) : randomWeightFor(species);
+    // Your level sets how big they run: beginners hook the small, easy ones.
+    // Now and then a BOSS -- the top of your range or past it.
+    const lvl = myLevel().level;
+    const boss = !trophy && (forceBoss || rollBoss());
+    forceBoss = false;
+    const weightKg = trophy ? trophyWeightFor(species)
+      : boss ? bossWeightFor(species, lvl)
+        : randomWeightFor(species, sizeSkew(lvl), Math.random, sizeCap(lvl));
     if (trophy) hud.showToast('Something BIG is on! Don\'t horse it — ease off in the red and let it run.');
+    else if (boss) hud.showToast(`BOSS FISH! A real test for level ${lvl} — keep the drag soft, don't wind while it runs.`);
     // Bigger fish run harder and give up line more slowly -- on any gear.
     casting.setFightStrength(fightStrength(species.id, weightKg));
     showFightFish(species, weightKg);
@@ -567,16 +843,33 @@ function startGame(locationId, startTimeOfDay) {
         // A trophy pays triple. The catch's id fixes the price wobble, so the
         // server (which pays out when you're online) comes to the same sum.
         const catchId = newCatchId();
-        const payArgs = { species, weightKg: Math.round(weightKg * 100) / 100, rod: activeRod, line: activeLine, hook: activeHook, trophy, catchId };
+        // A boat rod on the fish it's rigged for pays extra, credits and XP.
+        const bonus = boatBonus(boatRod, species.id);
+        const payArgs = { species, weightKg: Math.round(weightKg * 100) / 100, rod: activeRod, line: activeLine, hook: activeHook, trophy, catchId, bonus };
         const payout = catchPayout(payArgs);
         const keepPayout = catchPayout({ ...payArgs, kept: true });
         const entry = save.catchLog[species.id] || { count: 0, bestWeightKg: 0 };
         const previousBestKg = entry.bestWeightKg;
+        const levelBefore = myLevel().level;
+        const boatPts = boatPoints({ weightKg: payArgs.weightKg, trophy, boss }, bonus);
+        const earned = pointsForCatch({ weightKg, trophy, boss, kept: true }, entry.count ? { ...entry } : null) + boatPts;
+        if (boatPts) entry.boatPts = (entry.boatPts || 0) + boatPts;
+        // Running totals for level points: weight landed, personal bests.
+        entry.totalKg = Math.round(((Number.isFinite(entry.totalKg) ? entry.totalKg : entry.count * (entry.bestWeightKg || 0) * 0.5) + weightKg) * 100) / 100;
+        if (entry.count > 0 && weightKg > (entry.bestWeightKg || 0)) entry.pbs = (entry.pbs || 0) + 1;
         entry.count += 1;
         if (trophy) entry.trophies = (entry.trophies || 0) + 1;
+        if (boss) entry.bosses = (entry.bosses || 0) + 1;
         entry.bestWeightKg = Math.max(entry.bestWeightKg, weightKg);
         save.catchLog[species.id] = entry;
         saveSave(save);
+        const levelNow = myLevel();
+        if (levelNow.level > levelBefore) {
+          audio.landed();
+          hud.showToast(`LEVEL ${levelNow.level}! New gear in the tackle box, and bigger fish are coming on.`);
+        } else {
+          hud.showToast(`${boss ? 'BOSS landed! ' : ''}+${earned} XP${boatPts ? ` (boat rod bonus +${boatPts})` : ''}`);
+        }
         const phase = environment.getState().timeOfDay;
         // Online: every catch goes to the server (the dam's stats and your
         // catch log on every device). Beat the spot's record and it says so.
@@ -595,7 +888,7 @@ function startGame(locationId, startTimeOfDay) {
           saveSave(save);
           cloud.queueCatch({
             id: catchId, speciesId: species.id, locationId: location.id, weightKg: Math.round(weightKg * 100) / 100,
-            lengthCm, trophy, timeOfDay: phase, kept, gear: { rodId: activeRod.id, lineId: activeLine.id, hookId: activeHook.id },
+            lengthCm, trophy, boss, timeOfDay: phase, kept, gear: { rodId: activeRod.id, lineId: activeLine.id, hookId: activeHook.id, ...(boatRod ? { boatRodId: boatRod.id } : {}) },
           });
           sessionCatches.push({ speciesId: species.id, weightKg, kept, locationId: location.id, timeOfDay: phase, trophy, caughtAt: new Date().toISOString() });
           const finished = challengeSnapshot().filter((c) => c.progress >= c.need && !before.find((b) => b.id === c.id && b.progress >= b.need));
@@ -612,6 +905,7 @@ function startGame(locationId, startTimeOfDay) {
           locationName: location.name,
           timeLabel: phase.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()),
           trophy,
+          boss,
           keepPayout,
           onChoice: decide,
           lockMs: 1500, // time to read the card before the buttons work
@@ -690,6 +984,7 @@ function startGame(locationId, startTimeOfDay) {
   }
 
   let forceTrophy = false; // dev hook: the next bite is a trophy
+  let forceBoss = false; // dev hook: the next bite is a boss
   // A fish takes the bait -- not hooked yet. See strike.js.
   let take = null; // { plan, species, t, warned, real }
   let comeBackTimer = 0; // after a strike too early, the fish may come back
@@ -750,11 +1045,13 @@ function startGame(locationId, startTimeOfDay) {
   // The hooked fish itself: hidden in the murk while it's deep, seen as it
   // comes up near the top, and in full view when it jumps.
   let fightFishMesh = null;
+  let fishRingTimer = 0, fishSprayTimer = 0, lastFightElapsed = 0;
   function showFightFish(species, weightKg) {
     hideFightFish();
     fightFishMesh = createFishMesh(species.id);
     // Sized to the real fish: the model is ~0.62 m long at scale 1.
     fightFishMesh.scale.setScalar((estimateLengthCm(species, weightKg) / 100) / 0.62);
+    fightFishMesh.userData.speciesId = species.id;
     fightFishMesh.visible = false;
     scene.add(fightFishMesh);
   }
@@ -764,12 +1061,39 @@ function startGame(locationId, startTimeOfDay) {
   }
   function updateFightFish(elapsed) {
     const f = casting.getFightFish();
+    const dt = Math.min(0.1, Math.max(0, elapsed - lastFightElapsed));
+    lastFightElapsed = elapsed;
+    // A fish fighting on top churns the water white; one just under bulges
+    // and sends out rings.
+    const nearTop = f && !f.jumping ? Math.max(0, 1 - f.depth / 0.6) : 0;
+    const churn = nearTop * (f?.takingLine || f?.running ? 1 : 0.55);
+    if (f && fightFishMesh) {
+      const len = fightFishMesh.scale.x * 0.62;
+      water.setBoil(f.position.x, f.position.z, 0.35 + len * 1.1, churn);
+      fishRingTimer -= dt;
+      if (churn > 0.2 && fishRingTimer <= 0) {
+        water.addRipple(f.position.x + (Math.random() - 0.5) * len, f.position.z + (Math.random() - 0.5) * len, 0.4 + churn * len * 1.5);
+        fishRingTimer = 0.18 + Math.random() * 0.3;
+      }
+    } else {
+      water.setBoil(0, 0, 1, 0);
+    }
     if (!fightFishMesh || !f) { if (fightFishMesh) fightFishMesh.visible = false; return; }
     fightFishMesh.visible = f.jumping || f.depth < 0.45;
     fightFishMesh.position.copy(f.position);
-    // The model faces +x; turn it to its heading, nose up/down in a leap.
-    fightFishMesh.rotation.set(0, -f.heading, f.pitch, 'YXZ');
-    setFishSwim(fightFishMesh, elapsed * (f.jumping ? 20 : 12), f.jumping ? 2.2 : 1.4);
+    // Thrashing on top: the back and tail break the surface.
+    if (churn > 0.5) fightFishMesh.position.y = Math.max(fightFishMesh.position.y, -0.05 * fightFishMesh.scale.x);
+    // The model faces +x; turn it to its heading, nose up/down in a leap. On
+    // top it rolls onto its flank and shakes its head.
+    const roll = churn * (Math.sin(elapsed * 6.1) * 0.55 + Math.sin(elapsed * 13.7) * 0.2);
+    const shake = churn * Math.sin(elapsed * 17) * 0.12;
+    fightFishMesh.rotation.set(roll, -f.heading + shake, f.pitch, 'YXZ');
+    setFishSwim(fightFishMesh, elapsed * (f.jumping ? 20 : 12 + churn * 8), f.jumping ? 2.2 : 1.4 + churn * 1.2);
+    // Water streams off a leaping fish.
+    if (f.jumping) {
+      fishSprayTimer -= dt;
+      if (fishSprayTimer <= 0) { splashEffect.spray(f.position, 0.25 + fightFishMesh.scale.x * 0.12); fishSprayTimer = 0.05; }
+    }
   }
 
   // A cast that's sat this long is guaranteed a bite -- the exact moment
@@ -837,6 +1161,11 @@ function startGame(locationId, startTimeOfDay) {
     return challengesFor().map((c) => ({ id: c.id, text: c.text, reward: c.reward, need: c.need, progress: progressOf(c, catches) }));
   }
 
+  // ── Levels (levels.js): points from the catch log and competition places ──
+  function myLevel() {
+    return levelInfo(pointsFromLog(save.catchLog, save.compPlaces));
+  }
+
   // ── Landing the fish: snags, the net, keep or release ──
   let releasedHere = 0;
   const keptHere = {};
@@ -846,8 +1175,9 @@ function startGame(locationId, startTimeOfDay) {
       * Math.max(1 - L.keepPenaltyMax, 1 - (keptHere[speciesId] || 0) * L.keepPenalty);
   }
   let lastCover = null, lastSnag = null, lastNetReady = false;
-  let landingNet = null;
-  function tickLanding() {
+  let debugNetAt = null; // dev hook: a pretend fish to show the net on
+  const landingNet = createLandingNet(scene, { onSplash: (point, strength) => splashEffect.spawn(point, strength) });
+  function tickLanding(delta, elapsed) {
     const f = casting.getFightFish();
     const mg = minigame.getState();
     minigame.setSnagged(!!f?.snagged);
@@ -858,29 +1188,16 @@ function startGame(locationId, startTimeOfDay) {
     lastCover = f?.headingForCover || null;
     lastSnag = f?.snagged || null;
     lastNetReady = mg.active && mg.netReady;
-    // The landing net, in the water by the fish while it's ready to net.
-    if (!landingNet) {
-      landingNet = new THREE.Group();
-      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.015, 6, 28), new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.6, roughness: 0.4 }));
-      rim.rotation.x = Math.PI / 2;
-      const mesh = new THREE.Mesh(new THREE.ConeGeometry(0.31, 0.4, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x1a2a22, wireframe: true, transparent: true, opacity: 0.6 }));
-      mesh.position.y = -0.2;
-      mesh.rotation.x = Math.PI;
-      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.6, 8), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 }));
-      handle.position.set(0.8, 0.45, 0);
-      handle.rotation.z = Math.PI / 2.6;
-      landingNet.add(rim, mesh, handle);
-      landingNet.visible = false;
-      scene.add(landingNet);
-    }
-    landingNet.visible = !!(f && mg.active && mg.netReady);
-    if (landingNet.visible) {
-      const me = playerController.getPosition();
-      const dx = me.x - f.position.x, dz = me.z - f.position.z;
-      const len = Math.hypot(dx, dz) || 1;
-      landingNet.position.set(f.position.x + (dx / len) * 0.5, 0.02, f.position.z + (dz / len) * 0.5);
-      landingNet.rotation.y = Math.atan2(dx, dz) + Math.PI / 2;
-    }
+    // The landing net: slides in by the fish while it's ready to net, lifts
+    // it out on a good scoop.
+    const me = playerController.getPosition();
+    const wu = water.uniforms;
+    landingNet.setWater({ seeDepthM: 0.15 + wu.uClarity.value * 1.2, tint: wu.uShallow.value });
+    landingNet.update(delta, elapsed, {
+      show: !!(f && mg.active && mg.netReady) || !!debugNetAt,
+      fishPos: f?.position || debugNetAt,
+      playerPos: { x: me.x, y: camera.position.y - 1.6, z: me.z },
+    });
   }
 
   // What the fish see right now: the water, the bait or lure, the rig.
@@ -1022,25 +1339,83 @@ function startGame(locationId, startTimeOfDay) {
   let timeOverride = null;
   let seasonOverride = null;
 
-  // Adaptive quality: if the first few seconds run slow, drop the render
-  // resolution and the reflection resolution once rather than stutter.
-  let perfFrames = 0, perfTime = 0, perfDone = quality === 'low';
+  // Dynamic resolution: the picture's sharpness follows the frame rate all
+  // the time, not just at the start. Below ~55 frames a second it draws
+  // fewer pixels (down to half); with steady headroom it creeps back up to
+  // the setting's full sharpness. Watched over 1.5 s windows so a single
+  // hitch (a splash, a new spot coming into view) doesn't trigger it.
+  const fullRatio = pixelRatio;
+  const minRatio = Math.max(0.5, fullRatio * 0.5);
+  let perfWindow = 0, perfFrames = 0, perfSkip = 60, calmWindows = 0, slowWindows = 0;
+  let lastFrameMs = 16.7;
+  function setRatio(r) {
+    pixelRatio = Math.min(fullRatio, Math.max(minRatio, r));
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    post.setSize();
+  }
   function adaptQuality(delta) {
-    if (perfDone) return;
+    lastFrameMs = lastFrameMs * 0.9 + delta * 1000 * 0.1;
+    if (quality === 'low') return;
+    if (perfSkip > 0) { perfSkip--; return; } // startup and right after a change
+    perfWindow += delta;
     perfFrames++;
-    if (perfFrames < 30) return; // skip shader-compile hitches at startup
-    perfTime += delta;
-    if (perfFrames < 150) return;
-    perfDone = true;
-    const avgMs = (perfTime / 120) * 1000;
-    if (avgMs > 28) {
-      pixelRatio = Math.max(0.75, pixelRatio * (avgMs > 45 ? 0.6 : 0.8));
-      renderer.setPixelRatio(pixelRatio);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      post.setSize();
-      water.setReflectionScale(0.35);
+    if (perfWindow < 1.5) return;
+    const avgMs = (perfWindow / perfFrames) * 1000;
+    perfWindow = 0;
+    perfFrames = 0;
+    if (avgMs > 18.5) {
+      slowWindows++;
+      calmWindows = 0;
+      if (slowWindows >= 1 && pixelRatio > minRatio) {
+        setRatio(pixelRatio * (avgMs > 30 ? 0.75 : 0.88));
+        perfSkip = 30;
+        slowWindows = 0;
+      }
+    } else {
+      slowWindows = 0;
+      calmWindows++;
+      // Several smooth windows in a row: try a little sharper.
+      if (calmWindows >= 4 && pixelRatio < fullRatio) {
+        setRatio(pixelRatio * 1.08);
+        perfSkip = 30;
+        calmWindows = 0;
+      }
     }
   }
+
+  // F3 shows how the game is running: frames a second, the frame time, how
+  // sharp it's drawing, and which graphics chip and renderer it's on.
+  const perfBox = document.createElement('div');
+  perfBox.className = 'perf-overlay';
+  perfBox.hidden = true;
+  appEl.appendChild(perfBox);
+  let gpuName = GPU.on ? 'WebGPU' : 'WebGL';
+  if (GPU.on) {
+    navigator.gpu.requestAdapter().then((a) => {
+      const info = a?.info || {};
+      gpuName = `WebGPU · ${[info.vendor, info.architecture, info.description].filter(Boolean).join(' ') || 'unknown card'}`;
+    }).catch(() => {});
+  } else {
+    try {
+      const gl = renderer.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      gpuName = `WebGL · ${ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown card'}`;
+    } catch { /* no details */ }
+  }
+  let perfShownAt = 0;
+  function updatePerfBox(now) {
+    if (perfBox.hidden || now - perfShownAt < 0.5) return;
+    perfShownAt = now;
+    perfBox.textContent = `${Math.round(1000 / lastFrameMs)} fps · ${lastFrameMs.toFixed(1)} ms · sharpness ${Math.round((pixelRatio / fullRatio) * 100)}% · ${quality}\n${gpuName}`;
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'F3') {
+      e.preventDefault();
+      perfBox.hidden = !perfBox.hidden;
+      perfShownAt = 0;
+    }
+  });
 
   function animate() {
     requestAnimationFrame(animate);
@@ -1048,6 +1423,7 @@ function startGame(locationId, startTimeOfDay) {
     const delta = Math.min(0.1, (now - lastTime) / 1000);
     lastTime = now;
     adaptQuality(delta);
+    updatePerfBox(now / 1000);
     frame(delta, now / 1000);
   }
 
@@ -1057,8 +1433,11 @@ function startGame(locationId, startTimeOfDay) {
       environment.tick(delta);
       const envState = environment.getState();
       setWaterTemperature(envState.waterTempC);
+      waterClock = elapsed;
       playerController.update(delta);
+      updateBoat(delta, elapsed);
       const atmos = world.update({ delta, elapsed, envState, timeOverride });
+      boats?.update(elapsed, delta, { camera, windSpeed: envState.windSpeed, light: world.hemiLight.intensity });
       water.setAtmosphere(atmos, envState.windSpeed, windUniforms.uWindDir.value);
       updateWater(waterMesh, elapsed);
       post.setLook(atmos, elapsed, location.skyWarmth);
@@ -1087,7 +1466,7 @@ function startGame(locationId, startTimeOfDay) {
       minigame.setRodLift(fighting ? playerController.getRodLift() : 0);
       // A fish running away keeps the line tight against the drag.
       minigame.setFishPulling(!!casting.getFightFish()?.takingLine);
-      tickLanding();
+      tickLanding(delta, elapsed);
       rollBitesIfWaiting(delta);
       tickTake(delta);
       tickLureAction(delta, elapsed);
@@ -1180,6 +1559,7 @@ function startGame(locationId, startTimeOfDay) {
       hud.setFight(mgState.active ? mgState : null);
       hud.update({
         credits: save.credits,
+        level: myLevel(),
         season: envState.season,
         timeOfDay: envState.timeOfDay,
         waterTempC: envState.waterTempC,
@@ -1207,17 +1587,53 @@ function startGame(locationId, startTimeOfDay) {
   // The fishing line is too thin to show a reflection; drawn in it, it looks
   // like a second line running straight down into the water.
   const hiddenInReflection = [playerRod.rodGroup, casting.lineMesh, ...fishSwarm];
+  if (GPU.on && water.reflection) {
+    // WebGPU's reflector draws the mirror view itself, from a camera that
+    // sees only layer 0: the rod and line move to layer 2 (the fish are
+    // under the mirror plane, so it clips them anyway).
+    for (const obj of [playerRod.rodGroup, casting.lineMesh]) obj.traverse((o) => o.layers.set(2));
+    camera.layers.enable(2);
+    const mirrorCam = new THREE.PerspectiveCamera();
+    mirrorCam.copy(camera, false);
+    mirrorCam.layers.set(0);
+    water.reflection.reflector.virtualCameras.set(camera, mirrorCam);
+  }
+  // Work that needn't be redone every frame: the water's mirror image is
+  // redrawn every other frame (the ripples hide the difference), and the
+  // sun's shadows only when you move or every other frame otherwise.
+  let frameNo = 0;
+  const sunShadow = world.sunLight.shadow;
+  sunShadow.autoUpdate = false;
+  const lastShadowAt = new THREE.Vector3(Infinity, 0, 0);
+  if (GPU.on && water.reflection) {
+    const reflector = water.reflection.reflector;
+    const drawMirror = reflector.updateBefore.bind(reflector);
+    reflector.updateBefore = (f) => (frameNo % 2 === 0 ? drawMirror(f) : undefined);
+  }
   function renderFrame() {
-    water.renderReflection(renderer, scene, camera, hiddenInReflection);
+    frameNo++;
+    if (frameNo % 2 === 0 || camera.position.distanceToSquared(lastShadowAt) > 0.0004) {
+      sunShadow.needsUpdate = true;
+      lastShadowAt.copy(camera.position);
+    }
+    if (!GPU.on && frameNo % 2 === 0) water.renderReflection(renderer, scene, camera, hiddenInReflection);
     post.render(scene, camera);
   }
-  animate();
+  // Build every material's graphics program before the first frame, so the
+  // game doesn't hitch the first time each thing comes into view.
+  const warmUp = renderer.compileAsync ? renderer.compileAsync(scene, camera).catch(() => {}) : Promise.resolve();
+  warmUp.then(() => animate());
 
   window.__game = {
     environment, casting, minigame, save, scene, camera, catchReveal, fishSwarm,
     playerController, location, localSpecies, dam, chumSystem, world, renderer, water, post, playerRod, audio,
     // Dev hook: GPU-synchronised cost of one full frame, in ms.
     timeFrame: (frames = 10) => {
+      if (GPU.on) {
+        const t0 = performance.now();
+        for (let i = 0; i < frames; i++) renderFrame();
+        return (performance.now() - t0) / frames;
+      }
       const gl = renderer.getContext();
       const px = new Uint8Array(4);
       renderFrame();
@@ -1232,6 +1648,12 @@ function startGame(locationId, startTimeOfDay) {
       timeOverride = TIME_OF_DAY_PHASES.includes(timeOfDay) ? { timeOfDay, progress } : null;
     },
     setSeasonOverride: (season) => { seasonOverride = season || null; },
+    // Dev hooks: your boat (null where boats aren't allowed), and G.
+    myBoat,
+    toggleBoat,
+    camp: world.camp,
+    boats,
+    standAt: (x, z, yaw, pitch) => playerController.setPosition(x, z, yaw, pitch),
     // Dev hook: run the game loop by hand (steps of dt seconds), then render.
     advance: (steps = 1, dt = 1 / 60) => {
       for (let i = 0; i < steps; i++) {
@@ -1246,7 +1668,24 @@ function startGame(locationId, startTimeOfDay) {
       startBite(species);
       return take?.plan;
     },
-    debugForceBite: (speciesId, { trophy = false } = {}) => {
+    // Dev hook: show the landing net on a pretend fish `metres` out in front;
+    // scoop it with a species id; null puts the net away.
+    debugNet: (metres = 2.5, scoopSpecies = null) => {
+      if (metres == null) { debugNetAt = null; return; }
+      const me = playerController.getPosition();
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      dir.y = 0; dir.normalize();
+      debugNetAt = new THREE.Vector3(me.x + dir.x * metres, -0.1, me.z + dir.z * metres);
+      if (scoopSpecies) {
+        const mesh = createFishMesh(scoopSpecies);
+        mesh.scale.setScalar(0.6 / 0.62);
+        debugNetAt = null;
+        landingNet.scoop(mesh);
+      }
+    },
+    debugForceBite: (speciesId, { trophy = false, boss = false } = {}) => {
+      forceBoss = boss;
       const species = localSpecies.find((s) => s.id === speciesId) || localSpecies[0];
       forceTrophy = trophy;
       hookFish(species);

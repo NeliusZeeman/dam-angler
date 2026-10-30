@@ -1,14 +1,18 @@
+import { STARTER_ITEMS } from './gear.js';
+
 const SAVE_KEY = 'pond-fishing-save';
 
 export const DEFAULT_SAVE = {
   locationId: null,
   startTimeOfDay: null,
   credits: 0,
-  ownedRodIds: ['rod-starter'],
-  ownedLineIds: ['line-starter'],
-  ownedReelIds: ['reel-starter'],
-  ownedHookIds: ['hook-small'],
-  ownedLureIds: ['bread-bait'],
+  // The free starter kits (gear.js STARTER_KITS): general, bass, carp, fly
+  // and barbel & tiger.
+  ownedRodIds: [...STARTER_ITEMS.rod],
+  ownedLineIds: [...STARTER_ITEMS.line],
+  ownedReelIds: [...STARTER_ITEMS.reel],
+  ownedHookIds: [...STARTER_ITEMS.hook],
+  ownedLureIds: [...STARTER_ITEMS.lure],
   ownedGadgetIds: [], // fish finders: owning one is using it
   equippedRodId: 'rod-starter',
   equippedLineId: 'line-starter',
@@ -18,7 +22,7 @@ export const DEFAULT_SAVE = {
   drag: 0.33, // reel drag, share of the line's breaking strain (a third is the rule of thumb)
   catchLog: {},
   settings: {
-    quality: 'auto', // 'auto' (low on phones/small tablets) | 'high' | 'low'
+    quality: 'auto', // 'auto' (low on phones/small tablets) | 'ultraplus' (WebGPU) | 'ultra' | 'high' | 'medium' | 'low'
     showHints: true, // the controls reminder along the top bar
     turnSpeed: 1, // multiplier on Q/E, edge-of-screen and right-drag turning
     volume: 0.7, // 0 = sound off .. 1 = loud
@@ -26,10 +30,17 @@ export const DEFAULT_SAVE = {
   },
 };
 
+const OWNED_FIELDS = { rod: 'ownedRodIds', line: 'ownedLineIds', reel: 'ownedReelIds', hook: 'ownedHookIds', lure: 'ownedLureIds' };
+
 // Settings are merged key by key so saves from before a setting existed
-// still get its default.
+// still get its default, and saves from before the starter kits get them.
 export function normalizeSave(raw = {}) {
-  return { ...DEFAULT_SAVE, ...raw, settings: { ...DEFAULT_SAVE.settings, ...(raw.settings || {}) } };
+  const save = { ...DEFAULT_SAVE, ...raw, settings: { ...DEFAULT_SAVE.settings, ...(raw.settings || {}) } };
+  for (const [kind, field] of Object.entries(OWNED_FIELDS)) {
+    const owned = Array.isArray(save[field]) ? save[field] : [];
+    save[field] = [...owned, ...STARTER_ITEMS[kind].filter((id) => !owned.includes(id))];
+  }
+  return save;
 }
 
 export function loadSave() {

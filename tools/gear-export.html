@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gear export</title>
+<!-- Poses every Tackle Box item exactly as the game pictures it and sends
+     the model, with a camera framing it, to tools/gear-export-server.mjs
+     for Blender to render. -->
+<script type="importmap">{ "imports": { "three": "/vendor/three.module.js" } }</script>
+</head>
+<body>
+<pre id="log">exporting...</pre>
+<script type="module">
+import * as THREE from '/vendor/three.module.js';
+import { GLTFExporter } from '/tools/lib/GLTFExporter.js';
+import { setPictureCapture, poseGear } from '/src/gfx/gearThumbs.js';
+import { RODS, REELS, LINES, HOOKS, LURES, GADGETS, COMBOS } from '/src/gear.js';
+
+const log = document.getElementById('log');
+const only = new URLSearchParams(location.search).get('only');
+const exporter = new GLTFExporter();
+const KINDS = { rod: RODS, reel: REELS, line: LINES, hook: HOOKS, lure: LURES, gadget: GADGETS, combo: COMBOS };
+
+// Everything visible in the studio, with its world position baked in, plus
+// an orthographic camera framing it the way the game's picture does.
+function snapshot({ scene, center, view, up, half }) {
+  scene.updateMatrixWorld(true);
+  const group = new THREE.Group();
+  scene.traverseVisible((o) => {
+    if (!(o.isMesh || o.isLine)) return;
+    const copy = o.clone(false);
+    o.matrixWorld.decompose(copy.position, copy.quaternion, copy.scale);
+    group.add(copy);
+  });
+  const cam = new THREE.OrthographicCamera(-half, half, half, -half, 0.01, 50);
+  // The picture's half-width rides in the name: Blender reads it back.
+  cam.name = `PictureCamera_${half.toFixed(5)}`;
+  cam.position.copy(center).addScaledVector(view, 10);
+  cam.up.copy(up);
+  cam.lookAt(center);
+  group.add(cam);
+  return group;
+}
+
+let done = 0;
+for (const [kind, list] of Object.entries(KINDS)) {
+  for (const item of list) {
+    const name = `${kind}-${item.id}`;
+    if (only && !only.split(',').includes(name)) continue;
+    let shot = null;
+    setPictureCapture((s) => { shot = snapshot(s); });
+    try { poseGear(kind, item); } catch (err) { log.textContent += `\n${name}: ${err.message}`; continue; }
+    if (!shot) continue;
+    const glb = await exporter.parseAsync(shot, { binary: true });
+    await fetch(`/save/${name}.glb`, { method: 'POST', body: glb });
+    done++;
+    log.textContent = `exported ${done}: ${name}`;
+  }
+}
+setPictureCapture(null);
+await fetch('/done', { method: 'POST' });
+log.textContent += '\nDONE';
+</script>
+</body>
+</html>

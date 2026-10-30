@@ -81,6 +81,10 @@ test('saves: made-up settings and impossible numbers are cleaned or refused', as
   assert.equal(s.locationId, null);
   const huge = await c.put('/api/me/save', { save: { credits: 1e20 }, baseVersion: put.body.version });
   assert.equal(huge.status, 400);
+  // The WebGPU graphics setting is a real one and is kept.
+  const gpu = await c.put('/api/me/save', { save: { credits: 5, settings: { quality: 'ultraplus' } }, baseVersion: put.body.version });
+  assert.equal(gpu.status, 200);
+  assert.equal((await c.get('/api/me')).body.save.settings.quality, 'ultraplus');
 });
 
 test('catches: fish must live at that spot, and nobody can flood the records', async () => {

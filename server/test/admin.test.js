@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { STARTER_ITEMS } from '../../src/gear.js';
 import { randomUUID } from 'node:crypto';
 import { newTestDb, startTestServer } from './helpers.js';
 import { setRole } from '../admin.js';
@@ -98,7 +99,7 @@ test('player page: details, gear, rig, catches and credit history', async () => 
   assert.equal(d.player.username, 'annemarie');
   assert.equal(d.player.email, 'anna@example.com');
   assert.equal(d.player.totalCatches, 2);
-  assert.deepEqual(d.save.ownedRodIds, ['rod-starter']);
+  assert.deepEqual(d.save.ownedRodIds, STARTER_ITEMS.rod);
   assert.equal(d.catches[0].speciesId, 'catfish', 'newest first');
   assert.ok(d.creditHistory.every((h) => h.reason === 'catch'));
   assert.equal((await admin.get('/api/admin/players/999999')).status, 404);

@@ -1,5 +1,6 @@
 const WALK_SPEED = 2.2; // m/s
 const RUN_SPEED = 4.6;
+const DECK_SPEED = 1.1; // careful steps on a rocking boat
 const EYE_HEIGHT = 1.6;
 const TURN_SPEED = 1.6; // rad/s with Q/E
 const MOUSE_LOOK = 0.0022; // rad per pixel of mouse travel
@@ -20,7 +21,9 @@ const FIGHT_YAW_FREE = 0.12; // the fish can wander this far off centre before t
 // (Shift runs) relative to where you're facing; Q/E also turn. You can walk
 // anywhere on dry land and out along the stands, but not into the water.
 // `turnSpeed` (from Settings) is the mouse sensitivity.
-export function createPlayerController({ camera, domElement, dam, turnSpeed = 1 }) {
+// In a boat (boatDrive.js) W/S is the throttle and A/D steers instead.
+// `waterY(x, z)` is the water surface height there (the boat rides it).
+export function createPlayerController({ camera, domElement, dam, turnSpeed = 1, waterY = () => 0 }) {
   let x = dam.spawn.x, z = dam.spawn.z;
   let yaw = dam.spawn.yaw, pitch = -0.1;
   let eyeY = dam.floorHeight(x, z) + EYE_HEIGHT;
@@ -29,6 +32,9 @@ export function createPlayerController({ camera, domElement, dam, turnSpeed = 1 
   const pressed = new Set();
   let fightTarget = null; // world point to keep in view while playing a fish
   let rodLift = 0; // -1 tip down at the water .. 1 held high
+  let boat = null; // the boatDrive you're in, or null on foot
+  let boatHeld = false; // line out: motor off, anchor down
+  let deck = null; // walking the deck: where you stand, in the boat's metres (boatDrive.js)
 
   // Pointer lock: the mouse is captured while you fish and released for menus.
   let locked = false;
@@ -119,6 +125,40 @@ export function createPlayerController({ camera, domElement, dam, turnSpeed = 1 
     // The touch stick walks at the speed it's pushed, and runs near the rim.
     const stickPush = Math.min(1, Math.hypot(stick.x, stick.y));
     if (stickPush > 0.12) { fwd += stick.y; side += stick.x; }
+    if (boat) {
+      // Driving: the view swings round with the boat; mouse-look is free.
+      const before = boat.state.heading;
+      let bobY = 0;
+      if (deck) {
+        // Walking the deck, anchor down: WASD steps you round the boat.
+        boat.step(dt, 0, 0, false);
+        yaw += boat.state.heading - before;
+        if (fwd !== 0 || side !== 0) {
+          const speed = DECK_SPEED * (stickPush > 0.12 ? Math.min(1, stickPush / 0.92) : 1) / Math.hypot(fwd, side);
+          const m = boat.moveToBoat((-Math.sin(yaw) * fwd + Math.cos(yaw) * side) * speed * dt, (-Math.cos(yaw) * fwd - Math.sin(yaw) * side) * speed * dt);
+          const to = boat.walkDeck(deck.x, deck.z, deck.x + m.x, deck.z + m.z);
+          if (to.x !== deck.x || to.z !== deck.z) bob += dt * 7;
+          deck = to;
+          bobY = Math.sin(bob) * 0.02;
+        }
+        const p = boat.toWorld(deck.x, deck.z);
+        x = p.x; z = p.z;
+      } else {
+        const throttle = boatHeld ? 0 : Math.max(-1, Math.min(1, fwd));
+        boat.step(dt, throttle, boatHeld ? 0 : Math.max(-1, Math.min(1, side)), has('ShiftLeft', 'ShiftRight') || stickPush > 0.92);
+        yaw += boat.state.heading - before;
+        const seat = boat.seat();
+        x = seat.x; z = seat.z;
+      }
+      const targetY = waterY(x, z) + boat.spec.eye;
+      eyeY += (targetY - eyeY) * Math.min(1, dt * 6);
+      aimFight(dt);
+      // A little sway on the water, more at speed.
+      const sway = Math.sin(performance.now() * 0.0013) * 0.012 + (boat.state.bumped > 0 ? Math.sin(boat.state.bumped * 40) * 0.03 : 0);
+      camera.position.set(x, eyeY + bobY, z);
+      camera.rotation.set(pitch, yaw, sway, 'YXZ');
+      return;
+    }
     const moving = fwd !== 0 || side !== 0;
     if (moving) {
       const keySpeed = has('ShiftLeft', 'ShiftRight') ? RUN_SPEED : WALK_SPEED;
@@ -133,9 +173,17 @@ export function createPlayerController({ camera, domElement, dam, turnSpeed = 1 
     // Step up onto a deck or over a bump smoothly rather than snapping.
     const targetY = dam.floorHeight(x, z) + EYE_HEIGHT;
     eyeY += (targetY - eyeY) * Math.min(1, dt * 10);
-    // Playing a fish: the view keeps the fish and the line in sight -- a
-    // little above it, so the rod and the water round the fish both show --
-    // however low or high you hold the rod.
+    aimFight(dt);
+
+    const bobY = moving ? Math.sin(bob) * 0.03 : 0;
+    camera.position.set(x, eyeY + bobY, z);
+    camera.rotation.set(pitch, yaw, 0, 'YXZ');
+  }
+
+  // Playing a fish: the view keeps the fish and the line in sight -- a
+  // little above it, so the rod and the water round the fish both show --
+  // however low or high you hold the rod.
+  function aimFight(dt) {
     if (fightTarget) {
       const tx = fightTarget.x - x, tz = fightTarget.z - z;
       const flat = Math.max(1, Math.hypot(tx, tz));
@@ -145,17 +193,29 @@ export function createPlayerController({ camera, domElement, dam, turnSpeed = 1 
       off = Math.atan2(Math.sin(off), Math.cos(off));
       if (Math.abs(off) > FIGHT_YAW_FREE) yaw += (off - Math.sign(off) * FIGHT_YAW_FREE) * Math.min(1, dt * 2.5);
     }
-
-    const bobY = moving ? Math.sin(bob) * 0.03 : 0;
-    camera.position.set(x, eyeY + bobY, z);
-    camera.rotation.set(pitch, yaw, 0, 'YXZ');
   }
 
   return {
     update,
-    isWalking: () => has('KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight')
-      || Math.hypot(stick.x, stick.y) > 0.12,
+    isWalking: () => !boat && has('KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight')
+      || (!boat && Math.hypot(stick.x, stick.y) > 0.12),
     getPosition: () => ({ x, z }),
+    // The boat: climb in (facing the bow), step ashore at `spot`.
+    enterBoat: (drive) => { boat = drive; yaw = drive.state.heading + Math.PI; pitch = -0.05; },
+    leaveBoat: (spot) => {
+      boat = null;
+      deck = null;
+      x = spot.x; z = spot.z;
+    },
+    inBoat: () => boat,
+    // Leave the helm and walk the deck (from where you were standing), or
+    // go back to it. onDeck() is where you stand, or null at the helm.
+    setOnDeck: (on) => { deck = on && boat?.spec.deck ? { x: 0, z: boat.spec.seat } : null; },
+    onDeck: () => deck,
+    // Dev hook: stand somewhere else, looking along `facing`.
+    setPosition: (nx, nz, facing = yaw, look = pitch) => { x = nx; z = nz; yaw = facing; pitch = look; },
+    // Line out: the motor stops and the anchor goes down.
+    setBoatHeld: (held) => { boatHeld = !!held; },
     lockPointer,
     releasePointer,
     // Touch look: pixels dragged; perPixel defaults to the mouse feel.

@@ -9,13 +9,15 @@ const carp = FISH_SPECIES.find((f) => f.id === 'common-carp');
 const tiger = FISH_SPECIES.find((f) => f.id === 'tigerfish');
 
 // Fight a fish with a given drag; `strategy(state)` says whether to wind.
-function fight({ species, weightKg, gear, drag, strategy, seconds = 120 }) {
+// `runs`: the fish tears off line 1.5s in every 4s (otherwise it never runs).
+function fight({ species, weightKg, gear, drag, strategy, seconds = 120, runs = false }) {
   const mg = createMinigame();
   let result = null;
   let info = null;
   let maxRod = 0;
   mg.start({ species, weightKg, ...gear, drag, onSuccess: () => { result = 'landed'; }, onFailure: (r, i) => { result = r; info = i; } });
   for (let t = 0; t < seconds * 20 && mg.isActive(); t++) {
+    if (runs) mg.setFishPulling((t * 0.05) % 4 < 1.5);
     mg.setHolding(strategy(mg.getState()));
     mg.update(0.05);
     maxRod = Math.max(maxRod, mg.getState().rodLoad);
@@ -40,13 +42,14 @@ const tally = (n, run) => {
 }
 
 {
-  // A jerky starter reel's drag sticks for a moment on a lunge -- winding
-  // at a third drag, that's enough to part the line. A smooth big-pit
-  // gives line cleanly.
-  const base = { rod: byId(RODS, 'rod-spinning'), line: byId(LINES, 'line-mono-12'), hook: byId(HOOKS, 'hook-carp-hair') };
-  const starter = tally(40, () => fight({ species: carp, weightKg: 7, gear: { ...base, reel: REELS[0] }, drag: 0.3, strategy: () => true }));
-  const bigpit = tally(40, () => fight({ species: carp, weightKg: 7, gear: { ...base, reel: byId(REELS, 'reel-bigpit') }, drag: 0.3, strategy: () => true }));
-  assert.ok((starter['line-snapped'] || 0) > (bigpit['line-snapped'] || 0) + 10, `smooth drag snaps less (starter ${JSON.stringify(starter)}, big pit ${JSON.stringify(bigpit)})`);
+  // A jerky starter reel's drag now and again sticks on a lunge -- winding
+  // through a hard-fighting yellowfish's runs with the drag a bit firm, that can part
+  // light line. A smooth big-pit gives line cleanly.
+  const yellow = FISH_SPECIES.find((f) => f.id === 'largescale-yellowfish');
+  const light = { rod: RODS[0], line: byId(LINES, 'line-starter'), hook: byId(HOOKS, 'hook-baitholder') };
+  const starter = tally(100, () => fight({ species: yellow, weightKg: 3, gear: { ...light, reel: REELS[0] }, drag: 0.42, strategy: () => true, runs: true }));
+  const bigpit = tally(100, () => fight({ species: yellow, weightKg: 3, gear: { ...light, reel: byId(REELS, 'reel-bigpit') }, drag: 0.42, strategy: () => true, runs: true }));
+  assert.ok((starter["line-snapped"] || 0) >= 4 && (bigpit["line-snapped"] || 0) <= 1, `smooth drag snaps less (starter ${JSON.stringify(starter)}, big pit ${JSON.stringify(bigpit)})`);
   console.log(`PASS: a smooth drag survives lunges a jerky one doesn't (starter ${JSON.stringify(starter)}, big pit ${JSON.stringify(bigpit)})`);
 }
 
@@ -78,3 +81,16 @@ const tally = (n, run) => {
 }
 
 console.log('All drag tests passed.');
+
+{
+  // What the drag is for: a loose drag lets a fish far heavier than the
+  // line's rating take line instead of breaking it -- a long fight, but it
+  // comes in. Screw the drag down on the same fish and the line goes.
+  const barbel = FISH_SPECIES.find((f) => f.id === 'catfish');
+  const light = { rod: RODS[0], line: byId(LINES, 'line-starter'), hook: byId(HOOKS, 'hook-baitholder'), reel: REELS[0] };
+  const loose = tally(60, () => fight({ species: barbel, weightKg: 9, gear: light, drag: 0.15, strategy: () => true, runs: true, seconds: 300 }));
+  const tight = tally(60, () => fight({ species: barbel, weightKg: 9, gear: light, drag: 0.5, strategy: () => true, runs: true, seconds: 300 }));
+  assert.ok((loose.landed || 0) >= 54, `a loose drag lands a 9kg barbel on 4.5kg line (${JSON.stringify(loose)})`);
+  assert.ok((tight.landed || 0) <= 15, `a tight drag loses it (${JSON.stringify(tight)})`);
+  console.log(`PASS: a loose drag lands a fish twice the line's rating, a tight one loses it (loose ${JSON.stringify(loose)}, tight ${JSON.stringify(tight)})`);
+}

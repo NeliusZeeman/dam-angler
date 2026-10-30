@@ -3,6 +3,7 @@ import { getLocationById } from './locations.js';
 import { FISH_SPECIES } from './fish.js';
 import { saveSave } from './save.js';
 import { createTackleBox } from './tackleBox.js';
+import { levelInfo, pointsFromLog } from './levels.js';
 import { renderCatchLog } from './ui.js';
 import { buildLabel } from './versionCheck.js';
 import { showAccountPanel } from './accountPanel.js';
@@ -18,8 +19,8 @@ const TIME_LABELS = {
 const SETTINGS = [
   {
     key: 'quality', label: 'Graphics',
-    hint: 'Auto picks Low on phones and small tablets. Low is smoother on older graphics.',
-    options: [{ value: 'auto', label: 'Auto' }, { value: 'high', label: 'High' }, { value: 'low', label: 'Low' }],
+    hint: 'Auto picks Low on phones and small tablets. Ultra+ uses WebGPU (Chrome, Edge, newer Safari): water you can see into, softer contact shadows and smoother edges — the best look, for a good graphics card; without WebGPU it falls back to Ultra. Low is smoothest on phones and older PCs. Takes effect on the next dam you load.',
+    options: [{ value: 'auto', label: 'Auto' }, { value: 'ultraplus', label: 'Ultra+ (WebGPU)' }, { value: 'ultra', label: 'Ultra' }, { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }],
   },
   {
     key: 'showHints', label: 'Control hints',
@@ -50,7 +51,8 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
   const tackleBox = createTackleBox({ container: overlay, save, onSaveChanged: () => {
     saveSave(save);
     if (view === 'home') render(); // credits on the title card
-  }, onBuy: (kind, id) => cloud?.queueBuy(kind, id) });
+  }, onBuy: (kind, id) => cloud?.queueBuy(kind, id), getLevel: () => myLevel().level });
+  const myLevel = () => levelInfo(pointsFromLog(save.catchLog, save.compPlaces));
   const logPanel = document.createElement('div');
   logPanel.className = 'shop-panel hidden';
   overlay.appendChild(logPanel);
@@ -95,7 +97,7 @@ export function showMainMenu(container, { save, onContinue, onNewGame, onSetting
       <div class="mm-card">
         <p class="mm-kicker">South African freshwater angling</p>
         <h1 class="mm-title">Dam Angler</h1>
-        <p class="mm-stats"><span>${save.credits} credits</span><span>${totalCaught()} fish landed</span></p>
+        <p class="mm-stats"><span>Level ${myLevel().level} · ${myLevel().points} XP</span><span>${save.credits} credits</span><span>${totalCaught()} fish landed</span></p>
         <p class="mm-version">${buildLabel()}</p>
         ${accountHtml()}
         <nav class="mm-buttons">

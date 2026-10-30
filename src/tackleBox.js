@@ -1,8 +1,11 @@
-import { RODS, LINES, REELS, HOOKS, LURES, COMBOS, GADGETS, getGearById, rigCheck, TACKLE_SECTIONS, sectionsFor } from './gear.js';
+import { RODS, LINES, REELS, HOOKS, LURES, COMBOS, GADGETS, getGearById, rigCheck, TACKLE_SECTIONS, sectionsFor, STARTER_KITS } from './gear.js';
 import { gearPicture } from './gfx/gearThumbs.js';
+import { gearLevel } from './levels.js';
 
 // `onBuy(kind, id)`: a purchase was made (the online server checks it).
-export function createTackleBox({ container, save, onSaveChanged, onBuy = () => {} }) {
+// `getLevel()`: the angler's level -- better gear unlocks as it rises. All
+// of it stays on show, with the level it needs.
+export function createTackleBox({ container, save, onSaveChanged, onBuy = () => {}, getLevel = () => 1 }) {
   const panel = document.createElement('div');
   panel.className = 'shop-panel hidden';
   container.appendChild(panel);
@@ -16,8 +19,10 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     const rows = shown.sort((a, b) => a.cost - b.cost).map((item) => {
       const owned = ownedIds.includes(item.id);
       const equipped = equippedId === item.id || (kind === 'gadget' && owned);
-      const label = owned ? (equipped ? 'In use' : 'Use') : 'Buy';
-      const disabled = (!owned && save.credits < item.cost) || equipped;
+      const needs = gearLevel(item);
+      const locked = !owned && needs > getLevel();
+      const label = owned ? (equipped ? 'In use' : 'Use') : locked ? `Level ${needs}` : 'Buy';
+      const disabled = (!owned && (locked || save.credits < item.cost)) || equipped;
       // Rods: action and power. Lines: type and breaking strain. Hooks: how
       // big a fish they'll hold. Plus each item's own short note.
       const lineSpec = item.breakKg ? `${{ mono: 'Mono', braid: 'Braid', fluoro: 'Fluorocarbon', fly: item.sinking ? 'Sinking fly line' : 'Floating fly line' }[item.type] || ''} · breaks at ${item.breakKg} kg` : '';
@@ -27,18 +32,19 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
       const spec = item.priceR ? item.note
         : item.action ? `${item.action} action · ${item.power} power${item.note ? ` · ${item.note}` : ''}`
         : specText;
-      return card({ kind, id: item.id, name: item.name, spec, cost: item.cost, owned, equipped, label, disabled });
+      return card({ kind, id: item.id, name: item.name, spec, cost: item.cost, owned, equipped, label, disabled, needs, locked });
     }).join('');
     return `<h3>${title}</h3><div class="shop-grid">${rows}</div>`;
   }
 
   // One item as a card: name, specs, then its price (or owned / rigged) and
   // the button.
-  function card({ kind, id, name, spec, cost, owned, equipped, label, disabled }) {
+  function card({ kind, id, name, spec, cost, owned, equipped, label, disabled, needs = 1, locked = false }) {
     const status = equipped ? '<span class="card-tag rigged">Rigged</span>'
       : owned ? '<span class="card-tag">Owned</span>'
         : `<span class="card-price">${cost ? `${cost} credits` : 'Free'}</span>`;
-    return `<div class="shop-card${owned ? ' owned' : ''}${equipped ? ' equipped' : ''}">
+    const levelTag = !owned && needs > 1 ? `<span class="card-level${locked ? ' locked' : ''}">${locked ? '🔒 ' : ''}Level ${needs}</span>` : '';
+    return `<div class="shop-card${owned ? ' owned' : ''}${equipped ? ' equipped' : ''}${locked ? ' locked' : ''}">${levelTag}
       <div class="card-img"><img alt="" data-pic="${kind}|${id}" hidden></div>
       <div class="card-name">${name}</div>
       ${spec ? `<small class="card-spec">${spec}</small>` : ''}
@@ -52,11 +58,13 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     const rows = items.filter((c) => c.inShop !== false || hasCombo(c)).sort((a, b) => a.cost - b.cost).map((c) => {
       const owned = hasCombo(c);
       const rigged = save.equippedRodId === c.rodId && save.equippedReelId === c.reelId;
-      const label = owned ? (rigged ? 'In use' : 'Use') : 'Buy';
-      const disabled = (!owned && save.credits < c.cost) || rigged;
+      const needs = gearLevel(c);
+      const locked = !owned && needs > getLevel();
+      const label = owned ? (rigged ? 'In use' : 'Use') : locked ? `Level ${needs}` : 'Buy';
+      const disabled = (!owned && (locked || save.credits < c.cost)) || rigged;
       const rod = getGearById(RODS, c.rodId), reel = getGearById(REELS, c.reelId);
       const spec = `${c.note}<br><b>Rod:</b> ${rod.note}<br><b>Reel:</b> ${reel.note}`;
-      return card({ kind: 'combo', id: c.id, name: c.name, spec, cost: c.cost, owned, equipped: rigged, label, disabled });
+      return card({ kind: 'combo', id: c.id, name: c.name, spec, cost: c.cost, owned, equipped: rigged, label, disabled, needs, locked });
     }).join('');
     return `<h3>${title}</h3><div class="shop-grid">${rows}</div>`;
   }
@@ -115,6 +123,27 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     </div>`;
   }
 
+  // The free starter kits: one tap rigs the whole lot.
+  const kitRigged = (k) => save.equippedRodId === k.rod && save.equippedReelId === k.reel && save.equippedLineId === k.line
+    && (!k.hooks.length || k.hooks.includes(save.equippedHookId)) && k.lures.includes(save.equippedLureId);
+  function kitsHtml() {
+    return `<div class="starter-kits"><b>Starter kits</b> <small>free — tap one to rig it all</small>
+      <div class="kit-row">${STARTER_KITS.map((k) => `<button type="button" class="kit-btn${kitRigged(k) ? ' on' : ''}" data-kit="${k.id}" title="${k.blurb}">${k.label}</button>`).join('')}</div>
+    </div>`;
+  }
+  function rigKit(id) {
+    const k = STARTER_KITS.find((x) => x.id === id);
+    if (!k) return;
+    save.equippedRodId = k.rod;
+    save.equippedReelId = k.reel;
+    save.equippedLineId = k.line;
+    if (k.hooks.length) save.equippedHookId = k.hooks[0];
+    save.equippedLureId = k.lures[0];
+    activeSection = k.id;
+    onSaveChanged();
+    refresh();
+  }
+
   function refresh() {
     const section = TACKLE_SECTIONS.find((x) => x.id === activeSection) || TACKLE_SECTIONS[0];
     // Only the parts this kind of fishing has (flies come tied on their own
@@ -130,6 +159,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
           <div class="tackle-credits">Credits: ${save.credits}</div>
           <div class="tackle-rigged"><b>Rigged:</b> ${rigged}</div>
           ${rigHtml()}
+          ${kitsHtml()}
         </div>
         <div class="tackle-sliders">${dragHtml()}${floatHtml()}</div>
       </div>
@@ -158,6 +188,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
       panel.querySelector('#float-read').textContent = `${Number(floatSlider.value).toFixed(1)} m`;
     });
     floatSlider.addEventListener('change', () => { onSaveChanged(); refresh(); });
+    panel.querySelectorAll('[data-kit]').forEach((btn) => btn.addEventListener('click', () => rigKit(btn.dataset.kit)));
     panel.querySelectorAll('[data-section]').forEach((btn) => btn.addEventListener('click', () => {
       activeSection = btn.dataset.section;
       refresh();
@@ -210,7 +241,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     if (kind === 'combo') {
       const c = COMBOS.find((x) => x.id === id);
       if (!hasCombo(c)) {
-        if (save.credits < c.cost) return;
+        if (save.credits < c.cost || gearLevel(c) > getLevel()) return;
         save.credits -= c.cost;
         if (!save.ownedRodIds.includes(c.rodId)) save.ownedRodIds.push(c.rodId);
         if (!save.ownedReelIds.includes(c.reelId)) save.ownedReelIds.push(c.reelId);
@@ -225,7 +256,7 @@ export function createTackleBox({ container, save, onSaveChanged, onBuy = () => 
     const owned = ownedListFor(kind);
     const item = itemsFor(kind).find((i) => i.id === id);
     if (!owned.includes(id)) {
-      if (save.credits < item.cost) return;
+      if (save.credits < item.cost || gearLevel(item) > getLevel()) return;
       save.credits -= item.cost;
       owned.push(id);
       onBuy(kind, id);

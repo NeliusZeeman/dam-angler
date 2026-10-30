@@ -2,10 +2,13 @@ import * as THREE from '../../vendor/three.module.js';
 import { createPlayerRod } from './rod.js';
 import { createTerminalTackle, hook } from './terminalTackle.js';
 import { RODS, REELS, getGearById } from '../gear.js';
+import { assetTag } from '../versionCheck.js';
 
-// Pictures for the Tackle Box cards, taken of the game's own 3D models: the
-// same rod, reel, bait or lure you fish with, photographed on a clear
-// background. Made on demand, a few per frame, and kept for the session.
+// Pictures for the Tackle Box cards, of the game's own 3D models: the same
+// rod, reel, bait or lure you fish with. The proper ones are rendered in
+// Blender (tools/build-gear-pictures.mjs -> assets/gear/<kind>-<id>.webp);
+// anything without one is photographed here on a clear background instead,
+// on demand, a few per frame, and kept for the session.
 
 const SIZE = 256;
 const cache = new Map(); // key -> data URL
@@ -42,9 +45,19 @@ function makeStudio() {
 const v = () => new THREE.Vector3();
 const tmp = { c: v(), d: v(), e: v() };
 
+// The Blender pipeline (tools/gear-export.html) takes the posed model and
+// framing instead of a picture: see setPictureCapture.
+let capture = null;
+export function setPictureCapture(fn) { capture = fn; }
+export function poseGear(kind, item) {
+  if (!studio) studio = makeStudio();
+  return render(kind, item);
+}
+
 // Aim the square picture at `center`, looking along -`view`, with `up` as
 // up, wide enough for `half` metres either side.
 function shoot(center, view, up, half) {
+  if (capture) { capture({ scene: studio.scene, center: center.clone(), view: view.clone(), up: up.clone(), half }); return 'captured'; }
   const { cam, renderer, scene } = studio;
   cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half;
   cam.updateProjectionMatrix();
@@ -239,13 +252,26 @@ export function gearPicture(kind, item, callback) {
   if (cache.has(key)) { callback(cache.get(key)); return; }
   if (waiting.has(key)) { waiting.get(key).push(callback); return; }
   waiting.set(key, [callback]);
+  // The Blender render first; photograph it here only if there isn't one.
+  const url = `assets/gear/${kind}-${item.id}.webp${assetTag()}`;
+  const img = new Image();
+  img.onload = () => finish(key, url);
+  img.onerror = () => photograph(key, kind, item);
+  img.src = url;
+}
+
+function finish(key, url) {
+  cache.set(key, url);
+  for (const cb of waiting.get(key) || []) cb(url);
+  waiting.delete(key);
+}
+
+function photograph(key, kind, item) {
   try {
     if (!studio) studio = makeStudio();
   } catch {
     // No WebGL for pictures: cards simply go without.
-    cache.set(key, null);
-    callback(null);
-    waiting.delete(key);
+    finish(key, null);
     return;
   }
   queue.push({ key, kind, item });

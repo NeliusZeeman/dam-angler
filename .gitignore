@@ -4,3 +4,9 @@ backups/
 .playwright-mcp/
 server/.env
 server/dev-admin.txt
+
+# Downloaded scans (tools/fetch-scans.py); the game uses assets/scenery.
+art-source/
+
+# Blender smoke/fire cache
+waveletNoiseTile.bin

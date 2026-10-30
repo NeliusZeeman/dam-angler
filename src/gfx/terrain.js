@@ -1,6 +1,8 @@
 import * as THREE from '../../vendor/three.module.js';
 import { fbm, makeRng, seedFromString, smoothstep, NOISE_GLSL } from './noise.js';
 import { grassGroundTexture, sandTexture } from './pixelTextures.js';
+import { GPU } from './gpu.js';
+import { scanTexture, scanModel, groundSetFor, plantVariant } from '../sceneryAssets.js';
 
 const DEG = Math.PI / 180;
 
@@ -82,24 +84,33 @@ export function createTerrain(scene, { dam, location }) {
   }
   groundGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-  const grassMap = grassGroundTexture();
-  const sandMap = sandTexture();
+  // Photo-scanned grass and bank soil when they've loaded (sceneryAssets.js);
+  // the painted textures otherwise. A scan covers about 2 m, the painted
+  // ones about 5, hence the tiling.
+  const groundSet = groundSetFor(location);
+  const grassScan = scanTexture(groundSet.grass), soilScan = scanTexture(groundSet.soil);
+  const grassMap = grassScan?.map || grassGroundTexture();
+  const sandMap = soilScan?.map || sandTexture();
+  const groundTile = { value: grassScan ? 2.3 : 1 };
+  // The scans carry their own colour: the dam's bank tint only nudges them.
+  const softenTint = (c) => (soilScan ? c.lerp(new THREE.Color(1, 1, 1), 0.6) : c);
   const grassTint = { value: new THREE.Color(location.grassTint ?? 0xffffff) };
   // Each dam's own bank colour (pale Vaal silt, red Loskop sandstone...),
   // relative to the generic sand the texture is painted in.
   const sandRef = new THREE.Color(0xa89878);
   const sandLook = new THREE.Color(groundLook.sand ?? 0xa89878);
-  const sandTint = { value: new THREE.Color(sandLook.r / sandRef.r, sandLook.g / sandRef.g, sandLook.b / sandRef.b) };
+  const sandTint = { value: softenTint(new THREE.Color(sandLook.r / sandRef.r, sandLook.g / sandRef.g, sandLook.b / sandRef.b)) };
   const groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0, vertexColors: true });
   groundMat.customProgramCacheKey = () => 'ground';
   groundMat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, { uGrassMap: { value: grassMap }, uSandMap: { value: sandMap }, uGrassTint: grassTint, uSandTint: sandTint });
+    Object.assign(shader.uniforms, { uGrassMap: { value: grassMap }, uSandMap: { value: sandMap }, uGrassTint: grassTint, uSandTint: sandTint, uTile: groundTile });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aSand;\nvarying float vSand;\nvarying vec3 vGroundPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSand = aSand;\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform sampler2D uGrassMap;
+        uniform float uTile;
         uniform sampler2D uSandMap;
         uniform vec3 uGrassTint;
         uniform vec3 uSandTint;
@@ -108,11 +119,11 @@ export function createTerrain(scene, { dam, location }) {
         ${NOISE_GLSL}`)
       .replace('#include <map_fragment>', `
         vec2 wuv = vGroundPos.xz;
-        vec3 grassA = texture2D(uGrassMap, wuv * 0.21).rgb;
-        vec3 grassB = texture2D(uGrassMap, wuv * 0.047 + 0.31).rgb;
+        vec3 grassA = texture2D(uGrassMap, wuv * 0.21 * uTile).rgb;
+        vec3 grassB = texture2D(uGrassMap, wuv * 0.047 * uTile + 0.31).rgb;
         vec3 grassCol = mix(grassA, grassB, 0.35) * uGrassTint;
         grassCol *= 0.78 + fbm4(wuv * 0.045) * 0.45;
-        vec3 sandCol = texture2D(uSandMap, wuv * 0.33).rgb * uSandTint;
+        vec3 sandCol = texture2D(uSandMap, wuv * 0.33 * uTile).rgb * uSandTint;
         float edgeNoise = fbm4(wuv * 0.7) - 0.5;
         float sandAmt = smoothstep(0.35, 0.65, vSand + edgeNoise * 0.6);
         float groundWet = 1.0 - smoothstep(-0.03, 0.09, vGroundPos.y);
@@ -123,6 +134,7 @@ export function createTerrain(scene, { dam, location }) {
       `)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.28, groundWet);');
   };
+  if (GPU.on) GPU.nodes.groundNodes(groundMat, { grassMap, sandMap, grassTint, sandTint, tile: groundTile });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.receiveShadow = true;
   ground.frustumCulled = false;
@@ -134,7 +146,22 @@ export function createTerrain(scene, { dam, location }) {
   const rockColA = new THREE.Color(groundLook.rock ?? 0x8b857a).multiplyScalar(1.08);
   const rockColB = new THREE.Color(groundLook.rock ?? 0x8b857a).multiplyScalar(0.72);
   const lichen = new THREE.Color(0xa7a46a);
+  // Real Namaqualand boulders and stones when the scans have loaded: each
+  // boulder becomes a placement of one of them instead of a built shape.
+  const scanBoulders = ['boulderA', 'boulderB', 'boulderC'].flatMap((k) => scanModel(k) || []);
+  const scanSlabs = ['stones', 'rockSmall'].flatMap((k) => scanModel(k) || []);
+  const boulderPlacements = new Map(); // variant -> placements
+  function placeScan(variants, x, z, size, flatness, sink) {
+    const v = variants[Math.floor(rng() * variants.length)];
+    const across = Math.max(v.size.x, v.size.z) || 1;
+    const scale = (size * 2) / across;
+    const list = boulderPlacements.get(v) || [];
+    list.push({ x, z, y: heightAt(x, z) - v.size.y * scale * (0.12 + (1 - flatness) * 0.1) + size * sink * 0.2, rotY: rng() * Math.PI * 2, scale });
+    boulderPlacements.set(v, list);
+  }
   function addBoulder(x, z, size, flatness = 0.62, sink = 0.15) {
+    if (scanBoulders.length && flatness > 0.45) { placeScan(scanBoulders, x, z, size, flatness, sink); return; }
+    if (scanSlabs.length && flatness <= 0.45) { placeScan(scanSlabs, x, z, size, flatness, sink); return; }
     const g = new THREE.IcosahedronGeometry(1, 2);
     const p = g.getAttribute('position');
     const cols = [];
@@ -172,6 +199,7 @@ export function createTerrain(scene, { dam, location }) {
     const z = dam.shoreZ(x) + 0.7 - rng() * 2.6;
     addBoulder(x, z, 0.35 + rng() * 0.9, 0.22 + rng() * 0.2, 0.02);
   }
+  for (const [variant, placements] of boulderPlacements) plantVariant(scene, variant, placements);
   if (rockGeos.length) {
     const merged = mergeGeometries(rockGeos);
     merged.computeVertexNormals();
@@ -271,7 +299,7 @@ function createMountains(scene, horizon, seed, farShore) {
       uLightColor: { value: new THREE.Color(1, 1, 1) }, uBase: { value: new THREE.Color(spec.base) },
       uHaze: { value: spec.haze }, uDay: { value: 1 },
     };
-    const mat = new THREE.ShaderMaterial({ uniforms, vertexShader: mountainVertex, fragmentShader: mountainFragment, side: THREE.DoubleSide, fog: false });
+    const mat = GPU.on ? GPU.nodes.mountainMaterial(uniforms) : new THREE.ShaderMaterial({ uniforms, vertexShader: mountainVertex, fragmentShader: mountainFragment, side: THREE.DoubleSide, fog: false });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.frustumCulled = false;
     mesh.renderOrder = -5;

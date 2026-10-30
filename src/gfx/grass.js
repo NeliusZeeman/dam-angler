@@ -1,6 +1,6 @@
 import * as THREE from '../../vendor/three.module.js';
 import { makeRng, seedFromString } from './noise.js';
-import { addWindToMaterial } from './wind.js';
+import { addWindToMaterial, prepareWindInstances } from './wind.js';
 
 
 // A single blade, 1 unit tall: tapered, curving slightly forward, dark at
@@ -104,11 +104,14 @@ export function createGrass(scene, { dam, terrain, location, exclude = () => fal
   }
 
   // ─── Blades, grown in tufts ───────────────────────────────────────────────
+  // Planted in square patches, each its own instanced mesh, so patches out
+  // of view aren't drawn at all and far ones are thinned (see update).
   const bladeMat = addWindToMaterial(new THREE.MeshStandardMaterial({
     color: SEASON_GRASS.summer, vertexColors: true, roughness: 0.85, side: THREE.DoubleSide,
   }), { instanced: true, amount: 1 });
-  const blades = new THREE.InstancedMesh(bladeGeometry(), bladeMat, bladeCount);
-  blades.userData.fullCount = bladeCount;
+  const bladeGeo = bladeGeometry();
+  const PATCH = 16;
+  const patchBlades = new Map(); // "i,j" -> [{ matrix, color }]
   let n = 0;
   while (n < bladeCount) {
     const spot = randomSpot(70);
@@ -124,20 +127,44 @@ export function createGrass(scene, { dam, terrain, location, exclude = () => fal
       dummy.rotation.set((rng() - 0.5) * 0.35, rng() * Math.PI * 2, (rng() - 0.5) * 0.35);
       dummy.scale.set(w, h, w);
       dummy.updateMatrix();
-      blades.setMatrixAt(n, dummy.matrix);
       const v = rng();
       color.setRGB(0.8 + v * 0.35, 0.85 + v * 0.25, 0.7 + v * 0.2);
       if (rng() < 0.18) color.setRGB(1.35, 1.15, 0.6); // sun-bleached blades
-      blades.setColorAt(n, color);
+      const key = `${Math.floor(x / PATCH)},${Math.floor(z / PATCH)}`;
+      if (!patchBlades.has(key)) patchBlades.set(key, []);
+      patchBlades.get(key).push({ matrix: dummy.matrix.clone(), color: color.clone() });
       n++;
     }
   }
-  blades.instanceMatrix.needsUpdate = true;
-  blades.instanceColor.needsUpdate = true;
-  blades.receiveShadow = true;
-  blades.frustumCulled = false;
-  blades.layers.set(1);
-  scene.add(blades);
+  const patches = [];
+  for (const list of patchBlades.values()) {
+    // Shuffled, so showing only the first part of a patch thins it evenly.
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    const mesh = new THREE.InstancedMesh(bladeGeo, bladeMat, list.length);
+    list.forEach((b, i) => { mesh.setMatrixAt(i, b.matrix); mesh.setColorAt(i, b.color); });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.instanceColor.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    mesh.boundingSphere.radius += 0.6; // room for the blades to sway
+    mesh.userData.fullCount = list.length;
+    prepareWindInstances(mesh);
+    mesh.receiveShadow = true;
+    mesh.layers.set(1);
+    scene.add(mesh);
+    patches.push(mesh);
+  }
+  // Out past ~25 m a blade is a pixel or two: draw fewer of them, down to a
+  // sixth of the patch on the far slopes.
+  function update(camera) {
+    for (const mesh of patches) {
+      const d = mesh.boundingSphere.center.distanceTo(camera.position);
+      const keep = d < 25 ? 1 : Math.max(0.16, 1 - (d - 25) / 70);
+      mesh.count = Math.ceil(mesh.userData.fullCount * keep);
+    }
+  }
 
   // ─── Wildflowers ──────────────────────────────────────────────────────────
   const FLOWERS = 2600;
@@ -159,6 +186,7 @@ export function createGrass(scene, { dam, terrain, location, exclude = () => fal
     flowerSpots.push(rng());
   }
   flowers.instanceMatrix.needsUpdate = true;
+  prepareWindInstances(flowers);
   flowers.layers.set(1);
   flowers.frustumCulled = false;
   scene.add(flowers);
@@ -176,5 +204,5 @@ export function createGrass(scene, { dam, terrain, location, exclude = () => fal
   }
   setSeason('summer');
 
-  return { blades, flowers, setSeason };
+  return { patches, flowers, setSeason, update };
 }

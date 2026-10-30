@@ -1,6 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { makeRng, seedFromString } from './noise.js';
 import { glowTexture } from './pixelTextures.js';
+import { GPU } from './gpu.js';
 
 // African fish eagle: dark chestnut body, white head/chest/tail, broad
 // fingered wings. Built facing +z.
@@ -119,6 +120,21 @@ export function createWildlife(scene, { dam, location }) {
   }));
   fireflies.frustumCulled = false;
   scene.add(fireflies);
+  // WebGPU draws points a single pixel wide, so there each firefly is a
+  // small glowing sprite instead (moved from the same numbers).
+  const ffSprites = [];
+  if (GPU.on) {
+    fireflies.visible = false;
+    fireflies.material.visible = false;
+    const map = fireflies.material.map;
+    for (let i = 0; i < FIREFLIES; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      sprite.scale.setScalar(0.22);
+      sprite.visible = false;
+      scene.add(sprite);
+      ffSprites.push(sprite);
+    }
+  }
 
   const tmp = new THREE.Vector3();
 
@@ -176,6 +192,13 @@ export function createWildlife(scene, { dam, location }) {
       ffGeo.attributes.position.needsUpdate = true;
       ffGeo.attributes.color.needsUpdate = true;
     }
+    ffSprites.forEach((sprite, i) => {
+      sprite.visible = fireflies.visible;
+      if (!sprite.visible) return;
+      sprite.position.fromArray(ffPos, i * 3);
+      sprite.material.color.fromArray(ffCol, i * 3);
+    });
+    if (ffSprites.length) fireflies.visible = false;
   }
 
   return { update };

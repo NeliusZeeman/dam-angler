@@ -129,7 +129,8 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     // swim out on its own; keep hauling and it stays put.
     if (snag) {
       speed = 0;
-      snag.ease = holding ? 0 : snag.ease + dt;
+      // Winding undoes the easing off, but a tap or two doesn't start it over.
+      snag.ease = holding ? Math.max(0, snag.ease - dt * 0.25) : snag.ease + dt;
       if (snag.ease >= L().snagEaseSeconds && rng() < L().snagFreeChance * dt) {
         snag = null;
         coverTarget = null;
@@ -151,7 +152,7 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
       heading = holding ? away + (rng() * 2 - 1) * style.swing : rng() * Math.PI * 2;
       // A fish that lives in cover makes for the nearest weed, reeds or timber.
       coverTarget = null;
-      if (seeksCover && progress < 0.85 && rng() < 0.7) {
+      if (seeksCover && progress < 0.85 && rng() < L().coverChance) {
         const c = findCover();
         if (c) { coverTarget = c; heading = Math.atan2(c.z - z, c.x - x); }
       }
@@ -165,10 +166,12 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
       diff = Math.atan2(Math.sin(awayFromCover - heading), Math.cos(awayFromCover - heading));
       if (Math.abs(diff) < 0.6) coverTarget = null;
     }
-    const running = runLeft > 0;
+    // Beaten: no more runs -- it rolls over and comes in on the reel.
+    const beaten = progress >= 0.98;
+    const running = runLeft > 0 && !beaten;
     runLeft -= dt;
     // Tiring: the further the fight goes, the weaker its runs.
-    const tire = 1 - 0.55 * Math.min(1, progress);
+    const tire = beaten ? 0.15 : 1 - 0.7 * Math.min(1, progress);
     const targetSpeed = style.runSpeed * strength * tire * (running ? 1 : 0.35);
     speed += (targetSpeed - speed) * Math.min(1, dt * 4);
 
@@ -193,7 +196,7 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     if (dist > before) newDist = before + (dist - before) * Math.max(0.3, Math.min(1.6, 1.6 - 1.8 * drag));
     // A heavy fish gives up line more slowly against the reel -- and winding
     // against a slipping drag barely gains any: the spool just turns.
-    const reelGain = slipping ? 0.35 : 1;
+    const reelGain = slipping && !beaten ? 0.35 : 1;
     if (holding) newDist = Math.max(MIN_DISTANCE, newDist - (reelSpeed * reelGain / (0.55 + 0.45 * strength)) * dt);
     newDist = Math.min(newDist, ENGINE.motion.lineOnSpool);
     if (newDist !== dist) {
@@ -205,7 +208,7 @@ export function createFightMotion({ start, rod, style = DEFAULT_STYLE, isWater =
     // Reached the cover: snagged.
     if (seeksCover && !snag && distance > L().snagMinDistance) {
       const kind = coverAt(x, z);
-      if (kind && (coverTarget || rng() < 0.3 * dt)) { snag = { kind, ease: 0 }; coverTarget = null; }
+      if (kind && (coverTarget || rng() < L().straySnagChance * dt)) { snag = { kind, ease: 0 }; coverTarget = null; }
     }
 
     // Depth: holds deep while strong, comes up as it tires.

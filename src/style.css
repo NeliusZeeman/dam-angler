@@ -91,6 +91,12 @@ body.touch .loss-report { top: 96px; }
 .rig-check { margin: 8px 0 4px; padding: 7px 10px; border-radius: 6px; font-size: 12px; line-height: 1.35; display: flex; flex-direction: column; gap: 2px; }
 .rig-check.ok { background: rgba(90, 170, 90, 0.18); color: #bfe6b0; }
 .rig-check.warn { background: rgba(220, 150, 40, 0.18); color: #ffd79a; }
+.starter-kits { margin: 6px 0 2px; font-size: 12px; }
+.starter-kits small { opacity: 0.7; }
+.kit-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.kit-btn { padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.08); color: inherit; font: inherit; font-size: 12px; cursor: pointer; min-height: 32px; }
+.kit-btn:hover { background: rgba(255, 255, 255, 0.16); }
+.kit-btn.on { background: rgba(90, 170, 90, 0.3); border-color: #8fd08f; }
 .rig-check.warn span::before { content: '• '; }
 .shop-row button { background: #2f6b3a; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
 .shop-row button:disabled { background: #555; cursor: not-allowed; opacity: 0.6; }
@@ -590,3 +596,68 @@ body.touch .shop-card button { min-height: 36px; }
 .comp-table td:last-child, .comp-table th:last-child { text-align: right; }
 .comp-table tr.me td { background: rgba(255, 207, 122, 0.12); color: #ffe08a; font-weight: 700; }
 .trophy { font-size: 12px; }
+
+/* Level badge in the top bar: the level, and a thin bar to the next one. */
+#hud-level { display: inline-flex; flex-direction: column; gap: 3px; min-width: 64px; }
+#hud-level b { font-weight: 700; color: #ffd27a; white-space: nowrap; }
+#hud-level i { display: block; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+#hud-level u { display: block; height: 100%; width: 0; background: #ffb54a; transition: width 0.6s ease; }
+
+/* Gear above your level: still on show, with the level it needs. */
+.shop-card { position: relative; }
+.card-level { position: absolute; top: 6px; right: 6px; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 10px; background: rgba(255, 181, 74, 0.18); color: #ffd27a; }
+.card-level.locked { background: rgba(0, 0, 0, 0.55); color: #ffb54a; }
+.shop-card.locked .card-img, .shop-card.locked .card-name, .shop-card.locked .card-spec { opacity: 0.55; }
+
+/* Fishing-spot picker: sketch map of the dam and the spot list. */
+.peg-picker { display: grid; grid-template-columns: minmax(220px, 1fr) 1.3fr; gap: 14px; margin: 6px 0 14px; text-align: left; }
+.peg-map { background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; padding: 8px; }
+.peg-map svg { width: 100%; height: auto; display: block; }
+.peg-map small { display: block; opacity: 0.7; margin-top: 4px; font-size: 11px; }
+.map-water { fill: #2d5a6a; stroke: #8fb9a0; stroke-width: 0.8; stroke-linejoin: round; }
+.map-label { fill: #d8d2b8; font-size: 3.2px; text-anchor: middle; opacity: 0.85; }
+.map-peg { cursor: pointer; }
+.map-peg circle { fill: #f2b84b; stroke: #1b1b1b; stroke-width: 0.6; }
+.map-peg.selected circle { fill: #ff7b2e; stroke: #fff; stroke-width: 0.8; }
+.map-peg text { fill: #1b1b1b; font-size: 4px; font-weight: 700; text-anchor: middle; pointer-events: none; }
+.peg-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
+.peg-card { text-align: left; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; padding: 8px 10px; color: inherit; cursor: pointer; font: inherit; }
+.peg-card.selected { border-color: #ff9a3e; background: rgba(255, 154, 62, 0.14); }
+.peg-card p { margin: 4px 0 0; font-size: 12px; opacity: 0.85; }
+@media (max-width: 700px) { .peg-picker { grid-template-columns: 1fr; } .peg-list { max-height: none; } }
+
+/* F3: frame rate, sharpness and graphics chip. */
+.perf-overlay {
+  position: fixed; left: 8px; bottom: 8px; z-index: 50; pointer-events: none;
+  font: 12px/1.4 ui-monospace, Consolas, monospace; color: #e8f2e8; white-space: pre;
+  background: rgba(0, 0, 0, 0.55); padding: 4px 8px; border-radius: 4px;
+}
+
+/* Get in / out of your boat, helm or deck, the rod rack. */
+.boat-bar { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 30; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100vw - 32px); pointer-events: none; }
+.boat-btn { pointer-events: auto; padding: 10px 18px; min-height: 44px; border-radius: 22px; border: 1px solid rgba(255, 255, 255, 0.4); background: rgba(20, 60, 90, 0.82); color: #fff; font: 600 14px/1.2 system-ui, sans-serif; cursor: pointer; }
+.boat-btn:hover { background: rgba(30, 90, 130, 0.9); }
+.boat-btn.hidden { display: none; }
+/* Phones: above the drag buttons and the stick. */
+body.touch .boat-bar { bottom: calc(232px + env(safe-area-inset-bottom)); }
+@media (max-height: 500px) { body.touch .boat-bar { bottom: calc(120px + env(safe-area-inset-bottom)); } }
+
+/* The boat's own rods. */
+.rack-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; box-sizing: border-box; padding: 14px 16px 16px; border-radius: 12px; background: rgba(14, 30, 42, 0.95); border: 1px solid rgba(255, 255, 255, 0.25); color: #e8eef0; font: 14px/1.35 system-ui, sans-serif; }
+.rack-panel.hidden { display: none; }
+.rack-head { display: flex; align-items: center; justify-content: space-between; }
+.rack-head h3 { margin: 0; font-size: 17px; text-transform: capitalize; }
+.rack-close { width: 44px; height: 44px; border: 0; background: none; color: #fff; font-size: 26px; cursor: pointer; }
+.rack-note { margin: 4px 0 10px; color: #b9c8cf; font-size: 13px; }
+.rack-list { display: grid; gap: 8px; }
+.rack-card { padding: 10px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.1); }
+.rack-card.using { border-color: #e0b94a; background: rgba(224, 185, 74, 0.12); }
+.rack-name { font-weight: 700; font-size: 15px; }
+.rack-for { color: #f0cf6a; font-size: 13px; margin: 2px 0 4px; }
+.rack-blurb { font-size: 13px; }
+.rack-gear { color: #9fb2ba; font-size: 12px; margin-top: 4px; }
+.rack-card button { margin-top: 8px; min-height: 40px; padding: 8px 16px; border-radius: 20px; border: 0; background: #2f7d4f; color: #fff; font: 600 14px system-ui, sans-serif; cursor: pointer; }
+.rack-card button:disabled { background: rgba(255, 255, 255, 0.15); cursor: default; }
+.rack-baits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rack-card .rack-bait { margin: 0; min-height: 36px; padding: 6px 12px; background: rgba(255, 255, 255, 0.12); font-weight: 500; font-size: 13px; }
+.rack-card .rack-bait.on { background: #e0b94a; color: #1a1a1a; font-weight: 700; }

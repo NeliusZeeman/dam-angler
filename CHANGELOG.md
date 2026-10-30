@@ -3,6 +3,254 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Boat rods and walking the deck (built locally, not live yet)
+
+- **The boat's own rods** (`src/boatRods.js`): a rack of six outfits, each rigged for one kind of fish — bass, carp, yellowfish & trout, barbel, tigerfish and kurper. The bass boat, tiger boat and kayak each carry their own set. Fish what a rod is rigged for and that fish pays **+50% credits and +50% XP**. Each comes fully rigged: reel, line, hook and its own baits, picked in the rack (the bass rod has a soft plastic, spinner, crankbait, jig and frog). Nothing from your own rig comes across, so a mieliebom no longer ends up on the bass rod. The rods stay on the boat: step ashore and you're back on your own rod and rig, and your saved gear never changes.
+- **Walk the deck** (H, or the "Walk the deck" button): the anchor drops and W/A/S/D (or the stick) walks you round the boat, inside the gunwales and round the consoles. The rod rack is at the stern (R, or "Boat rods"). In a kayak the rods are behind your seat. H takes the helm again.
+- **Server pays it too**: a catch sends its boat rod. The server only accepts it on water where you'd have that boat, then works out the bonus itself. The extra XP is stored per catch (migration `010_boat_rods.sql`, `catches.boat_pts`).
+- Phones: the boat buttons sit above the drag control.
+- Tests: `test/boatRods.test.js`, plus a server test for boat-rod payouts.
+
+## v2 — Real boats, modelled in Blender (built locally, not live yet)
+
+- **Every boat rebuilt from scratch in Blender** (`tools/build-boats.mjs`):
+  bass boat, tiger boat, fishing kayak, ski boat, pontoon, houseboat and
+  yacht. Proper V-bottom hulls with chines, spray rails and a rising bow;
+  carpeted decks with rod lockers and livewells; consoles with wheel,
+  gauges and fish finder; bucket seats; outboards with a spinning prop;
+  bow trolling motor; rods in holders; shade canopy on the tiger boat,
+  wakeboard tower on the ski boat, sails on the yacht. Corner shading
+  baked in Cycles. Each boat its own paint (metal-flake bass boats,
+  painted aluminium tiger boats, bright kayaks); shiny paint and chrome
+  reflect the sky.
+- The live crews stand and sit in the boats' real seats; the kayak has a
+  real paddler with both hands on a working paddle.
+- **White-water wake** trails behind your boat and the ski boats.
+- Low graphics keeps the old simple boats.
+
+## v2 — Starter kits, your own boat, and a living campsite (built locally, not live yet)
+
+- **Starter kits**: five free kits everyone owns from the start (old saves
+  get them too): General, **Bass** (Sensation Rapid Spin, spinning reel,
+  light fluorocarbon, weedless hooks, soft plastic, spinnerbait), **Carp**
+  (Adrenalin Eco Tech 3.66 m, budget baitrunner, carp mono, hair rigs,
+  mielies, mieliebom), Fly, and Barbel & Tiger. One tap in the Tackle Box
+  rigs a whole kit. The server hands them out too, and they don't count
+  against the guest-import limit.
+- **Your own boat** on dams that allow boats: a bass boat (a tiger boat on
+  tigerfish water, a kayak where only paddling is allowed), tied up off the
+  slipway or beside your spot. G or the on-screen button gets in and out;
+  W/S throttle, A/D steer, Shift full speed. It rides the waves, leaves a
+  wake, bumps off the bank and stands; the anchor drops while your line is
+  out, and you step ashore only near the bank or a stand.
+- **Real people at the camps**: men, women and kids with real faces, skin
+  and clothes (Microsoft Rocketbox, MIT licence, converted and retargeted in
+  Blender) walking, sitting, drinking, eating boerewors rolls, laughing and
+  chatting. The braai master turns the meat with tongs, has a beer and
+  fetches another from the cooler box; the kids run about.
+- **The anglers really fish**: they wait in their chairs behind the rod
+  pods, run for the rod on a take, play the fish in (rod bending and
+  pumping, line cutting the water, splashes as it comes close), land it,
+  hold it up for a photo while the camp claps and cheers, slip it back,
+  cast out again and sit down. You hear about it when you're nearby.
+- **Boat crews too**: anglers on the bass and tiger boats cast and work
+  lures and now and then hook one; the rest sit back.
+- **Real fire**: the braai flames are a fire simulated in Blender
+  (Mantaflow), rendered frame by frame and played back over the coals,
+  with boerewors and chops on the grid.
+- Rebuild: `python tools/fetch-rocketbox.py`, then
+  `node tools/build-campers.mjs` (people, motions and the fire).
+  Previews: /tools/people-preview and /tools/people-game-preview.
+
+## v2 — Smoother frames and Blender-rendered Tackle Box (built locally, not live yet)
+
+- **Smoother**: the water's mirror image and the sun's shadows are redrawn
+  every other frame (shadows every frame while you move); every graphics
+  program is built before the first frame, so nothing hitches the first
+  time it comes into view; and the picture's sharpness now follows the
+  frame rate the whole time (down to half when it struggles, back up when
+  there's headroom) instead of being set once at the start. Draw calls per
+  frame down about a third.
+- **F3** shows frames a second, frame time, sharpness and which graphics
+  chip and renderer the game is on.
+- **Tackle Box pictures rendered in Blender** (Cycles, on the graphics
+  card): every rod, reel, combo, line, hook, lure, bait and fish finder,
+  lit like a product photo -- the same models and framing as before.
+  Pipeline: `node tools/gear-export-server.mjs` + open
+  http://localhost:5191/tools/gear-export.html (exports the models), then
+  `node tools/build-gear-pictures.mjs`. Anything without a picture is still
+  photographed in the game as before.
+
+## v2 — Photo-scanned scenery and Blender people (built locally, not live yet)
+
+- **Real scanned ground**: photo-scanned grass (lush in KZN and the
+  Lowveld, dry tufts in the Karoo and Cape, Highveld veld elsewhere) and bank
+  soil (damp sand, dry Vaal silt, red Loskop laterite) from Poly Haven
+  (CC0), tiled at their real size.
+- **Real boulders**: scanned Namaqualand boulders and stones in place of the
+  built rocks, on the land and along the waterline.
+- **Undergrowth**: wild rooibos and other shrubs, weeds along the margin,
+  stumps, fallen logs and dry branches on every bank (more on higher
+  settings), drawn patch by patch so what's behind you costs nothing.
+- **Camps**: white plastic monobloc chairs, a drum braai, a picnic table
+  with a lantern, a bread crate and a bucket -- all scans -- and people
+  modelled in Blender (smooth bodies, bucket hats and caps, mixed skin
+  tones and outfits; sitting, standing, and with a rod).
+- **Bark and planks**: scanned blue-gum and willow bark on the trees, and
+  weathered scanned planks on the jetties.
+- Pipeline: `python tools/fetch-scans.py` (downloads ~88 MB of scans into
+  art-source/, not in git) then `node tools/build-scenery.mjs` (Blender
+  shrinks them for the browser into assets/scenery, ~19 MB; a dam loads only
+  what it uses). Low graphics keeps the old built scenery.
+- New test: every scenery file the game asks for is present.
+
+## v2 — Fish remodelled in Blender (built locally, not live yet)
+
+- **All 16 species rebuilt in Blender** (tools/blender/build_fish.py, run by
+  `node tools/build-fish-models.mjs`; models in assets/fish3d/*.glb). Each
+  family has its real outline from body depth vs length: humped carp, deep
+  bluegill disc, deep tilapia, torpedo tigerfish, long bass with a big
+  jutting jaw, slim trout and yellowfish, long flat-headed catfish. Shaped
+  in: curved gill covers, mouths and fleshy lips (underslung on carp and
+  yellowfish), eye sockets, a smoothed (subdivided) skin, ribbed fins,
+  pectorals standing off the flank, wet eyes with iris and pupil, barbels
+  and tigerfish teeth. A light version is used for the fish swimming out in
+  the dam.
+- Same skins, swimming and sizes as before, on every graphics setting except
+  Low (phones keep the light built-in fish). Only the dam's own species are
+  loaded (about 2 MB); if a file doesn't arrive the built-in fish is used.
+- New test: every species has its model, with the parts and layout the game
+  expects.
+
+## v2 — WebGPU "Ultra+" graphics and three.js r186 (built locally, not live yet)
+
+- **3D engine updated**: three.js r160 to r186 (Sept 2026). All graphics
+  settings run on it; soft shadows now come from the sun's shadow blur.
+- **Ultra+ (WebGPU)** in Settings > Graphics: the whole look rebuilt as
+  three.js node materials running on WebGPU -- sky, clouds, stars and moon,
+  mist, far hills, ground, swaying grass/reeds/leaves, the water, fish
+  swimming, the landing net, and the picture pipeline. On top of Ultra:
+  - water you can see into: the bank, weed, timber and your float's stem
+    are seen through the surface, bent by the ripples, and fade with real
+    depth (clear Jozini shows deeper than muddy Bronkies or the Vaal);
+  - ambient occlusion: soft contact shadow under rocks, jetty planks,
+    trunks and in the reeds;
+  - FXAA edge smoothing, and a capped bloom so water glitter sparkles
+    without washing out the picture.
+  Fetched only when picked (the WebGPU build is ~2 MB); falls back to Ultra
+  with a note if the browser can't do WebGPU. Auto never picks it.
+- **Grass in patches** (all settings): planted in 16 m patches so patches
+  behind you aren't drawn and far ones are thinned. Ultra+ went from about
+  32 ms to 18 ms a frame on an Intel Iris Xe test machine.
+- Fireflies are glow sprites on Ultra+ (WebGPU draws points 1 pixel wide).
+- Server accepts the new `ultraplus` setting (tested).
+
+## v2 — Fishing spots, camps, boats, waves, graphics settings (built locally, not live yet)
+
+- **Fishing-spot maps**: the six big dams each have 3-4 named spots from SA
+  forums and resort pages (Harties: Schoemansville, Kommandonek, Ifafi &
+  Meerhof, Crocodile River inlet; Vaal: Deneysville, Oranjeville camp, Vaal
+  Marina timber; Jozini: Nkonkoni camp, Lebombo gorge, Pongola inlet;
+  Bronkies: northern jetties, estate slipway, camping bay; Loskop: Forever
+  Resort, Olifants inlet, wall rocks; Roodeplaat: north-shore campsite, reed
+  bay, the wall). Pick one on a sketch map in New Game. Each is its own
+  scene (bank, reeds, weed, timber, rocks, depth, water) and nudges what's
+  caught there. The last spot is remembered (also online).
+- **Camps** where there really are campsites: dome tents, a gazebo, camp
+  chairs round a braai with fire, smoke and a lantern at night, a cooler
+  box, a bakkie (a caravan at the bigger resorts), people, and carp rods on
+  pods at the water.
+- **Boats** only where they're allowed: yachts, ski boats, bass boats and a
+  party pontoon at Harties; yachts, ski and bass boats on the Vaal; tiger
+  boats and a houseboat at Jozini; kayaks and sail at Roodeplaat
+  (no motors). They ride the waves and leave rings behind them. Slipways
+  with a bakkie and trailer, and moored boats, at spots that have them.
+- **Wind waves**: the dam gets a chop as the wind picks up (about 10 cm at
+  30 km/h), running with the wind; the float and the net ride them.
+- **Fuller trees**: rounder, denser crowns on the gums and acacias; more
+  willow strands.
+- **Graphics setting: Low / Medium / High / Ultra** (Settings). Ultra: full
+  screen resolution, 160k grass blades, 4096 shadows over a wider area,
+  sharper reflections, fuller trees, 8x anti-aliasing -- it loads slower and
+  wants a good graphics card.
+- **Bait sense**: bass, tigers and largemouth yellowfish next to never take
+  mieliebom, boilies, mielies, bread or dough; carp and mudfish next to
+  never hit spinners, crankbaits or frogs. Bass take worms now and then.
+- **Gear check**: every rod, reel, line and hook was fought against the fish
+  a player at its level meets, in a matched rig -- none loses fish quickly.
+  The starter size-10 hook is a bit stronger (3.2 kg) and hooks need 3.5 s
+  of real overload before they can open.
+
+## v2 — XP, levels and boss fish (built locally, not live yet)
+
+- **XP and levels**: every new angler starts at level 1 with 0 XP. Landing
+  fish earns XP -- 10 per kg, plus bonuses for your first of a species, a
+  personal best, a trophy, a boss, releasing a fish, and a top-3 place in a
+  monthly competition. Each level needs more XP than the last (about 30 fish
+  to level 6, 95 to level 10, 180 to level 14). The level and a bar to the
+  next one sit beside your credits; the title card shows level and XP.
+- **Gear by level**: everything stays on show in the tackle box; anything
+  above your level is faded with a padlock and the level it needs. The
+  server checks it too (online players can't buy around it).
+- **Fish follow your level**: beginners hook small, easy fish; the biggest
+  you can hook grows each level (full size range from about level 21), and
+  big ones come more often as you climb.
+- **BOSS fish**: about 1 bite in 25 is a boss -- the top of your level's
+  range or past it -- with a warning, a BOSS badge on the catch card and
+  +120 XP. The server only accepts a boss that's a real lump for its species.
+- **Gentler fight**: a jumping fish you keep winding on throws the hook far
+  less often (at most 4 in 10, was up to 8 in 10 -- small bass were the
+  big losers); winding while a fish runs jolts the line less, and a cheap
+  reel's drag sticks less often. Big fish on light line still need care.
+- **Mist** drifts with the wind properly: it no longer swings or jumps when
+  the wind turns, barely moves on a still morning, drifts along in a breeze,
+  thins out and blows away when the wind gets up, churns and changes shape
+  as it goes, and stretches into streaks along a stronger wind.
+- **Fix**: a missing import in the boss-fish code crashed the game on every
+  bite (caught while testing, before anyone played it).
+- Every number is tunable in the admin area (Levels section). Server:
+  migration 009 adds the boss column; level worked out from the catches.
+
+## v2 — Real landing net and living water (built locally, not live yet)
+
+- **Landing net**: a proper 42" triangular carp net — two carbon arms, a
+  spreader block, a cord across the front and a 1.8 m handle up to your
+  hand. The knotted mesh bag sags, sways and fades into murky water. It
+  slides in beside a beaten fish, sits half-sunk, and on a good scoop lifts
+  the fish out curled in the bag.
+- **Water**: real rings spread in the surface (they bend the reflections)
+  from splashes, a nodding float, rising fish and spray drops; a fish
+  fighting on top churns the water white; wind gusts drift darker rough
+  patches across the dam with glassy slicks between. Splash spray is a
+  crown of big drops and fine mist instead of eight white balls.
+- **Fish close up** (on the line, in the net, in your hands): raised scales
+  under a wet, glossy slime coat; silvery fish (yellowfish, tigers, trout)
+  shimmer with a hint of rainbow. Barbel get leathery skin, no scales.
+- **The fight on top**: the fish rolls onto its flank, kicks and shakes its
+  head with its back out of the water; water streams off it in a jump.
+- **Willows** weep: each strand arches out from the crown and falls in a
+  curtain, instead of straight up-and-down cards.
+- **Sun rays** stream out past trees, hills and your rod when you look
+  towards a low sun (off on the Low graphics setting).
+- **The fight and the drag** (line snapped far too easily): winding steadily
+  against a slipping drag no longer breaks the line -- the drag now does
+  its job. A loose drag lets even a fish twice the line's rating take line
+  instead of snapping it; the price is a long fight (a 9 kg barbel on
+  4.5 kg line at 15% drag: about a minute). What still breaks line: a drag
+  screwed down tight, winding while the fish runs and tears line off (a
+  cheap starter drag sometimes sticks on a lunge), and line fraying when a
+  fish heavier than its rating keeps it loaded hard for a long time. New
+  tunables: lungeOver, stickChance, lineWear, wearFrom, slipGain.
+- **No more fish lost in the first seconds**: a fish in weed or reeds no
+  longer snaps the line when you wind -- the drag slips, as it would; snags
+  are rarer (a run bolts for cover 30% of the time, not 70%) and you get 20 s
+  to free one (tapping no longer starts the count over). A hook only opens
+  after 2 s of real overload, judged on the pull that actually reaches it.
+  The line can never carry more than the fish can pull (a 1.5 kg bass can't
+  break 4.5 kg line). Tired fish pull less, and a beaten fish stops running
+  and comes in on the reel. Tunables: coverChance, straySnagChance,
+  hookStrainSeconds, hookOpenRate, shockFactor, tireRelief.
+
 ## v2 — Admin area and game tuning (built locally, not live yet)
 
 - **Admin area** at `/admin` (admins only; the role is set on the server

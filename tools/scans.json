@@ -1,0 +1,37 @@
+{
+  "_about": "Photo-scanned textures and models from Poly Haven (polyhaven.com, all CC0). tools/fetch-scans.py downloads them into art-source/ (not in git); tools/blender/build_scenery.py turns them into the game's assets/scenery files.",
+  "textures": {
+    "grass": "sparse_grass",
+    "grassLush": "leafy_grass",
+    "grassDry": "withered_grass",
+    "sand": "damp_sand",
+    "mudDry": "brown_mud_dry",
+    "mudWet": "brown_mud_02",
+    "redSoil": "red_laterite_soil_stones",
+    "rock": "rock_boulder_dry",
+    "barkGum": "bark_bluegum",
+    "barkAcacia": "fever_tree_bark",
+    "barkWillow": "bark_willow",
+    "planks": "weathered_planks"
+  },
+  "models": {
+    "boulderA": "namaqualand_boulder_02",
+    "boulderB": "namaqualand_boulder_04",
+    "boulderC": "namaqualand_boulder_05",
+    "rockSmall": "rock_07",
+    "stones": "stone_01",
+    "bushRooibos": "wild_rooibos_bush",
+    "shrubA": "shrub_02",
+    "shrubB": "shrub_04",
+    "weed": "weed_plant_02",
+    "stump": "tree_stump_01",
+    "deadTrunk": "dead_tree_trunk",
+    "branches": "dry_branches_medium_01",
+    "chair": "plastic_monobloc_chair_01",
+    "picnicTable": "wooden_picnic_table",
+    "braaiDrum": "barrel_stove",
+    "crate": "plastic_crate_02",
+    "bucket": "wooden_bucket_01",
+    "lantern": "wooden_lantern_01"
+  }
+}

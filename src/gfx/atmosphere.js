@@ -1,6 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { NOISE_GLSL } from './noise.js';
 import { TIME_OF_DAY_PHASES } from '../environment.js';
+import { GPU } from './gpu.js';
 
 // One look per phase, taken as the look at the *middle* of that phase; the
 // frame-by-frame state blends between neighbours, so the sun really moves
@@ -194,7 +195,7 @@ export function createSky(scene) {
     uSunVis: { value: 1 },
     uMoonVis: { value: 0 },
   };
-  const material = new THREE.ShaderMaterial({
+  const material = GPU.on ? GPU.nodes.skyMaterial(uniforms) : new THREE.ShaderMaterial({
     uniforms, vertexShader: skyVertex, fragmentShader: skyFragment,
     side: THREE.BackSide, depthWrite: false, fog: false,
   });
@@ -218,15 +219,27 @@ void main() {
 }
 `;
 
+// The mist rides the wind: uDrift is how far the air has carried it (built
+// up a frame at a time, so a turning wind turns the drift instead of
+// jerking the whole bank), the low layer dragging slower over the water.
+// It churns as it goes (the noise is warped by a second, slowly changing
+// noise) and stretches into streaks along a stronger breeze.
 const mistFragment = /* glsl */`
-uniform float uTime, uMist, uLayer, uRadius;
+uniform float uTime, uMist, uLayer, uRadius, uWind;
 uniform vec3 uColor, uCenter;
-uniform vec2 uWindDir;
+uniform vec2 uWindDir, uDrift;
 varying vec3 vWorld;
 ${NOISE_GLSL}
 void main() {
-  vec2 p = vWorld.xz * 0.07 + uWindDir * uTime * 0.012 + uLayer * 7.3;
-  float n = fbm4(p) * 0.7 + fbm4(p * 2.7 - uTime * 0.02) * 0.3;
+  vec2 w = vWorld.xz - uDrift * (0.65 + 0.175 * uLayer);
+  // Wind-aligned: stretched along the wind as it picks up.
+  vec2 side = vec2(-uWindDir.y, uWindDir.x);
+  float stretch = 1.0 + min(uWind, 20.0) / 12.0;
+  vec2 p = vec2(dot(w, uWindDir) / stretch, dot(w, side)) * 0.07 + uLayer * 7.3;
+  // Slow churning: the pattern itself changes, it doesn't just slide.
+  vec2 warp = vec2(vnoise(p * 0.9 + uTime * 0.035), vnoise(p * 0.9 - uTime * 0.03 + 5.2)) - 0.5;
+  p += warp * 1.6;
+  float n = fbm4(p) * 0.7 + fbm4(p * 2.7 + warp * 2.0 - uTime * 0.015) * 0.3;
   float a = smoothstep(0.42, 0.85, n);
   float r = length(vWorld.xz - uCenter.xz) / uRadius;
   a *= 1.0 - smoothstep(0.85, 1.15, r);
@@ -242,12 +255,13 @@ export function createMist(scene, dam) {
     // A bank of mist lying on the water out in front of the angler.
     uCenter: { value: new THREE.Vector3(dam.spawn.x, 0, dam.shoreZ(dam.spawn.x) + 70) }, uRadius: { value: 140 },
     uWindDir: { value: new THREE.Vector2(1, 0) },
+    uDrift: { value: new THREE.Vector2() }, uWind: { value: 0 },
   };
   const layers = [];
   const geo = new THREE.PlaneGeometry(400, 320);
   geo.rotateX(-Math.PI / 2);
   [0.1, 0.38, 0.75].forEach((height, i) => {
-    const material = new THREE.ShaderMaterial({
+    const material = GPU.on ? GPU.nodes.mistMaterial(uniforms, i) : new THREE.ShaderMaterial({
       uniforms: { ...uniforms, uLayer: { value: i } },
       vertexShader: mistVertex, fragmentShader: mistFragment,
       transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
@@ -267,7 +281,7 @@ export function createMist(scene, dam) {
 const focus = new THREE.Vector3();
 const forward = new THREE.Vector3();
 
-export function applyAtmosphere({ skyUniforms, sunLight, hemiLight, scene, mist, camera, windDir }, atmos, elapsed) {
+export function applyAtmosphere({ skyUniforms, sunLight, hemiLight, scene, mist, camera, windDir, windSpeed = 0 }, atmos, elapsed) {
   skyUniforms.uTop.value.copy(atmos.top);
   skyUniforms.uHorizon.value.copy(atmos.horizon);
   skyUniforms.uSunDir.value.copy(atmos.sunDir);
@@ -302,7 +316,15 @@ export function applyAtmosphere({ skyUniforms, sunLight, hemiLight, scene, mist,
 
   if (mist) {
     mist.uniforms.uTime.value = elapsed;
-    mist.uniforms.uMist.value = atmos.mist;
+    // Carried along at a fraction of the wind (m/s from km/h) -- barely
+    // moving on a still morning. A stiff breeze thins it and blows it away.
+    const dt = Math.min(0.1, Math.max(0, elapsed - (mist.lastElapsed ?? elapsed)));
+    mist.lastElapsed = elapsed;
+    const kmh = windSpeed || 0;
+    if (windDir) mist.uniforms.uDrift.value.addScaledVector(windDir, (0.08 + (kmh / 3.6) * 0.3) * dt);
+    mist.uniforms.uWind.value = kmh;
+    const blownAway = 1 - 0.85 * THREE.MathUtils.smoothstep(kmh, 8, 25);
+    mist.uniforms.uMist.value = atmos.mist * blownAway;
     mist.uniforms.uColor.value.copy(atmos.fog).lerp(atmos.sun, 0.25).multiplyScalar(0.6 + atmos.day * 0.6);
     if (windDir) mist.uniforms.uWindDir.value.copy(windDir);
   }

@@ -38,6 +38,10 @@
       (build.modules || []).forEach(function (m) {
         imports[new URL(m, base).href] = new URL(m + tag, base).href;
       });
+      // The WebGPU build and its add-ons import three.js by these names.
+      imports['three'] = new URL('vendor/three.module.js' + tag, base).href;
+      imports['three/webgpu'] = new URL('vendor/three.webgpu.js' + tag, base).href;
+      imports['three/tsl'] = new URL('vendor/three.tsl.js' + tag, base).href;
       var map = document.createElement('script');
       map.type = 'importmap';
       if (nonce) map.nonce = nonce;

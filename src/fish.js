@@ -357,7 +357,7 @@ const TACKLE_AFFINITY = {
   'banded-tilapia': { 'dough-bait': 1.0 },
   mudfish: { 'dough-bait': 0.8, 'method-feeder': 1.0 },
   bluegill: { 'dough-bait': 0.8, 'method-feeder': 0.5, 'fly-damsel': 0.8 },
-  'largemouth-bass': { crankbait: 1.1, 'topwater-frog': 1.3, 'bass-jig': 1.2, 'rapala-minnow': 0.9, 'fly-damsel': 0.5, 'fly-walkers-killer': 0.6 },
+  'largemouth-bass': { crankbait: 1.1, 'topwater-frog': 1.3, 'bass-jig': 1.2, 'rapala-minnow': 0.9, 'fly-damsel': 0.5, 'fly-walkers-killer': 0.6, worm: 0.5 },
   'smallmouth-bass': { crankbait: 1.2, 'bass-jig': 1.2, 'rapala-minnow': 0.9 },
   // Liver catches the odd tiger (SA forums), but it's a barbel bait.
   tigerfish: { crankbait: 0.8, 'rapala-minnow': 1.2, sardine: 0.9, 'chicken-liver': 0.12 },
@@ -396,8 +396,11 @@ export function activityAt(species, timeOfDay) {
   return species.activeTimes?.includes(timeOfDay) ? 1 : 0.25;
 }
 
-export function randomWeightFor(species) {
-  return species.minWeightKg + Math.random() * (species.maxWeightKg - species.minWeightKg);
+// `skew` (levels.js sizeSkew): 1 = any size equally likely; above 1 mostly
+// small ones (a beginner), below 1 the big ones come more often.
+// `cap` (levels.js sizeCap): the share of the size range open to you.
+export function randomWeightFor(species, skew = 1, rng = Math.random, cap = 1) {
+  return species.minWeightKg + Math.pow(rng(), skew) * cap * (species.maxWeightKg - species.minWeightKg);
 }
 
 // The one that almost got away: about 1 bite in 300 is a trophy -- a fish
@@ -475,6 +478,22 @@ export function rollForBite({ species, waterTempC, equippedLureId, deltaSeconds,
 }
 
 // How well the current temp/bait/time/spot suits a species, 0..~2.4.
+// A bait a fish doesn't go for still gets the odd take (0.15) -- but some
+// pairings next to never happen: a bass doesn't pick up a mieliebom or a
+// boilie, and a carp doesn't chase a spinner or a crankbait.
+const PLANT_BAITS = new Set(['bread-bait', 'mielies', 'mieliebom', 'boilies', 'pop-up', 'method-feeder', 'dough-bait']);
+const HARD_LURES = new Set(['spinner', 'spoon-lure', 'crankbait', 'topwater-frog', 'bass-jig', 'rapala-minnow', 'soft-plastic']);
+const SHUNS = {
+  'largemouth-bass': [PLANT_BAITS, 0.02], 'smallmouth-bass': [PLANT_BAITS, 0.02],
+  tigerfish: [PLANT_BAITS, 0.02], 'largemouth-yellowfish': [PLANT_BAITS, 0.03],
+  'rainbow-trout': [PLANT_BAITS, 0.05], 'brown-trout': [PLANT_BAITS, 0.04],
+  'common-carp': [HARD_LURES, 0.02], 'mirror-carp': [HARD_LURES, 0.02], mudfish: [HARD_LURES, 0.02],
+};
+export function offBaitChance(speciesId, baitId) {
+  const shun = SHUNS[speciesId];
+  return shun && shun[0].has(baitId) ? shun[1] : 0.15;
+}
+
 export function suitability(species, { waterTempC, equippedLureId, timeOfDay = null, habitat = null, lureKind = null }) {
   const [minT, maxT] = species.tempRangeC;
   if (waterTempC < minT || waterTempC > maxT) return 0;
@@ -482,7 +501,7 @@ export function suitability(species, { waterTempC, equippedLureId, timeOfDay = n
   // `lureAffinity` for it (kurper will hit a spinner, just not often).
   const lureMultiplier = species.preferredLureIds.includes(equippedLureId)
     ? (species.lureAffinity?.[equippedLureId] ?? 1.0)
-    : 0.15;
+    : offBaitChance(species.id, equippedLureId);
   const timeMultiplier = activityAt(species, timeOfDay);
   const habitatMultiplier = habitat ? getHabitatMultiplier(species, { ...habitat, lureKind }) : 1;
   return lureMultiplier * timeMultiplier * habitatMultiplier;

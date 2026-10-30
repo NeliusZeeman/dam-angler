@@ -36,9 +36,10 @@ export const isTrophyWeight = (species, weightKg) => weightKg > species.maxWeigh
 // What one landed fish pays: its value on the gear it was caught on, the
 // wobble fixed by the catch's id, and triple for a trophy.
 // Kept (not released) pays ENGINE.landing.keepBonus more -- never for a
-// protected fish, which must go back.
-export function catchPayout({ species, weightKg, rod, line, hook = null, trophy = false, catchId, kept = false }) {
+// protected fish, which must go back. bonus: a boat rod on the fish it's
+// rigged for (boatRods.js).
+export function catchPayout({ species, weightKg, rod, line, hook = null, trophy = false, catchId, kept = false, bonus = 1 }) {
   const base = calculatePayout({ species, weightKg, rod, line, hook, rand: () => randomFromId(catchId) });
   const keep = kept && !species.protected ? ENGINE.landing.keepBonus : 1;
-  return Math.round(base * (trophy ? 3 : 1) * keep);
+  return Math.round(base * (trophy ? 3 : 1) * keep * bonus);
 }

@@ -31,7 +31,11 @@ const modules = [...walk(join(root, 'src')), ...walk(join(root, 'vendor'))]
   .sort();
 // Everything that makes up a release, for the fingerprint.
 const fingerprinted = [...modules, 'index.html', 'src/style.css']
-  .concat(existsSync(join(root, 'assets', 'fish')) ? readdirSync(join(root, 'assets', 'fish')).filter((f) => f.endsWith('.webp')).map((f) => `assets/fish/${f}`) : []);
+  .concat(existsSync(join(root, 'assets', 'fish')) ? readdirSync(join(root, 'assets', 'fish')).filter((f) => f.endsWith('.webp')).map((f) => `assets/fish/${f}`) : [])
+  .concat(existsSync(join(root, 'assets', 'fish3d')) ? readdirSync(join(root, 'assets', 'fish3d')).filter((f) => f.endsWith('.glb')).map((f) => `assets/fish3d/${f}`) : [])
+  .concat(['models', 'textures'].flatMap((d) => (existsSync(join(root, 'assets', 'scenery', d)) ? readdirSync(join(root, 'assets', 'scenery', d)).map((f) => `assets/scenery/${d}/${f}`) : [])))
+  .concat(existsSync(join(root, 'assets', 'people')) ? readdirSync(join(root, 'assets', 'people')).filter((f) => /\.(glb|json|webp|png)$/.test(f)).map((f) => `assets/people/${f}`) : [])
+  .concat(existsSync(join(root, 'assets', 'gear')) ? readdirSync(join(root, 'assets', 'gear')).filter((f) => f.endsWith('.webp')).map((f) => `assets/gear/${f}`) : []);
 
 const hash = createHash('sha1');
 for (const f of fingerprinted) {

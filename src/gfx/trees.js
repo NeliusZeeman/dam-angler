@@ -2,6 +2,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { makeRng, seedFromString } from './noise.js';
 import { addWindToMaterial } from './wind.js';
 import { barkTexture, willowStrandTexture, acaciaLeafTexture, gumLeafTexture } from './pixelTextures.js';
+import { scanTexture } from '../sceneryAssets.js';
 
 // Geometry accumulator: every tree of a kind is merged into one mesh per
 // material, so ~100 trees cost a handful of draw calls.
@@ -70,6 +71,27 @@ function addCard(b, center, right, up, canopyCenter, swayTop, swayBottom) {
   b.quad(ids[0], ids[1], ids[2], ids[3]);
 }
 
+// A bending leaf ribbon along a path (top first): a willow strand that
+// arches out from the crown and falls in a curtain. `side` is the half-width
+// direction; sway runs from swayTop at the root to 1 at the tip.
+function addRibbon(b, points, side, canopyCenter, swayTop) {
+  const n = points.length - 1;
+  let prev = null;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const p = points[i];
+    const normal = p.clone().sub(canopyCenter).normalize().lerp(UP, 0.3).normalize();
+    const sway = swayTop + (1 - swayTop) * t * t;
+    const v = 1 - t;
+    const row = [
+      b.vert(p.clone().sub(side), normal, 0, v, sway),
+      b.vert(p.clone().add(side), normal, 1, v, sway),
+    ];
+    if (prev) b.quad(row[0], row[1], prev[1], prev[0]);
+    prev = row;
+  }
+}
+
 function curve(a, b, lift, segments = 3) {
   const pts = [];
   for (let i = 0; i <= segments; i++) {
@@ -87,6 +109,22 @@ function taper(n, r0, r1) {
 
 // ─── Species ────────────────────────────────────────────────────────────────
 
+// How full the crowns are: more leaf on the better graphics settings.
+let LEAF = 1;
+const leafCount = (n) => Math.max(1, Math.round(n * LEAF));
+
+// A clump of leaf: cards turned every which way round a point, so the
+// foliage reads as a solid, rounded mass from any side.
+function addClump(b, c, size, canopyCenter, sway, rng, cards = 5) {
+  for (let k = 0; k < cards; k++) {
+    const yaw = rng() * Math.PI, tilt = (rng() - 0.5) * 1.6;
+    const right = v3(Math.cos(yaw), 0, Math.sin(yaw)).multiplyScalar(size * (0.4 + rng() * 0.2));
+    const up = v3(-Math.sin(yaw) * Math.sin(tilt), Math.cos(tilt), Math.cos(yaw) * Math.sin(tilt)).multiplyScalar(size * (0.35 + rng() * 0.2));
+    const cc = c.clone().add(v3((rng() - 0.5) * size * 0.5, (rng() - 0.5) * size * 0.4, (rng() - 0.5) * size * 0.5));
+    addCard(b, cc, right, up, canopyCenter, sway * 0.6, sway);
+  }
+}
+
 function buildWillow(bark, leaves, base, rng, scale, leanDir = null) {
   const lean = leanDir ?? rng() * Math.PI * 2;
   const leanAmt = (0.3 + rng() * 0.5) * scale;
@@ -102,24 +140,32 @@ function buildWillow(bark, leaves, base, rng, scale, leanDir = null) {
     const end = crown.clone().add(v3(Math.cos(a) * R * 0.7, 0.4 * scale + rng() * 0.6, Math.sin(a) * R * 0.7));
     addTube(bark, curve(top, end, 0.7 * scale), taper(4, 0.12 * scale, 0.035 * scale), 5);
   }
-  // Hanging strands over the whole dome; the ones near the top are short and
-  // drape over the crown, the ones round the rim sweep nearly to the ground.
-  const STRANDS = 150;
+  // Weeping curtains over the whole dome: each strand arches up and out
+  // from the crown, then falls. Near the top they're short and drape over
+  // the crown; round the rim they sweep nearly to the ground (or the water).
+  const STRANDS = leafCount(220);
   for (let i = 0; i < STRANDS; i++) {
     const a = rng() * Math.PI * 2;
     const e = Math.pow(rng(), 0.8) * 1.45;
     const out = v3(Math.cos(a), 0, Math.sin(a));
-    const attach = crown.clone().add(v3(out.x * Math.cos(e) * R, Math.sin(e) * R * 0.55, out.z * Math.cos(e) * R));
-    const drape = e > 1.0 ? 0.6 + rng() * 0.6 : (1.6 + rng() * 2.4) * (1 - e * 0.35);
+    const attach = crown.clone().add(v3(out.x * Math.cos(e) * R * 0.85, Math.sin(e) * R * 0.55, out.z * Math.cos(e) * R * 0.85));
+    const drape = e > 1.0 ? 0.7 + rng() * 0.7 : (1.8 + rng() * 2.6) * (1 - e * 0.35);
     let L = drape * scale;
-    L = Math.max(0.5, Math.min(L, attach.y - base.y - 0.35));
-    const w = (0.32 + rng() * 0.22) * scale;
-    const center = attach.clone().add(v3(out.x * 0.1, -L / 2 + 0.08, out.z * 0.1));
-    const up = v3(out.x * 0.08, L / 2, out.z * 0.08);
+    L = Math.max(0.6, Math.min(L, attach.y - base.y - 0.3));
+    const reach = (0.35 + rng() * 0.45) * scale * (1.2 - Math.min(1, e));
+    const arch = (0.15 + rng() * 0.25) * scale;
+    const pts = [];
+    for (let k = 0; k <= 4; k++) {
+      const t = k / 4;
+      pts.push(attach.clone()
+        .addScaledVector(out, reach * Math.sqrt(t))
+        .add(v3(0, arch * Math.sin(Math.PI * t) * (1 - t) - L * t * t, 0)));
+    }
+    const w = (0.26 + rng() * 0.2) * scale;
     const tangent = v3(-out.z, 0, out.x);
-    const twist = (rng() - 0.5) * 1.2;
-    const right = tangent.clone().multiplyScalar(Math.cos(twist)).addScaledVector(out, Math.sin(twist)).multiplyScalar(w / 2);
-    addCard(leaves, center, right, up, crown, 0.05, 1);
+    const twist = (rng() - 0.5) * 1.0;
+    const side = tangent.multiplyScalar(Math.cos(twist)).addScaledVector(out, Math.sin(twist)).multiplyScalar(w / 2);
+    addRibbon(leaves, pts, side, crown, 0.05);
   }
 }
 
@@ -139,7 +185,7 @@ function buildAcacia(bark, leaves, base, rng, scale) {
     const mid = trunkTop.clone().lerp(end, 0.45).add(v3(0, 0.25 * scale, 0));
     addTube(bark, [trunkTop, mid, end], [0.13 * scale, 0.09 * scale, 0.04 * scale], 5);
   }
-  const CARDS = 60;
+  const CARDS = leafCount(90);
   for (let i = 0; i < CARDS; i++) {
     const a = rng() * Math.PI * 2, rr = Math.sqrt(rng()) * Rc;
     const f = rr / Rc;
@@ -150,7 +196,12 @@ function buildAcacia(bark, leaves, base, rng, scale) {
     const fwd = v3(-Math.sin(b2), (rng() - 0.5) * 0.5, Math.cos(b2)).multiplyScalar(s / 2);
     addCard(leaves, c, right, fwd, center.clone().setY(center.y - 1.5), 0.3 + f * 0.5, 0.3 + f * 0.5);
   }
-  for (let i = 0; i < 14; i++) {
+  // Rounded clumps on top and the drooping edge of the umbrella.
+  for (let i = 0; i < leafCount(16); i++) {
+    const a = rng() * Math.PI * 2, rr = Math.sqrt(rng()) * Rc * 0.85;
+    addClump(leaves, center.clone().add(v3(Math.cos(a) * rr, 0.25 * scale, Math.sin(a) * rr)), (0.9 + rng() * 0.5) * scale, center.clone().setY(center.y - 1.5), 0.5, rng, 3);
+  }
+  for (let i = 0; i < leafCount(22); i++) {
     const a = rng() * Math.PI * 2;
     const c = center.clone().add(v3(Math.cos(a) * Rc * 0.92, -0.1, Math.sin(a) * Rc * 0.92));
     const s = (0.9 + rng() * 0.5) * scale;
@@ -180,13 +231,18 @@ function buildGum(bark, leaves, base, rng, scale) {
   }
   clusters.push(pts[5].clone().add(v3(0, 0.6, 0)));
   const crown = pts[0].clone().lerp(pts[5], 0.8);
+  // Twigs off each branch end, so the crown fills out between them.
+  const extra = [];
   for (const c of clusters) {
-    for (let k = 0; k < 3; k++) {
-      const s = (1.6 + rng() * 0.9) * scale;
-      const a = (k / 3) * Math.PI + rng() * 0.4;
-      const cc = c.clone().add(v3((rng() - 0.5) * 0.8, (rng() - 0.5) * 0.6, (rng() - 0.5) * 0.8));
-      addCard(leaves, cc, v3(Math.cos(a), 0, Math.sin(a)).multiplyScalar(s / 2), v3(0, s / 2, 0), crown, 0.2, 0.7);
+    for (let k = 0; k < 2; k++) {
+      const a = rng() * Math.PI * 2, len = (0.8 + rng() * 0.9) * scale;
+      const end = c.clone().add(v3(Math.cos(a) * len, len * (0.2 + rng() * 0.5), Math.sin(a) * len));
+      addTube(bark, [c, end], [0.03 * scale, 0.012 * scale], 4);
+      extra.push(end);
     }
+  }
+  for (const c of clusters.concat(extra)) {
+    addClump(leaves, c, (1.5 + rng() * 0.9) * scale, crown, 0.7, rng, leafCount(4));
   }
 }
 
@@ -223,11 +279,23 @@ function leafMaterial(map, windAmount) {
   return { mat, depth };
 }
 
-export function createTrees(scene, { dam, terrain, location }) {
+export function createTrees(scene, { dam, terrain, location, leafDensity = 1, avoid = null }) {
+  LEAF = leafDensity;
   const rng = makeRng(seedFromString(location.id) + 909);
   const weights = location.scenery?.trees || { willow: 0.4, acacia: 0.35, gum: 0.25 };
-  const barkDark = new THREE.MeshStandardMaterial({ map: barkTexture('dark'), roughness: 0.95 });
-  const barkGum = new THREE.MeshStandardMaterial({ map: barkTexture('gum'), roughness: 0.8 });
+  // Photo-scanned bark when loaded (sceneryAssets.js): dark, furrowed bark
+  // for the acacias and willows, peeling blue-gum bark for the gums. A scan
+  // covers about a metre; trunk UVs run 0.35 per metre up the trunk.
+  const scanBark = (key, base) => {
+    const scan = scanTexture(key);
+    if (!scan) return null;
+    const tile = (t) => { const c = t.clone(); c.repeat.set(1, 2.9); c.needsUpdate = true; return c; };
+    return new THREE.MeshStandardMaterial({
+      map: tile(scan.map), normalMap: tile(scan.normalMap), roughnessMap: tile(scan.roughnessMap), roughness: 1, ...base,
+    });
+  };
+  const barkDark = scanBark('barkWillow', { color: 0xd8d0c4 }) || new THREE.MeshStandardMaterial({ map: barkTexture('dark'), roughness: 0.95 });
+  const barkGum = scanBark('barkGum', {}) || new THREE.MeshStandardMaterial({ map: barkTexture('gum'), roughness: 0.8 });
   const barkSnag = new THREE.MeshStandardMaterial({ map: barkDark.map, color: 0xc9c2b4, roughness: 0.95 });
   const leafMats = {
     willow: leafMaterial(willowStrandTexture(), 1.8),
@@ -256,7 +324,7 @@ export function createTrees(scene, { dam, terrain, location }) {
 
   // Plant a tree at (x, z) -- never out in the water or on the wet margin.
   function placeAt(kind, x, z, scale, leanDir) {
-    if (dam.waterDist(x, z) > -1 || dam.standAt(x, z)) return;
+    if (dam.waterDist(x, z) > -1 || dam.standAt(x, z) || avoid?.(x, z)) return;
     const base = v3(x, terrain.heightAt(x, z), z);
     if (kind === 'bush') buildAcacia(builders.darkBark, builders.acacia, base, rng, scale);
     else if (kind === 'willow') buildWillow(builders.darkBark, builders.willow, base, rng, scale, leanDir);

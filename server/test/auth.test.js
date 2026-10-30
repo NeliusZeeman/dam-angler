@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { STARTER_ITEMS } from '../../src/gear.js';
 import { newTestDb, startTestServer } from './helpers.js';
 import { createRateLimiter } from '../auth.js';
 
@@ -19,7 +20,7 @@ test('sign up starts a session and /api/me shows the new player', async () => {
   assert.equal(me.status, 200);
   assert.equal(me.body.user.username, 'nelius');
   assert.equal(me.body.save.credits, 0);
-  assert.deepEqual(me.body.save.ownedRodIds, ['rod-starter']);
+  assert.deepEqual(me.body.save.ownedRodIds, STARTER_ITEMS.rod);
   assert.equal(me.body.save.equippedLureId, 'bread-bait');
   const stored = (await db.query("SELECT password_hash FROM users WHERE username = 'nelius'")).rows[0].password_hash;
   assert.ok(stored.startsWith('$2') && !stored.includes('hunter22x'), 'only a bcrypt hash is stored');

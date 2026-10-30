@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>People preview</title>
+<!-- Shows the campsite people (assets/people) playing their motions, to
+     check the Blender export: ?who=man-shorts,boy&clip=drink&t=2 -->
+<script type="importmap">{ "imports": { "three": "/vendor/three.module.js" } }</script>
+<style>body { margin: 0; background: #8aa; } canvas { display: block; }</style>
+</head>
+<body>
+<script type="module">
+import * as THREE from '/vendor/three.module.js';
+import { GLTFLoader } from '/vendor/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from '/vendor/addons/utils/SkeletonUtils.js';
+
+const q = new URLSearchParams(location.search);
+const who = (q.get('who') || 'man-shorts,man-vest,woman-green,boy').split(',');
+const clipName = q.get('clip') || 'idle';
+const at = Number(q.get('t') || 1.5);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9fb8c4);
+scene.add(new THREE.HemisphereLight(0xdfefff, 0x6a5a40, 1.4));
+const sun = new THREE.DirectionalLight(0xfff2dd, 2.2);
+sun.position.set(3, 5, 4);
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({ color: 0x7a7050 }));
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
+const camera = new THREE.PerspectiveCamera(Number(q.get('fov') || 35), innerWidth / innerHeight, 0.05, 100);
+const span = who.length * 0.9;
+camera.position.set(0, Number(q.get('cy') || 1.3), Number(q.get('cz') || span + 2.2));
+camera.lookAt(0, Number(q.get('ly') || 1.0), 0);
+
+const loader = new GLTFLoader();
+const motions = await loader.loadAsync('/assets/people/motions.glb?v=' + Date.now());
+const clip = motions.animations.find((c) => c.name === clipName);
+const info = { clips: motions.animations.map((c) => c.name), people: [] };
+let i = 0;
+for (const name of who) {
+  const g = await loader.loadAsync(`/assets/people/${name}.glb?v=${Date.now()}`);
+  const person = SkeletonUtils.clone(g.scene);
+  person.position.x = (i - (who.length - 1) / 2) * 0.9;
+  scene.add(person);
+  const mixer = new THREE.AnimationMixer(person);
+  if (clip) mixer.clipAction(clip).play();
+  mixer.update(at);
+  const box = new THREE.Box3().setFromObject(person);
+  info.people.push({ name, height: +(box.max.y - box.min.y).toFixed(2), minY: +box.min.y.toFixed(2) });
+  i++;
+}
+renderer.render(scene, camera);
+window.__info = info;
+document.title = 'ready';
+</script>
+</body>
+</html>
