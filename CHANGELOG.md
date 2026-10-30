@@ -3,6 +3,12 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Camp people fixes (built locally, not live yet)
+
+- **Chairs the right way round**: the scanned plastic chairs were turned 180°, so campers sat facing the backrest (`camp.js` `SCAN_CHAIR_TURN` is now 0).
+- **Faces in the shade**: heads give back a little of their own colour (more for darker skin, dimmed at night, `people.js` `setPeopleLight`). Faces no longer go flat black when lit from behind or under a boat's canopy.
+- **Food and drink held properly**: bottles and cans stand upright in the hand and tip to the lips when drinking. The boerewors roll is held crosswise and now looks like one: crust, soft inside, wors poking out both ends, and relish. The bottle got a gold cap and the can a silver top.
+
 ## v2 — Boat rods and walking the deck (built locally, not live yet)
 
 - **The boat's own rods** (`src/boatRods.js`): a rack of six outfits, each rigged for one kind of fish — bass, carp, yellowfish & trout, barbel, tigerfish and kurper. The bass boat, tiger boat and kayak each carry their own set. Fish what a rod is rigged for and that fish pays **+50% credits and +50% XP**. Each comes fully rigged: reel, line, hook and its own baits, picked in the rack (the bass rod has a soft plastic, spinner, crankbait, jig and frog). Nothing from your own rig comes across, so a mieliebom no longer ends up on the bass rod. The rods stay on the boat: step ashore and you're back on your own rod and rig, and your saved gear never changes.

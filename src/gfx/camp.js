@@ -136,8 +136,9 @@ function rodPod(b, place, rods = 2) {
   }
 }
 
-// Which way the scanned monobloc chair faces, relative to the built ones.
-const SCAN_CHAIR_TURN = Math.PI;
+// Which way the scanned monobloc chair faces, relative to the built ones
+// (the same way: seat toward +z, backrest behind).
+const SCAN_CHAIR_TURN = 0;
 
 export function createCamp(scene, { dam, terrain, spec, seed = 1, location = {}, maxPeople = 8 }) {
   if (!spec) return null;

@@ -6,7 +6,7 @@ import { windUniforms } from './gfx/wind.js';
 import { GPU, loadGpu, webgpuAvailable } from './gfx/gpu.js';
 import { loadFishModels } from './fishModels.js';
 import { loadScenery } from './sceneryAssets.js';
-import { loadPeople, PEOPLE } from './people.js';
+import { loadPeople, PEOPLE, setPeopleLight } from './people.js';
 import { createEnvironment, TIME_OF_DAY_PHASES } from './environment.js';
 import { FISH_SPECIES, rollDamBite, randomWeightFor, pickGuaranteedBite, estimateLengthCm, rollTrophy, trophyWeightFor, suitability } from './fish.js';
 import { rigFor } from './gfx/terminalTackle.js';
@@ -1438,6 +1438,7 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
       updateBoat(delta, elapsed);
       const atmos = world.update({ delta, elapsed, envState, timeOverride });
       boats?.update(elapsed, delta, { camera, windSpeed: envState.windSpeed, light: world.hemiLight.intensity });
+      setPeopleLight(world.hemiLight.intensity);
       water.setAtmosphere(atmos, envState.windSpeed, windUniforms.uWindDir.value);
       updateWater(waterMesh, elapsed);
       post.setLook(atmos, elapsed, location.skyWarmth);

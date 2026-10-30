@@ -36,8 +36,36 @@ async function loadOne(name) {
     o.frustumCulled = false;
     const m = o.material;
     if (m && m.alphaTest > 0) m.side = THREE.DoubleSide;
+    if (m?.map && /-head$/.test(m.name)) skinGlow(m);
   });
   bases.set(name, gltf.scene);
+}
+
+// Light through skin: a face lit from behind or in the shade of a boat's
+// canopy goes flat black under plain lighting -- dark skin most of all --
+// so heads give back a little of their own colour, more for darker skin,
+// dimmed at night (setPeopleLight).
+const heads = new Map(); // material -> glow strength
+function skinGlow(m) {
+  let glow = 0.2;
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const g = c.getContext('2d');
+    g.drawImage(m.map.image, 0, 0, 32, 32);
+    const d = g.getImageData(0, 0, 32, 32).data;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
+    const avg = sum / (d.length / 4) / 3;
+    glow = Math.min(0.4, Math.max(0.12, (90 - avg) / 150));
+  } catch { /* no canvas: the default */ }
+  m.emissiveMap = m.map;
+  m.emissive.setScalar(glow);
+  heads.set(m, glow);
+}
+export function setPeopleLight(light) {
+  const k = Math.max(0.1, Math.min(1, light / 0.6));
+  for (const [m, glow] of heads) m.emissive.setScalar(glow * k);
 }
 
 // Loads the motions and these people; gives up quietly after `timeoutMs`.
@@ -112,17 +140,28 @@ function makeProp(kind) {
     neck.position.y = 0.12;
     const label = new THREE.Mesh(new THREE.CylinderGeometry(0.0325, 0.0325, 0.07, 12, 1, true), mat('label', { color: 0xe8dcc0, roughness: 0.7 }));
     g.add(body, neck, label);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 10), mat('cap', { color: 0xc9a227, roughness: 0.3, metalness: 0.8 }));
+    cap.position.y = 0.165;
+    g.add(cap);
   } else if (kind === 'can') {
     g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.12, 14), mat('can', { color: 0xc0201a, roughness: 0.3, metalness: 0.6 })));
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.033, 0.012, 14), mat('canTop', { color: 0xc8c8cc, roughness: 0.25, metalness: 0.9 }));
+    rim.position.y = 0.066;
+    g.add(rim);
   } else if (kind === 'roll') {
-    // A boerewors roll: the bun and the coiled sausage poking out.
-    const bun = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.12, 4, 10), mat('bun', { color: 0xd9a35f, roughness: 0.8 }));
-    bun.rotation.z = Math.PI / 2;
-    const wors = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.17, 4, 8), mat('wors', { color: 0x5a2414, roughness: 0.5 }));
-    wors.rotation.z = Math.PI / 2;
-    wors.position.y = 0.02;
-    g.add(bun, wors);
-    g.rotation.y = Math.PI / 2;
+    // A boerewors roll, lengthwise along y with the split on top (+z): a
+    // golden crust, the soft white inside showing, the wors poking out both
+    // ends and a line of tomato-and-onion relish.
+    const bun = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.13, 4, 12), mat('bun', { color: 0xb87333, roughness: 0.85 }));
+    bun.scale.set(1.15, 1, 0.8);
+    const crumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.026, 0.13, 4, 10), mat('crumb', { color: 0xf0dcb4, roughness: 0.95 }));
+    crumb.scale.set(1.05, 1, 0.5);
+    crumb.position.z = 0.014;
+    const wors = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.19, 4, 8), mat('wors', { color: 0x4a1d10, roughness: 0.45 }));
+    wors.position.z = 0.026;
+    const relish = new THREE.Mesh(new THREE.CapsuleGeometry(0.007, 0.11, 3, 6), mat('relish', { color: 0xc23a1c, roughness: 0.4 }));
+    relish.position.z = 0.04;
+    g.add(bun, crumb, wors, relish);
   } else if (kind === 'tongs') {
     const steel = mat('steel', { color: 0xb8b8bc, roughness: 0.35, metalness: 0.9 });
     for (const s of [-1, 1]) {
@@ -149,6 +188,7 @@ const GRIP = {
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _pole = new THREE.Vector3();
+const _m = new THREE.Matrix4(), _YDOWN = new THREE.Vector3(0, -1, 0);
 
 // Turns `bone` (in world space) so the direction `from` now points along `to`.
 function swing(bone, from, to) {
@@ -233,6 +273,7 @@ export function makePerson(name) {
     holder.scale.setScalar(unit);
     holder.add(p);
     holder.userData.kind = kind;
+    holder.userData.grip = holder.position.clone();
     hand.add(holder);
     held[side] = holder;
   }
@@ -259,12 +300,66 @@ export function makePerson(name) {
     swing(lower, _c.clone().sub(_b), target.clone().sub(_b));
   }
 
+  // Food and drink held the way people hold them, whatever the hand bone is
+  // doing: a bottle or can upright, tipping to the lips as the hand comes up
+  // to the mouth; a roll crosswise in front, split side up. (The motions
+  // weren't recorded holding anything, so a fixed grip points them anywhere.)
+  const AIMED = { beer: 'drink', can: 'drink', roll: 'across' };
+  // How far the lip end is from the middle of a drink (neck or can top).
+  const LIP = { beer: 0.165, can: 0.06 };
+  const _grip = new THREE.Vector3(), _want = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1);
+  function aimHeld() {
+    for (const side of ['R', 'L']) {
+      const holder = held[side];
+      const how = holder && AIMED[holder.userData.kind];
+      if (!how) continue;
+      const hand = B(`${side}_Hand`);
+      hand.getWorldPosition(_a);
+      // The mouth: a little in front of and below the head bone.
+      root.getWorldQuaternion(_q);
+      const fwd = _b.set(0, 0, 1).applyQuaternion(_q);
+      B('Head').getWorldPosition(_c).addScaledVector(fwd, 0.09).y -= 0.03;
+      const mouth = _c;
+      const toMouth = _pole.copy(mouth).sub(_a);
+      const near = Math.min(1, Math.max(0, (0.42 - toMouth.length()) / 0.16));
+      // Where it sits in the palm (hold()'s grip), in the world.
+      _grip.copy(holder.userData.grip).applyMatrix4(hand.matrixWorld);
+      let axis, top;
+      if (how === 'drink') {
+        // Upright, then the lip end to the mouth with the base tipped up,
+        // the hand sliding down the bottle.
+        toMouth.normalize();
+        axis = _d.set(0, 1, 0).lerp(toMouth.addScaledVector(_YDOWN, 0.9).normalize(), near).normalize();
+        _grip.lerp(_a.copy(mouth).addScaledVector(axis, -LIP[holder.userData.kind]), near * 0.8);
+        top = fwd;
+      } else {
+        // Crosswise in front of you, split side up.
+        axis = _d.set(fwd.z, 0, -fwd.x).normalize();
+        top = _pole.set(0, 1, 0);
+      }
+      const x = new THREE.Vector3().crossVectors(axis, top);
+      if (x.lengthSq() < 1e-6) x.set(1, 0, 0);
+      x.normalize();
+      const z = new THREE.Vector3().crossVectors(x, axis);
+      _m.makeBasis(x, axis, z);
+      _q2.setFromRotationMatrix(_m);
+      // That place and turn in the world, as the holder's in the hand.
+      _want.compose(_grip, _q2, _one);
+      _m.copy(hand.matrixWorld).invert().multiply(_want);
+      _m.decompose(holder.position, holder.quaternion, holder.scale);
+    }
+  }
+
   const bonePos = (n, out = new THREE.Vector3()) => B(n).getWorldPosition(out);
 
   return {
     name, root, model, mixer, pose, hold, reach, bonePos, female, kid: isKid(name),
     walkSpeed: walkSpeed[own('walk')] || 1.1,
     strollSpeed: walkSpeed[own('stroll')] || 0.8,
-    update(dt) { mixer.update(dt); root.updateMatrixWorld(true); },
+    update(dt) {
+      mixer.update(dt);
+      root.updateMatrixWorld(true);
+      if (held.R || held.L) { aimHeld(); root.updateMatrixWorld(true); }
+    },
   };
 }
