@@ -27,6 +27,9 @@ import sys
 import numpy as np
 from mathutils import Vector, Matrix
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bake_light import bake_ao, gltf_colour_options  # noqa: E402
+
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 ROOT = argv[0] if argv else os.getcwd()
 ONLY = set(argv[1].split(',')) if len(argv) > 1 and argv[1] else None
@@ -643,8 +646,12 @@ def build_kind(kind):
     bpy.ops.object.select_all(action='SELECT')
     bpy.context.view_layer.objects.active = bpy.context.scene.objects[0]
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    # Soft shade inside the crown and down the trunk (bake_light.py); the
+    # far cards' pictures are flat-lit and left alone.
+    near = [o for o in bpy.context.scene.objects if o.type == 'MESH' and '_lod2_' not in o.name]
+    bake_ao(near, 0.12, floor=lambda o: 0.45 if o.name.endswith('_leaves') else 0.5)
     path = os.path.join(OUT, f'tree-{kind}.glb')
-    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True, export_apply=True,
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True, export_apply=True, **gltf_colour_options(),
                               export_attributes=True, export_extras=True, export_image_format='AUTO',
                               export_materials='EXPORT')
     print('wrote', path)

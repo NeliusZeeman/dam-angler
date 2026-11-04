@@ -430,15 +430,19 @@ export function createTrees(scene, { dam, terrain, location, leafDensity = 1, av
   let forest = null;
   const modelLeaves = {}, farMats = {};
   if (useModels) {
+    // Soft shade Blender baked into the trees' vertex colours (bake_light.py),
+    // when the files have it.
+    const shaded = (kind) => !!treeModel(kind)[0].lods[0].bark.geometry.attributes.color;
     const barkMats = {};
     const barkFor = (kind) => (barkMats[kind] ||= addWindToMaterial(
-      scanBark(`bark${kind[0].toUpperCase()}${kind.slice(1)}`, kind === 'gum' ? {} : { color: 0xd8d0c4 })
-        || new THREE.MeshStandardMaterial({ map: barkTexture(kind === 'gum' ? 'gum' : 'dark'), roughness: 0.9 }),
+      Object.assign(scanBark(`bark${kind[0].toUpperCase()}${kind.slice(1)}`, kind === 'gum' ? {} : { color: 0xd8d0c4 })
+        || new THREE.MeshStandardMaterial({ map: barkTexture(kind === 'gum' ? 'gum' : 'dark'), roughness: 0.9 }), { vertexColors: shaded(kind) }),
       { instanced: true, sway: true, amount: BARK_SWAY },
     ));
     for (const kind of TREE_KINDS) {
       const variants = treeModel(kind);
       modelLeaves[kind] = leafMaterial(variants[0].lods[0].leaves.map, MODEL_SWAY[kind], true);
+      modelLeaves[kind].mat.vertexColors = shaded(kind);
       farMats[kind] = variants.map((v) => {
         liftNormals(v.lods[2].far.geometry);
         return addWindToMaterial(new THREE.MeshStandardMaterial({

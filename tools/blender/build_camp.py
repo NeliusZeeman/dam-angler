@@ -26,6 +26,9 @@ import random
 import sys
 from mathutils import Vector
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bake_light import bake_ao, gltf_colour_options  # noqa: E402
+
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 ROOT = argv[0] if argv else os.getcwd()
 OUT = os.path.join(ROOT, 'assets', 'scenery', 'models')
@@ -346,6 +349,9 @@ def build_camp():
         bpy.ops.mesh.select_all(action='SELECT')
         bpy.ops.mesh.remove_doubles(threshold=0.001)
         bpy.ops.object.mode_set(mode='OBJECT')
+        # Soft shade under the roofs, in folds and wheel arches, baked before
+        # the lighter copies are made so they keep it (bake_light.py).
+        bake_ao([lod0], 0.6, floor=0.5)
         lods = [lod0]
         for level, ratio in enumerate(LOD_RATIOS[1:], start=1):
             copy = lod0.copy()
@@ -363,7 +369,7 @@ def build_camp():
         out.append(name)
         print(name, [tri_count(o) for o in lods])
     path = os.path.join(OUT, 'camp.glb')
-    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True, export_apply=True, export_materials='EXPORT')
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True, export_apply=True, export_materials='EXPORT', **gltf_colour_options())
     print('wrote', path)
 
 

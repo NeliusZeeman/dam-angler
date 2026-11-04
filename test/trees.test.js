@@ -16,6 +16,8 @@ for (const kind of TREE_KINDS) {
       assert.ok(node, `${kind}${v}_${part} present`);
       const prim = json.meshes[node.mesh].primitives[0];
       assert.ok('_SWAY' in prim.attributes, `${kind}${v}_${part} has sway values`);
+      // Baked soft shade on the near shapes (tools/blender/bake_light.py).
+      if (!part.startsWith('lod2')) assert.ok('COLOR_0' in prim.attributes, `${kind}${v}_${part} has baked shade`);
       const h = node.extras?.height;
       const [lo, hi] = { acacia: [4, 10], gum: [12, 24], willow: [6, 12] }[kind];
       assert.ok(h >= lo && h <= hi, `${kind}${v} is ${h} m tall`);
@@ -39,7 +41,9 @@ for (const kind of TREE_KINDS) {
       for (const part of ['lod0_plant', 'lod1_plant', 'lod2_far']) {
         const node = nodes.get(`${kind}${v}_${part}`);
         assert.ok(node, `${kind}${v}_${part} present`);
-        assert.ok('_SWAY' in json.meshes[node.mesh].primitives[0].attributes, `${kind}${v}_${part} sways`);
+        const attrs = json.meshes[node.mesh].primitives[0].attributes;
+        assert.ok('_SWAY' in attrs, `${kind}${v}_${part} sways`);
+        if (part.endsWith('plant')) assert.ok('COLOR_0' in attrs, `${kind}${v}_${part} has baked shade`);
         const [lo, hi] = { typha: [1.2, 2.6], phragmites: [1.8, 3.6] }[kind];
         assert.ok(node.extras?.height >= lo && node.extras.height <= hi, `${kind}${v} is ${node.extras?.height} m tall`);
       }

@@ -3,6 +3,14 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Baked shade, and no more white leaves and people (built locally, not live yet)
+
+- **Fix: white/grey cardboard trees, white reeds and white campers on some PCs.** The game asked a throwaway graphics context which squashed (KTX2) formats work, which on a PC with two graphics chips can be the wrong chip; and a squashed model that lost its pictures stayed white. Now:
+  - the WebGL renderer is made before loading and asked directly;
+  - two test pictures are unpacked and uploaded first -- any failure (blocked unpacker, refused format, time-out) turns squashed textures off and the plain files load instead;
+  - a squashed model that comes in missing any picture is reloaded from the plain file.
+- **Baked shade (Blender ambient occlusion in the vertex colours,** `tools/blender/bake_light.py`): tree crowns and trunks, reed clumps and the camp gear are darker where little sky reaches -- inside crowns, under the gazebo roof, in tent folds and wheel arches. Costs nothing at run time; the sun and its shadows stay live.
+
 ## v2 — Blender camp gear and jetties (built locally, not live yet)
 
 - **Camp gear made in Blender** (`node tools/build-camp.mjs`, `tools/blender/build_camp.py`), replacing the sphere tents and box vehicles:

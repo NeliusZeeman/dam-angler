@@ -17,6 +17,8 @@ for (const name of ['tent', 'tentBig', 'gazebo', 'bakkie', 'caravan', 'cooler'])
   assert.ok(lods.every(Boolean), `${name} has three levels`);
   const t = lods.map((n) => tris(camp, n));
   assert.ok(t[0] > t[1] && t[1] > t[2], `${name} levels get lighter (${t.join(' > ')})`);
+  // Baked soft shade (tools/blender/bake_light.py) on every level.
+  for (const n of lods) assert.ok(camp.meshes[n.mesh].primitives.every((p) => 'COLOR_0' in p.attributes), `${n.name} has baked shade`);
 }
 // The materials the game recolours.
 const names = new Set(camp.materials.map((m) => m.name));

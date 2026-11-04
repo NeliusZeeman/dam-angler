@@ -184,6 +184,8 @@ export function createShoreline(scene, { dam, location, lod = { near: 18, mid: 6
   if (useModels) {
     const plantMat = addWindToMaterial(new THREE.MeshStandardMaterial({
       map: lodModel('typha')[0].lods[0].plant.map, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75,
+      // Shade Blender baked deep in each clump (bake_light.py), when present.
+      vertexColors: !!lodModel('typha')[0].lods[0].plant.geometry.attributes.color,
     }), { instanced: true, sway: true, amount: 0.8 });
     // (No "cutout" alpha boost: the leaves are real shapes, and boosting the
     // plumes' fine hairs turned them into solid blocks at a distance.)

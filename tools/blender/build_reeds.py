@@ -27,6 +27,7 @@ from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import build_trees as T  # noqa: E402
+from bake_light import bake_ao, gltf_colour_options  # noqa: E402
 
 ROOT = T.ROOT
 OUT = T.OUT
@@ -329,8 +330,10 @@ def build():
     bpy.ops.object.select_all(action='SELECT')
     bpy.context.view_layer.objects.active = bpy.context.scene.objects[0]
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    # Shade deep in each clump, light at the tips (bake_light.py).
+    bake_ao([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name.endswith('_plant')], 0.15, floor=0.45)
     path = os.path.join(OUT, 'reeds.glb')
-    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True, export_apply=True,
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True, export_apply=True, **gltf_colour_options(),
                               export_attributes=True, export_extras=True, export_image_format='AUTO',
                               export_materials='EXPORT')
     print('wrote', path)

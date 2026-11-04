@@ -240,10 +240,14 @@ async function startGame(locationId, startTimeOfDay, pegId = null) {
   if (GPU.on && quality === 'ultra') quality = 'ultraplus';
   // The Blender-made fish for this water (Low keeps the light built-in ones).
   // and the photo-scanned scenery (sceneryAssets.js).
+  // The WebGL renderer is made now, before loading, so the squashed-texture
+  // check asks the very graphics chip the game will draw with (a PC with two
+  // chips could otherwise answer for the wrong one).
+  const glRenderer = gpuRenderer ? null : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   if (quality !== 'low') {
     const loc = getLocationById(locationId);
     // Squashed textures where the graphics chip reads them (gfx/ktx2.js).
-    const squashed = forceJpg ? null : await compressedLoader(gpuRenderer);
+    const squashed = forceJpg ? null : await compressedLoader(gpuRenderer || glRenderer);
     // The campsite people, where the dam has camps (Medium brings fewer).
     // Phones without squashed pictures bring fewer of them, drawn smaller
     // (graphics memory).
@@ -257,10 +261,10 @@ async function startGame(locationId, startTimeOfDay, pegId = null) {
     await Promise.all([loadFishModels(loc.speciesIds), loadScenery(loc), people, loadBoatModels(boatKinds)]);
   }
   const fellBack = wantsWebGpu() && !GPU.on;
-  startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, fellBack);
+  startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, fellBack, glRenderer);
 }
 
-function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, gpuFellBack = false) {
+function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, gpuFellBack = false, glRenderer = null) {
   // The dam as it is at the chosen fishing spot (pegs.js).
   const location = withPeg(getLocationById(locationId), pegId);
   cloud.damStats(); // this spot's record, for "New dam record!"
@@ -286,7 +290,7 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
   // Lowveld and Karoo water warm.
   const environment = createEnvironment({ startTimeOfDay, tempOffset: location.tempOffset ?? 0 });
 
-  const renderer = gpuRenderer || new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  const renderer = gpuRenderer || glRenderer || new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   const gfx = graphicsFor(quality);
   let pixelRatio = sharpnessFor(gfx);
   renderer.setPixelRatio(pixelRatio);
