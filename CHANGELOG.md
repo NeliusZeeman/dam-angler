@@ -3,6 +3,12 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — The real cause of white trees, rocks and people on the live site
+
+- **Server security rule:** `connect-src` now allows `blob:` and `data:`. The model loader reads the pictures packed inside every .glb through blob: addresses, and the rule refused them -- so on the live site (not the local test server, which has no rule) every scanned rock, Blender tree, reed and person came out white, squashed or not.
+- **Squashed textures under that rule:** the KTX2 unpacker's helper thread now starts from its own file (`vendor/addons/libs/basis/ktx2-worker.js`, made by `node tools/ktx/build-ktx2-worker.mjs`) instead of a blob: address, which inherited the page's rule and hung (the Basis transcoder builds functions at start-up). The page itself still forbids eval.
+- Safety checks from before stay: test pictures are drawn and read back before squashed textures are used.
+
 ## v2 — Baked shade, and no more white leaves and people (built locally, not live yet)
 
 - **Fix: white/grey cardboard trees, white reeds and white campers on some PCs.** The game asked a throwaway graphics context which squashed (KTX2) formats work, which on a PC with two graphics chips can be the wrong chip; and a squashed model that lost its pictures stayed white. Now:

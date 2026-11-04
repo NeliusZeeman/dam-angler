@@ -29,7 +29,10 @@ export function contentSecurityPolicy(nonce) {
     "style-src 'self' 'unsafe-inline'", // the game positions things with inline styles
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",
-    "connect-src 'self'",
+    // blob:/data: -- the model loader reads the pictures packed inside .glb
+    // files through blob: addresses (in-page only); without them every
+    // scanned rock, tree, reed and person came out white.
+    "connect-src 'self' blob: data:",
     "font-src 'self'",
     "worker-src 'self' blob:",
     "object-src 'none'",

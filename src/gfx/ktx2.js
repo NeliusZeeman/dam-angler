@@ -33,6 +33,17 @@ async function make(renderer) {
     l = new KTX2Loader().setTranscoderPath('vendor/addons/libs/basis/').detectSupport(support);
     const c = l.workerConfig;
     if (!(c.astcSupported || c.etc2Supported || c.etc1Supported || c.dxtSupported || c.bptcSupported)) throw new Error('no compressed format');
+    // Start the unpacking worker from its own file, not the blob: address
+    // KTX2Loader would use: a blob worker inherits the page's security
+    // policy, which forbids the function-making the Basis transcoder does
+    // at start-up, and hung (tools/ktx/build-ktx2-worker.mjs).
+    await l.init();
+    l.workerPool.setWorkerCreator(() => {
+      const worker = new Worker(`vendor/addons/libs/basis/ktx2-worker.js${assetTag()}`);
+      const transcoderBinary = l.transcoderBinary.slice(0);
+      worker.postMessage({ type: 'init', config: l.workerConfig, transcoderBinary }, [transcoderBinary]);
+      return worker;
+    });
     // Unpack the test pictures and hand them to the chip: a blocked
     // WebAssembly unpacker or a format the chip refuses shows up here,
     // instead of as blank white leaves and people later.

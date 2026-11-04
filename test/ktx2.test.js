@@ -41,4 +41,13 @@ const tones = JSON.parse(readFileSync('assets/people/skin.json', 'utf8'));
 for (const [key, v] of Object.entries(tones)) assert.ok(v >= 0 && v <= 255, `${key} tone in range`);
 assert.ok(Object.keys(tones).length >= 10, 'a face tone for every person');
 
+// The unpacking worker saved as a file (tools/ktx/build-ktx2-worker.mjs)
+// carries the current transcoder -- rebuild it after updating three.js.
+{
+  const worker = readFileSync('vendor/addons/libs/basis/ktx2-worker.js', 'utf8');
+  const transcoder = readFileSync('vendor/addons/libs/basis/basis_transcoder.js', 'utf8');
+  assert.ok(worker.includes(transcoder), 'ktx2-worker.js holds the current basis_transcoder.js');
+  assert.ok(/_EngineFormat/.test(worker) && /addEventListener\(\s*'message'/.test(worker), 'ktx2-worker.js holds the KTX2Loader worker');
+}
+
 console.log('ktx2 tests passed');

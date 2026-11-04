@@ -1,6 +1,6 @@
 {
-  "version": "2054e467fb",
-  "built": "2026-11-04T14:42:48.284Z",
+  "version": "24fddb4a94",
+  "built": "2026-11-04T15:08:15.920Z",
   "modules": [
     "src/accountPanel.js",
     "src/admin/admin.js",
@@ -83,6 +83,7 @@
     "src/waterReading.js",
     "src/weather.js",
     "vendor/addons/libs/basis/basis_transcoder.js",
+    "vendor/addons/libs/basis/ktx2-worker.js",
     "vendor/addons/libs/ktx-parse.module.js",
     "vendor/addons/libs/zstddec.module.js",
     "vendor/addons/loaders/GLTFLoader.js",

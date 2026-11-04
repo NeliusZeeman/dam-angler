@@ -128,6 +128,10 @@ test('security headers on every response; the page gets a CSP with a fresh nonce
   assert.match(csp, /script-src 'self' 'nonce-[A-Za-z0-9+/=]+'/);
   assert.match(csp, /frame-ancestors 'none'/);
   assert.doesNotMatch(csp, /script-src[^;]*unsafe-inline/);
+  // Never plain eval; the KTX2 unpacker's worker runs from its own file instead.
+  assert.doesNotMatch(csp, /script-src[^;]*'unsafe-eval'/);
+  // The model loader reads pictures packed in .glb files through blob: addresses.
+  assert.match(csp, /connect-src 'self' blob: data:/);
   const n1 = (await page1.text()).match(/<script nonce="([^"]+)">/)[1];
   const n2 = (await page2.text()).match(/<script nonce="([^"]+)">/)[1];
   assert.ok(csp.includes(n1) && n1 !== n2, 'each visit gets its own nonce');
