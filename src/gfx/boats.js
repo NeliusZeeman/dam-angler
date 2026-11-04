@@ -1,6 +1,6 @@
 import * as THREE from '../../vendor/three.module.js';
 import { makeRng } from './noise.js';
-import { Baker, M, at, person, bakkie } from './camp.js';
+import { Baker, M, at, person, bakkie, lodPiece } from './camp.js';
 import { waterSurfaceY } from '../water.js';
 import { peopleReady, makePerson, loadedPeople, isKid } from '../people.js';
 import { createLureAngler } from './campLife.js';
@@ -233,7 +233,15 @@ export function createBoats(scene, { dam, kinds = [], moored = 0, slipway = null
     const ramp = new THREE.BoxGeometry(4.5, 0.25, len);
     const slope = Math.atan2(top + 0.6, len);
     b.add(ramp, 0x9b9a94, M(x, (top - 0.6) / 2, z0, 0, slope));
-    bakkie(b, at(ground, x - 4, z0 - 12, 0.2), 0xf2f2f2);
+    // The Blender double-cab (camp.js lodPiece) when loaded.
+    const car = lodPiece('bakkieHilux', { paint: 0xf2f2f0 });
+    if (car) {
+      car.position.set(x - 4, ground(x - 4, z0 - 12), z0 - 12);
+      car.rotation.y = 0.2;
+      scene.add(car);
+    } else {
+      bakkie(b, at(ground, x - 4, z0 - 12, 0.2), 0xf2f2f2);
+    }
     b.add(new THREE.BoxGeometry(1.8, 0.12, 4.5), 0x4a4a4a, at(ground, x + 0.5, z0 - 9.5, 0)(M(0, 0.55, 0)));
     for (const s of [-0.9, 0.9]) b.add(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 10), 0x151515, at(ground, x + 0.5, z0 - 9.5, 0)(M(s, 0.3, -0.6, 0, 0, Math.PI / 2)));
     const mesh = new THREE.Mesh(b.build(), material);

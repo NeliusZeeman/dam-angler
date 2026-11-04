@@ -3,6 +3,15 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — A true South African campsite (built locally, not live yet)
+
+- **No more floating tents and bakkies:** each camp gets a levelled pitch (`dam.levelArea`, `campPad` in camp.js) blending into the bank, built before the ground so grass, campers and gear agree. Pieces used to stand at the slope's height under their middle.
+- **Campsite rebuilt from the SA market** (`tools/blender/sa_camp_pieces.py`, researched at Outdoor Warehouse / Cape Union Mart / 4x4 Community listings and NAAMSA 2025 bakkie sales):
+  - a canvas bow tent (Tentco-type, khaki canvas, green skirt) with a 3 x 3 m canvas gazebo pitched in front of its door, and nylon family domes (Skydome / Country Dome type) with front awnings;
+  - double-cab bakkies in Hilux-, Ranger- and D-Max-type front styles at real sizes, with canopy, roller lid or roof rack and jerry cans; a Land Cruiser 79-type with snorkel and rooftop tent; a Fortuner-type SUV; an off-road camper trailer -- no badges or names. Mostly white, as SA buys them; bigger camps bring a second car and a trailer;
+  - a steel braai stand with a potjie, folding canvas camp chairs, a camp table under the gazebo, and the campsite's electricity point.
+- The slipway bakkie is the Blender double-cab too.
+
 ## v2 — The real cause of white trees, rocks and people on the live site
 
 - **Server security rule:** `connect-src` now allows `blob:` and `data:`. The model loader reads the pictures packed inside every .glb through blob: addresses, and the rule refused them -- so on the live site (not the local test server, which has no rule) every scanned rock, Blender tree, reed and person came out white, squashed or not.

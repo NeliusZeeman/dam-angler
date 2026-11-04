@@ -12,7 +12,7 @@ const tris = (json, node) => json.meshes[node.mesh].primitives.reduce((n, p) => 
 // Every camp piece at three levels, each lighter than the last.
 const camp = gltf('assets/scenery/models/camp.glb');
 const nodes = new Map(camp.nodes.map((n) => [n.name, n]));
-for (const name of ['tent', 'tentBig', 'gazebo', 'bakkie', 'caravan', 'cooler']) {
+for (const name of ['tentDome', 'bowTent', 'gazebo', 'bakkieHilux', 'bakkieRanger', 'bakkieDmax', 'cruiser', 'suv', 'trailer', 'braaiStand', 'potjie', 'campChair', 'campTable', 'powerPost', 'caravan', 'cooler']) {
   const lods = [0, 1, 2].map((l) => nodes.get(`${name}_lod${l}`));
   assert.ok(lods.every(Boolean), `${name} has three levels`);
   const t = lods.map((n) => tris(camp, n));
@@ -22,7 +22,7 @@ for (const name of ['tent', 'tentBig', 'gazebo', 'bakkie', 'caravan', 'cooler'])
 }
 // The materials the game recolours.
 const names = new Set(camp.materials.map((m) => m.name));
-assert.ok(names.has('fly') && names.has('paint'), 'tent fly-sheet and bakkie paint materials present');
+assert.ok(names.has('fly') && names.has('paint') && names.has('chair'), 'tent fly-sheet, vehicle paint and chair materials present');
 
 // Jetty parts, light enough to set out hundreds of.
 const jetty = gltf('assets/scenery/models/jetty.glb');

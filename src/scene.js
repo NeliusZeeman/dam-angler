@@ -7,7 +7,7 @@ import { createShoreline } from './gfx/shoreline.js';
 import { createProps } from './gfx/props.js';
 import { createWildlife } from './gfx/life.js';
 import { windUniforms, updateWind } from './gfx/wind.js';
-import { createCamp } from './gfx/camp.js';
+import { createCamp, campPad } from './gfx/camp.js';
 import { createDressing } from './gfx/dressing.js';
 import { seedFromString } from './gfx/noise.js';
 
@@ -58,11 +58,14 @@ export function createScene({ location, dam, quality = 'high', handheld = false 
   sunLight.shadow.radius = { low: 1, medium: 2, high: 2.5, ultra: 3, ultraplus: 3 }[quality] ?? 2.5;
   scene.add(sunLight, sunLight.target);
 
+  // A flat pitch for the camp before the ground is built.
+  const campSpec = location.camp ? { ...location.camp, x: dam.spawn.x + location.camp.x } : null;
+  if (campSpec) dam.levelArea(campPad(dam, campSpec));
   const terrain = createTerrain(scene, { dam, location });
   const props = createProps(scene, { dam, terrain, location });
   // A camp on the bank at spots that have one (pegs.js).
   const camp = location.camp ? createCamp(scene, {
-    dam, terrain, spec: { ...location.camp, x: dam.spawn.x + location.camp.x }, seed: seedFromString(location.id + (location.pegId || '')),
+    dam, terrain, spec: campSpec, seed: seedFromString(location.id + (location.pegId || '')),
     location, maxPeople: Math.min(handheld ? 5 : 8, { medium: 4, high: 6, ultra: 8, ultraplus: 8 }[quality] ?? 6),
   }) : null;
   const keepClear = camp ? (x, z) => props.exclude(x, z) || camp.exclude(x, z) : props.exclude;

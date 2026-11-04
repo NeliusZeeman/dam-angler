@@ -140,6 +140,44 @@ function rodPod(b, place, rods = 2) {
 // (the same way: seat toward +z, backrest behind).
 const SCAN_CHAIR_TURN = 0;
 
+// A Blender camp piece (tools/blender/build_camp.py) with its three levels
+// of detail by distance, or null when not loaded. `tint` recolours
+// materials by name (a tent's fly-sheet, a vehicle's paint, a chair).
+const tinted = new Map();
+export function lodPiece(name, tint = null) {
+  const lods = pieceLods(name);
+  if (!lods) return null;
+  const lod = new THREE.LOD();
+  lods.forEach((variant, level) => {
+    const obj = variantObject(variant);
+    if (tint) {
+      obj.traverse((o) => {
+        const colour = o.isMesh ? tint[o.material.name] : undefined;
+        if (colour === undefined) return;
+        const key = `${o.material.uuid}:${colour}`;
+        if (!tinted.has(key)) {
+          const m = o.material.clone();
+          m.color.set(colour);
+          tinted.set(key, m);
+        }
+        o.material = tinted.get(key);
+      });
+    }
+    lod.addLevel(obj, [0, 30, 80][level]);
+  });
+  return lod;
+}
+
+// The campsite's levelled pitch -- campsites are flat stands, and pieces set
+// on the raw bank slope stood with one side in the air. Called before the
+// terrain is built (dam.levelArea) so the ground, grass and campers agree.
+export function campPad(dam, spec) {
+  const cx = spec.x;
+  const cz = dam.shoreZ(cx) - spec.back;
+  const half = spec.tents * 2.4 + 9;
+  return { x0: cx - half, x1: cx + half, z0: cz - 9, z1: cz + 4.5, y: dam.naturalHeight(cx, cz), blend: 5 };
+}
+
 export function createCamp(scene, { dam, terrain, spec, seed = 1, location = {}, maxPeople = 8 }) {
   if (!spec) return null;
   const rng = makeRng(seed + 4242);
@@ -161,32 +199,10 @@ export function createCamp(scene, { dam, terrain, spec, seed = 1, location = {},
     gear.add(obj);
     return true;
   }
-  // Tents, the gazebo, the bakkie, caravan and cooler made in Blender
-  // (tools/blender/build_camp.py) when loaded, each at three levels of
-  // detail by distance; `tint` recolours a material by name (the tent's
-  // fly-sheet, the bakkie's paint).
-  const tinted = new Map();
+  // Pieces made in Blender (tools/blender/build_camp.py) when loaded.
   function addPiece(name, x, z, turn, tint = null) {
-    const lods = pieceLods(name);
-    if (!lods) return false;
-    const lod = new THREE.LOD();
-    lods.forEach((variant, level) => {
-      const obj = variantObject(variant);
-      if (tint) {
-        obj.traverse((o) => {
-          const colour = o.isMesh ? tint[o.material.name] : undefined;
-          if (colour === undefined) return;
-          const key = `${o.material.uuid}:${colour}`;
-          if (!tinted.has(key)) {
-            const m = o.material.clone();
-            m.color.set(colour);
-            tinted.set(key, m);
-          }
-          o.material = tinted.get(key);
-        });
-      }
-      lod.addLevel(obj, [0, 30, 80][level]);
-    });
+    const lod = lodPiece(name, tint);
+    if (!lod) return false;
     lod.position.set(x, ground(x, z), z);
     lod.rotation.y = turn;
     gear.add(lod);
@@ -214,50 +230,88 @@ export function createCamp(scene, { dam, terrain, spec, seed = 1, location = {},
   const put = (x, z, r) => pieces.push({ x, z, r });
   const facing = 0; // tents' doors toward the water (+z)
 
+  // A South African camp: a canvas bow tent with a canvas gazebo pitched in
+  // front of its door, nylon family domes beside it, a steel braai stand
+  // with a potjie, folding camp chairs round the fire, and the bakkie (or
+  // Land Cruiser, SUV, trailer) parked alongside. Blender pieces when
+  // loaded (sa_camp_pieces.py), the built shapes otherwise.
+  const DOME_COLOURS = [0x5a6b4a, 0x2f5f8a, 0xc8782a, 0x6b6f72, 0x3f6e3a, 0x8a3a2a];
+  let gazeboAt = null;
   for (let i = 0; i < spec.tents; i++) {
-    const x = cx + (i - (spec.tents - 1) / 2) * 4.2 + (rng() - 0.5) * 1.2;
-    const z = cz - 3 - rng() * 2.5;
-    const turn = facing + (rng() - 0.5) * 0.6;
-    const colour = TENT_COLOURS[(i + Math.floor(rng() * 3)) % TENT_COLOURS.length];
-    const big = i % 3 === 2;
-    if (!addPiece(big ? 'tentBig' : 'tent', x, z, turn, { fly: colour })) tent(b, at(ground, x, z, turn), colour, rng);
-    put(x, z, big ? 2.8 : 2.2);
+    const x = cx + (i - (spec.tents - 1) / 2) * 4.6 + (rng() - 0.5) * 0.8;
+    const z = cz - 3.4 - rng() * 1.5;
+    const turn = facing + (rng() - 0.5) * 0.3;
+    if (i === 0 && addPiece('bowTent', x, z, turn)) {
+      // The gazebo stands right in front of the bow tent's door.
+      gazeboAt = { x: x + Math.sin(turn) * 2.9, z: z + Math.cos(turn) * 2.9, turn };
+      put(x, z, 2.2);
+      continue;
+    }
+    const colour = DOME_COLOURS[(i + Math.floor(rng() * 3)) % DOME_COLOURS.length];
+    if (!addPiece('tentDome', x, z, turn, { fly: colour })) tent(b, at(ground, x, z, turn), colour, rng);
+    put(x, z, 2.4);
   }
-  if (!addPiece('gazebo', cx - 1, cz + 1.5, 0.1)) gazebo(b, at(ground, cx - 1, cz + 1.5, 0.1));
-  put(cx - 1, cz + 1.5, 2.6);
-  const drum = addScan('braaiDrum', cx + 3, cz + 2.5, rng() * Math.PI);
+  gazeboAt ||= { x: cx - 1, z: cz + 1.5, turn: 0.1 };
+  if (!addPiece('gazebo', gazeboAt.x, gazeboAt.z, gazeboAt.turn)) gazebo(b, at(ground, gazeboAt.x, gazeboAt.z, gazeboAt.turn));
+  put(gazeboAt.x, gazeboAt.z, 2.6);
+  // Under the gazebo: the camp table with a lantern; the campsite's own
+  // picnic table out by the braai.
+  if (addPiece('campTable', gazeboAt.x, gazeboAt.z + 0.3, gazeboAt.turn)) {
+    addScan('lantern', gazeboAt.x + 0.3, gazeboAt.z + 0.2, 0.4, ground(gazeboAt.x, gazeboAt.z) + 0.72);
+  }
+  addScan('picnicTable', cx + 5.6, cz + 0.6, Math.PI / 2);
+  // The braai: a steel braai stand (or the scanned drum), a potjie beside it.
+  const stand = addPiece('braaiStand', cx + 3, cz + 2.5, rng() * 0.6 - 0.3);
+  const drum = stand || addScan('braaiDrum', cx + 3, cz + 2.5, rng() * Math.PI);
   if (!drum) braai(b, at(ground, cx + 3, cz + 2.5));
+  addPiece('potjie', cx + 3.9, cz + 3.1, rng() * 6);
   put(cx + 3, cz + 2.5, 1);
-  // A picnic table under the gazebo with a lantern on it, and the bread
-  // crate and a bucket by the braai.
-  if (addScan('picnicTable', cx - 1, cz + 1.5, Math.PI / 2)) {
-    addScan('lantern', cx - 0.7, cz + 1.3, 0.4, ground(cx - 1, cz + 1.5) + 0.75);
-  }
   addScan('crate', cx + 4.6, cz + 1.4, 0.7);
   addScan('bucket', cx + 4.4, cz + 3.4, 0.2);
-  // Chairs round the braai, with people in some.
+  // Folding camp chairs round the braai, with people in some.
+  const CHAIR_COLOURS = [0x1f3a5f, 0x2e5d2e, 0x8e2b2b, 0x222222, 0x5a5a5a];
   const people = spec.people || 0;
   let seated = 0;
   const chairs = [];
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2 + 0.3;
-    const x = cx + 3 + Math.cos(a) * 1.6, z = cz + 2.5 + Math.sin(a) * 1.6;
+    const x = cx + 3 + Math.cos(a) * 1.7, z = cz + 2.5 + Math.sin(a) * 1.7;
     const turn = Math.atan2(-(Math.cos(a)), -(Math.sin(a)));
     const place = at(ground, x, z, turn);
-    seat(b, place, [0x1f4e79, 0x2e7d32, 0x8e2b2b, 0x333333][i % 4], x, z, turn);
+    if (!addPiece('campChair', x, z, turn, { chair: CHAIR_COLOURS[i % CHAIR_COLOURS.length] })) {
+      seat(b, place, [0x1f4e79, 0x2e7d32, 0x8e2b2b, 0x333333][i % 4], x, z, turn);
+    }
     chairs.push({ x, z, turn });
     if (seated < Math.ceil(people * 0.6)) { somebody(b, place, x, z, turn, { sitting: true }); seated++; }
   }
-  // Cooler box and the vehicles behind the tents.
+  // Cooler box by the gazebo.
   if (!addPiece('cooler', cx + 0.8, cz + 3.5, 0)) {
     b.add(new THREE.BoxGeometry(0.7, 0.45, 0.45), 0xf4f4f0, at(ground, cx + 0.8, cz + 3.5)(M(0, 0.23, 0)));
     b.add(new THREE.BoxGeometry(0.72, 0.08, 0.47), 0x2b6cb0, at(ground, cx + 0.8, cz + 3.5)(M(0, 0.48, 0)));
   }
-  if (spec.bakkie) {
-    const x = cx - spec.tents * 2.4 - 3, z = cz - 4;
-    const paint = [0xf2f2f2, 0x9aa0a6, 0x7a2a2a, 0x2a3a5a][Math.floor(rng() * 4)];
-    if (!addPiece('bakkie', x, z, 0.4, { paint })) bakkie(b, at(ground, x, z, 0.4), paint);
+  // The campsite's electricity point at the edge of the stand.
+  addPiece('powerPost', cx - spec.tents * 2.4 - 1, cz - 1.2, 0);
+  // Vehicles parked alongside, as SA campers drive them: mostly double-cab
+  // bakkies (Hilux, Ranger and D-Max types -- the 2025 best sellers), a
+  // Land Cruiser-type or an SUV now and then, white far more than any
+  // other colour; a bigger camp brings a second car and a trailer.
+  const VEHICLES = [['bakkieHilux', 0.32], ['bakkieRanger', 0.26], ['bakkieDmax', 0.2], ['cruiser', 0.12], ['suv', 0.1]];
+  const PAINT = [[0xf2f2f0, 0.45], [0xb8bcc0, 0.2], [0x6b6e72, 0.12], [0x1c1d1f, 0.08], [0x8e1c16, 0.06], [0x2a4a72, 0.05], [0xc9b48a, 0.04]];
+  const pick = (list) => { let r = rng() * list.reduce((n, [, w]) => n + w, 0); for (const [v, w] of list) if ((r -= w) <= 0) return v; return list[0][0]; };
+  const park = (i) => {
+    const x = cx - spec.tents * 2.4 - 3.5 - i * 3.2, z = cz - 3.5 - i * 0.6;
+    const kind = pick(VEHICLES);
+    const paint = kind === 'cruiser' && rng() < 0.5 ? 0xc9b48a : pick(PAINT);
+    if (!addPiece(kind, x, z, 0.35, { paint })) bakkie(b, at(ground, x, z, 0.4), paint);
     put(x, z, 3.2);
+    return { x, z };
+  };
+  if (spec.bakkie) {
+    const first = park(0);
+    if (spec.tents >= 3) {
+      park(1);
+      addPiece('trailer', first.x + 2.2, first.z - 4.6, 0.35);
+    }
   }
   if (spec.caravan) {
     const x = cx + spec.tents * 2.4 + 4, z = cz - 4;

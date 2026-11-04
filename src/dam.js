@@ -77,8 +77,27 @@ export function createDam(spec = {}, seed = 1) {
     return best;
   }
 
+  // Levelled stands (a campsite's flat pitch): { x0, x1, z0, z1, y, blend }.
+  const pads = [];
+  function levelArea(pad) {
+    pads.push({ blend: 4, ...pad });
+  }
+
   // Ground height (land) or lake-bed height (under water).
   function groundHeight(x, z) {
+    const h = naturalHeight(x, z);
+    if (!pads.length) return h;
+    let y = h;
+    for (const p of pads) {
+      // 1 inside the stand, easing to 0 over `blend` metres outside it.
+      const dx = Math.max(p.x0 - x, 0, x - p.x1), dz = Math.max(p.z0 - z, 0, z - p.z1);
+      const w = 1 - smoothstep(0, p.blend, Math.hypot(dx, dz));
+      if (w > 0) y += (p.y - y) * w;
+    }
+    return y;
+  }
+
+  function naturalHeight(x, z) {
     const d = waterDist(x, z);
     if (d > 0) return 0.012 - Math.min(depthAt(x, z), d * 0.35 * bankSteepness + 0.15);
     const land = -d;
@@ -126,7 +145,7 @@ export function createDam(spec = {}, seed = 1) {
 
   return {
     shoreZ, farShoreZ, waterDist, isWater, depthAt, depthFactorAt, zoneAt,
-    groundHeight, floorHeight, isWalkable, standAt, stands: standBoxes, spawn,
+    groundHeight, naturalHeight, levelArea, floorHeight, isWalkable, standAt, stands: standBoxes, spawn,
     // flow: river current in m/s along +x (0 for still water).
     spec: { maxDepth, depthSlope, farShore, beachWidth, bankSteepness, hills, structure, flow },
   };
