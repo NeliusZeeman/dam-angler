@@ -3,6 +3,15 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Blender trees (built locally, not live yet)
+
+- **Trees grown in Blender** (`node tools/build-trees.mjs`, `tools/blender/build_trees.py`): umbrella thorn, blue gum and weeping willow, two shapes each.
+  - Leaf sprays are pictures Blender renders from modelled leaves (fine acacia leaflets with white thorns, sickle gum leaves, hanging willow strands).
+  - Three levels of detail: full branching near you, main limbs further off, and far away three crossed cards with pictures of the tree rendered from three sides. Phones switch sooner.
+  - Leaves sway in the wind (willows most); trees cast shadows. `?trees=built` shows the old built trees for comparing.
+  - Faster than the old trees at High (10.3 -> 9.2 ms a frame on the test PC).
+- **Fix:** thin foliage (grass, reeds, leaves) is now lit the same from both sides as intended -- the shader change never applied, so leaves seen from below could go black.
+
 ## v2 — Squashed textures and phone button layout (built locally, not live yet)
 
 - **Squashed textures (KTX2 / Basis Universal)** for the ground, bark, jetty planks, campers, boats and camp gear:

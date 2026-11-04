@@ -96,14 +96,46 @@ function prepareMaterial(m) {
   return m;
 }
 
-async function loadModel(key) {
-  if (models.has(key)) return;
+async function modelLoader() {
   if (!gltfLoader) {
     const { GLTFLoader } = await import('../vendor/addons/loaders/GLTFLoader.js');
     gltfLoader = withKtx2(new GLTFLoader());
   }
-  const gltf = await loadGltf(gltfLoader, `assets/scenery/models/${key}.glb`, assetTag());
+  return gltfLoader;
+}
+
+async function loadModel(key) {
+  if (models.has(key)) return;
+  const gltf = await loadGltf(await modelLoader(), `assets/scenery/models/${key}.glb`, assetTag());
   models.set(key, variantsOf(gltf, WHOLE.has(key)));
+}
+
+// The Blender trees (tools/build-trees.mjs), each 1 unit tall:
+// kind -> [{ height, width, lods: [{ bark, leaves }, { bark, leaves }, { far }] }]
+// where each part is { geometry, map }; the geometry's aSway is how freely
+// each point moves in the wind.
+export const TREE_KINDS = ['acacia', 'gum', 'willow'];
+const trees = new Map();
+async function loadTree(kind) {
+  if (trees.has(kind)) return;
+  const gltf = await loadGltf(await modelLoader(), `assets/scenery/models/tree-${kind}.glb`, assetTag());
+  const variants = [];
+  gltf.scene.traverse((o) => {
+    const m = o.isMesh && /^[a-z]+(\d+)_lod(\d)_([a-z]+)$/.exec(o.name);
+    if (!m) return;
+    const v = (variants[+m[1]] ||= { height: o.userData.height, width: o.userData.width, lods: [{}, {}, {}] });
+    const g = o.geometry;
+    if (g.attributes._sway) {
+      g.setAttribute('aSway', g.attributes._sway);
+      g.deleteAttribute('_sway');
+    }
+    v.lods[+m[2]][m[3]] = { geometry: g, map: o.material.map };
+  });
+  if (variants.length) trees.set(kind, variants);
+}
+
+export function treeModel(kind) {
+  return trees.get(kind) || null;
 }
 
 const WHOLE = new Set(['chair', 'picnicTable', 'braaiDrum', 'crate', 'bucket', 'lantern']);
@@ -117,7 +149,7 @@ export const SCENERY_MODELS = [
 
 // Which ground, soil and bark this water needs.
 export function textureKeysFor(location) {
-  return [groundSetFor(location).grass, groundSetFor(location).soil, 'rock', 'barkGum', 'barkWillow', 'planks'];
+  return [groundSetFor(location).grass, groundSetFor(location).soil, 'rock', 'barkAcacia', 'barkGum', 'barkWillow', 'planks'];
 }
 
 // Lush coastal and subtropical grass in KwaZulu-Natal and the Lowveld, dry
@@ -141,6 +173,8 @@ export async function loadScenery(location, timeoutMs = 10000) {
   const jobs = [
     ...textureKeysFor(location).map((k) => loadTextureSet(k)),
     ...SCENERY_MODELS.map((k) => loadModel(k)),
+    // ?trees=built: the game's own built trees instead, for comparing.
+    ...(globalThis.location?.search.includes('trees=built') ? [] : TREE_KINDS.map((k) => loadTree(k))),
   ].map((p) => p.catch((err) => console.warn('Scenery file not loaded:', err?.message || err)));
   await Promise.race([Promise.allSettled(jobs), new Promise((r) => setTimeout(r, timeoutMs))]);
 }

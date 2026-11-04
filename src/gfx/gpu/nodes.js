@@ -205,7 +205,7 @@ const windOffset = (wu, wp, h) => {
   return dir.mul(push).add(side.mul(tremble)).mul(h).mul(h);
 };
 
-export function windNodes(material, windUniforms, amountUniform, { instanced = false, cutout = false } = {}) {
+export function windNodes(material, windUniforms, amountUniform, { instanced = false, cutout = false, sway = false } = {}) {
   const amount = U(amountUniform, 'float');
   material.positionNode = Fn(() => {
     const p = positionLocal.toVar();
@@ -213,7 +213,8 @@ export function windNodes(material, windUniforms, amountUniform, { instanced = f
       // Each instance's root and height (prepareWindInstances in wind.js).
       const root = attribute('aRoot', 'vec4');
       const rootWorld = modelWorldMatrix.mul(vec4(root.xyz, 1.0)).xyz;
-      const off = windOffset(windUniforms, rootWorld, clamp(positionGeometry.y, 0.0, 1.0)).mul(root.w).mul(amount);
+      const h = sway ? attribute('aSway', 'float') : clamp(positionGeometry.y, 0.0, 1.0);
+      const off = windOffset(windUniforms, rootWorld, h).mul(root.w).mul(amount);
       p.x.addAssign(off.x);
       p.z.addAssign(off.y);
     } else {

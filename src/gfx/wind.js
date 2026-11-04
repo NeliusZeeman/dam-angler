@@ -60,22 +60,25 @@ export function prepareWindInstances(mesh) {
 // Adds the wind field to a built-in material. For instanced meshes the sway is
 // applied in world space after the instance transform, scaled by each
 // instance's height; for merged world-space meshes `aSway` (0 root .. 1 tip)
-// drives it directly.
-export function addWindToMaterial(material, { instanced = false, amount = 1, cutout = false } = {}) {
+// drives it directly. `sway`: an instanced mesh whose geometry carries its own
+// aSway (the Blender trees, 1 unit tall) instead of swaying by height.
+export function addWindToMaterial(material, { instanced = false, amount = 1, cutout = false, sway = false } = {}) {
   const amountUniform = { value: amount };
   material.userData.windAmount = amountUniform;
   if (GPU.on) {
-    GPU.nodes.windNodes(material, windUniforms, amountUniform, { instanced, cutout });
+    GPU.nodes.windNodes(material, windUniforms, amountUniform, { instanced, cutout, sway });
     return material;
   }
   // Same onBeforeCompile source for every variant, so the cache key must
   // tell them apart or three.js would reuse the wrong compiled program.
-  material.customProgramCacheKey = () => `wind-${instanced ? 'inst' : 'merged'}-${cutout ? 'cut' : 'solid'}`;
+  material.customProgramCacheKey = () => `wind-${instanced ? 'inst' : 'merged'}-${cutout ? 'cut' : 'solid'}${sway ? '-sway' : ''}`;
   material.onBeforeCompile = (shader) => {
     // Thin foliage is lit the same from both faces; three.js would otherwise
     // flip the normal on back faces and paint half of every blade black.
+    // (The chunk is still an #include at this point: expand it to edit it.)
     shader.fragmentShader = shader.fragmentShader.replace(
-      'float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;', 'float faceDirection = 1.0;',
+      '#include <normal_fragment_begin>',
+      THREE.ShaderChunk.normal_fragment_begin.replace('float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;', 'float faceDirection = 1.0;'),
     );
     if (cutout) {
       // Mipmapping averages a leaf texture's alpha away at a distance, so
@@ -93,7 +96,7 @@ export function addWindToMaterial(material, { instanced = false, amount = 1, cut
     }
     Object.assign(shader.uniforms, windUniforms, { uSwayAmount: amountUniform });
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\n${WIND_GLSL}\nuniform float uSwayAmount;\n${instanced ? '' : 'attribute float aSway;'}`);
+      .replace('#include <common>', `#include <common>\n${WIND_GLSL}\nuniform float uSwayAmount;\n${instanced && !sway ? '' : 'attribute float aSway;'}`);
     if (instanced) {
       shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `
         vec4 mvPosition = vec4(transformed, 1.0);
@@ -105,7 +108,7 @@ export function addWindToMaterial(material, { instanced = false, amount = 1, cut
           vec3 rootWorld = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
           float bladeHeight = 1.0;
         #endif
-        mvPosition.xz += windOffset(rootWorld, clamp(position.y, 0.0, 1.0)) * bladeHeight * uSwayAmount;
+        mvPosition.xz += windOffset(rootWorld, ${sway ? 'aSway' : 'clamp(position.y, 0.0, 1.0)'}) * bladeHeight * uSwayAmount;
         mvPosition = modelViewMatrix * mvPosition;
         gl_Position = projectionMatrix * mvPosition;
       `);

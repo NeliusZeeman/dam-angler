@@ -71,7 +71,13 @@ export function createScene({ location, dam, quality = 'high', handheld = false 
   const grass = createGrass(scene, {
     dam, terrain, location, exclude: keepClear, bladeCount: Math.round(({ low: 30000, medium: 60000, high: 95000, ultra: 160000, ultraplus: 200000 }[quality] ?? 95000) * (quality === 'low' ? 1 : phone)),
   });
-  const trees = createTrees(scene, { dam, terrain, location, avoid: camp?.area, leafDensity: Math.min(handheld ? 1 : 2, { low: 0.6, medium: 0.85, high: 1, ultra: 1.35, ultraplus: 1.35 }[quality] ?? 1) });
+  // Blender trees: full detail within `near` metres, lighter to `mid`, pictures beyond.
+  const treeLod = { medium: { near: 25, mid: 80 }, high: { near: 35, mid: 120 }, ultra: { near: 50, mid: 170 }, ultraplus: { near: 60, mid: 200 } }[quality] || { near: 35, mid: 120 };
+  const trees = createTrees(scene, {
+    dam, terrain, location, avoid: camp?.area,
+    leafDensity: Math.min(handheld ? 1 : 2, { low: 0.6, medium: 0.85, high: 1, ultra: 1.35, ultraplus: 1.35 }[quality] ?? 1),
+    lod: handheld ? { near: treeLod.near * 0.7, mid: treeLod.mid * 0.7 } : treeLod,
+  });
   createShoreline(scene, { dam, location });
   const wildlife = createWildlife(scene, { dam, location });
   const mist = createMist(scene, dam);
@@ -86,6 +92,7 @@ export function createScene({ location, dam, quality = 'high', handheld = false 
 
   function update({ delta, elapsed, envState, timeOverride = null }) {
     grass.update(camera);
+    trees.update(camera, delta);
     const tod = timeOverride || { timeOfDay: envState.timeOfDay, progress: envState.timeOfDayProgress };
     sampleAtmosphere(atmos, tod.timeOfDay, tod.progress);
     atmos.fogNear *= fogScale;
