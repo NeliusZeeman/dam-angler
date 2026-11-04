@@ -1,3 +1,4 @@
+import * as THREE from '../../vendor/three.module.js';
 import { assetTag } from '../versionCheck.js';
 
 // Squashed textures (tools/ktx/): KTX2 files the graphics chip keeps
@@ -39,12 +40,10 @@ async function make(renderer) {
     const probes = await Promise.race([Promise.all(PROBES.map((p) => l.loadAsync(`${p}${assetTag()}`))), timeout]);
     for (const t of probes) {
       if (!t.isCompressedTexture || !t.mipmaps?.[0]?.data?.byteLength) throw new Error('test picture empty');
-      if (renderer?.isWebGLRenderer) {
-        const gl = renderer.getContext();
-        while (gl.getError() !== gl.NO_ERROR) { /* clear old errors */ }
-        renderer.initTexture(t);
-        if (gl.getError() !== gl.NO_ERROR) throw new Error('graphics chip refused the test picture');
-      }
+      // Draw it and read the pixels back: a chip can take a squashed picture
+      // without complaint and still show nothing (WebGPU reports such errors
+      // only later), which is the white trees and people.
+      if (renderer && !(await shows(renderer, t))) throw new Error('graphics chip draws the test picture blank');
       t.dispose();
     }
     const list = await fetch(`assets/ktx2-models.json${assetTag()}`).then((r) => r.json()).catch(() => []);
@@ -56,6 +55,33 @@ async function make(renderer) {
     loader = null;
   }
   return loader;
+}
+
+// True if `texture` drawn on a little square off-screen comes out with any
+// colour (both test pictures are grey or blue-ish, never black).
+async function shows(renderer, texture) {
+  const target = new THREE.WebGLRenderTarget(4, 4);
+  const scene = new THREE.Scene();
+  const square = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: texture }));
+  scene.add(square);
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
+  camera.position.z = 1;
+  try {
+    renderer.setRenderTarget(target);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    let px = new Uint8Array(4 * 4 * 4);
+    if (renderer.isWebGPURenderer) px = await renderer.readRenderTargetPixelsAsync(target, 0, 0, 4, 4);
+    else renderer.readRenderTargetPixels(target, 0, 0, 4, 4, px);
+    let brightest = 0;
+    for (let i = 0; i < px.length; i += 4) brightest = Math.max(brightest, px[i], px[i + 1], px[i + 2]);
+    return brightest > 12;
+  } finally {
+    renderer.setRenderTarget(null);
+    target.dispose();
+    square.geometry.dispose();
+    square.material.dispose();
+  }
 }
 
 // Without a renderer (tool pages), ask a throwaway context which
