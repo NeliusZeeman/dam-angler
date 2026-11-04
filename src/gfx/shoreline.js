@@ -2,6 +2,8 @@ import * as THREE from '../../vendor/three.module.js';
 import { makeRng, seedFromString } from './noise.js';
 import { addWindToMaterial, prepareWindInstances } from './wind.js';
 import { lilyPadTexture } from './pixelTextures.js';
+import { lodModel, REED_KINDS } from '../sceneryAssets.js';
+import { plantLods, liftNormals } from './lodPlants.js';
 
 // A reed leaf 1 unit tall: long, tapering, arching outward.
 function reedLeafGeometry() {
@@ -112,7 +114,7 @@ function mergeIndexed(geos) {
   return merged;
 }
 
-export function createShoreline(scene, { dam, location }) {
+export function createShoreline(scene, { dam, location, lod = { near: 18, mid: 60 } }) {
   const rng = makeRng(seedFromString(location.id) + 515);
   const dummy = new THREE.Object3D();
   const color = new THREE.Color();
@@ -126,8 +128,23 @@ export function createShoreline(scene, { dam, location }) {
 
   // ─── Reeds & bulrushes ────────────────────────────────────────────────────
   const leaves = [], tails = [];
+  // The Blender reeds when they've loaded (tools/blender/build_reeds.py):
+  // one model per clump -- bulrushes along the waterline, mostly common
+  // reed (Phragmites) in the reed beds.
+  const useModels = REED_KINDS.every((k) => lodModel(k));
+  const planted = { typha: [], phragmites: [] };
   function clump(x, off, tall) {
     const [cx, cz] = offBank(x, off);
+    if (useModels) {
+      const kind = rng() < (tall ? 0.7 : 0.2) ? 'phragmites' : 'typha';
+      const variants = lodModel(kind);
+      const v = Math.floor(rng() * variants.length);
+      (planted[kind][v] ||= []).push({
+        x: cx, y: -0.25, z: cz, rotY: rng() * Math.PI * 2, tiltX: (rng() - 0.5) * 0.1,
+        h: variants[v].height * (tall ? 0.85 + rng() * 0.35 : 0.6 + rng() * 0.35),
+      });
+      return;
+    }
     const nLeaves = 10 + Math.floor(rng() * 10);
     for (let i = 0; i < nLeaves; i++) {
       const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 0.35;
@@ -163,39 +180,64 @@ export function createShoreline(scene, { dam, location }) {
     }
   }
 
-  const reedMat = addWindToMaterial(new THREE.MeshStandardMaterial({
-    color: 0x6f9a44, vertexColors: true, roughness: 0.75, side: THREE.DoubleSide,
-  }), { instanced: true, amount: 0.8 });
-  const reeds = new THREE.InstancedMesh(reedLeafGeometry(), reedMat, leaves.length);
-  leaves.forEach((l, i) => {
-    dummy.position.set(l.x, -0.25, l.z);
-    dummy.rotation.set(l.tilt * Math.cos(l.ry), l.ry, l.tilt * Math.sin(l.ry));
-    dummy.scale.set(l.w, l.h, l.w);
-    dummy.updateMatrix();
-    reeds.setMatrixAt(i, dummy.matrix);
-    const v = rng();
-    reeds.setColorAt(i, color.setRGB(0.85 + v * 0.3, 0.9 + v * 0.2, 0.75 + v * 0.2));
-  });
-  prepareWindInstances(reeds);
-  reeds.castShadow = true;
-  reeds.receiveShadow = true;
-  reeds.frustumCulled = false;
-  scene.add(reeds);
+  let reedPlants = null, reeds = null, cattails = null;
+  if (useModels) {
+    const plantMat = addWindToMaterial(new THREE.MeshStandardMaterial({
+      map: lodModel('typha')[0].lods[0].plant.map, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75,
+    }), { instanced: true, sway: true, amount: 0.8 });
+    // (No "cutout" alpha boost: the leaves are real shapes, and boosting the
+    // plumes' fine hairs turned them into solid blocks at a distance.)
+    const plantDepth = addWindToMaterial(new THREE.MeshDepthMaterial({
+      depthPacking: THREE.RGBADepthPacking, map: plantMat.map, alphaTest: 0.5,
+    }), { instanced: true, sway: true, amount: 0.8 });
+    const farMats = {};
+    reedPlants = plantLods(scene, planted, {
+      lod,
+      look: (kind, v, part) => {
+        if (part === 'plant') return { material: plantMat, depth: plantDepth, castShadow: true, receiveShadow: true };
+        const far = lodModel(kind)[v].lods[2].far;
+        liftNormals(far.geometry);
+        farMats[`${kind}${v}`] ||= addWindToMaterial(new THREE.MeshStandardMaterial({
+          map: far.map, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8,
+        }), { instanced: true, sway: true, cutout: true, amount: 0.5 });
+        return { material: farMats[`${kind}${v}`], castShadow: false, receiveShadow: true };
+      },
+    });
+  } else {
+    const reedMat = addWindToMaterial(new THREE.MeshStandardMaterial({
+      color: 0x6f9a44, vertexColors: true, roughness: 0.75, side: THREE.DoubleSide,
+    }), { instanced: true, amount: 0.8 });
+    reeds = new THREE.InstancedMesh(reedLeafGeometry(), reedMat, leaves.length);
+    leaves.forEach((l, i) => {
+      dummy.position.set(l.x, -0.25, l.z);
+      dummy.rotation.set(l.tilt * Math.cos(l.ry), l.ry, l.tilt * Math.sin(l.ry));
+      dummy.scale.set(l.w, l.h, l.w);
+      dummy.updateMatrix();
+      reeds.setMatrixAt(i, dummy.matrix);
+      const v = rng();
+      reeds.setColorAt(i, color.setRGB(0.85 + v * 0.3, 0.9 + v * 0.2, 0.75 + v * 0.2));
+    });
+    prepareWindInstances(reeds);
+    reeds.castShadow = true;
+    reeds.receiveShadow = true;
+    reeds.frustumCulled = false;
+    scene.add(reeds);
 
-  const tailMat = addWindToMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), { instanced: true, amount: 0.45 });
-  const cattails = new THREE.InstancedMesh(cattailGeometry(), tailMat, Math.max(1, tails.length));
-  tails.forEach((t, i) => {
-    dummy.position.set(t.x, -0.25, t.z);
-    dummy.rotation.set(t.tilt, t.ry, t.tilt * 0.7);
-    dummy.scale.set(t.s, t.s, t.s);
-    dummy.updateMatrix();
-    cattails.setMatrixAt(i, dummy.matrix);
-  });
-  cattails.count = tails.length;
-  prepareWindInstances(cattails);
-  cattails.castShadow = true;
-  cattails.frustumCulled = false;
-  scene.add(cattails);
+    const tailMat = addWindToMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), { instanced: true, amount: 0.45 });
+    cattails = new THREE.InstancedMesh(cattailGeometry(), tailMat, Math.max(1, tails.length));
+    tails.forEach((t, i) => {
+      dummy.position.set(t.x, -0.25, t.z);
+      dummy.rotation.set(t.tilt, t.ry, t.tilt * 0.7);
+      dummy.scale.set(t.s, t.s, t.s);
+      dummy.updateMatrix();
+      cattails.setMatrixAt(i, dummy.matrix);
+    });
+    cattails.count = tails.length;
+    prepareWindInstances(cattails);
+    cattails.castShadow = true;
+    cattails.frustumCulled = false;
+    scene.add(cattails);
+  }
 
   // ─── Lily pads, in clusters ───────────────────────────────────────────────
   const pads = [];
@@ -340,5 +382,5 @@ export function createShoreline(scene, { dam, location }) {
     scene.add(hyacinth, spikes);
   }
 
-  return { reeds, cattails, lily, petals, hyacinth };
+  return { reeds, cattails, lily, petals, hyacinth, update: (camera, delta) => reedPlants?.update(camera, delta) };
 }

@@ -3,6 +3,14 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Blender reeds (built locally, not live yet)
+
+- **Reeds grown in Blender** (`node tools/build-reeds.mjs`, `tools/blender/build_reeds.py`), replacing the single blades and cylinder bulrushes:
+  - bulrush / papkuil (Typha): upright fans of strap leaves, stems with velvety brown seed heads and spikes -- mostly along the waterline;
+  - common reed (Phragmites): tall canes with a leaf off every node and feathery plumes -- mostly in the reed beds.
+  - Three levels of detail like the trees (at half the trees' distances); sway in the wind. `?trees=built` shows the old reeds too.
+- The level-of-detail planting is shared by trees and reeds (`src/gfx/lodPlants.js`).
+
 ## v2 — Blender trees (built locally, not live yet)
 
 - **Trees grown in Blender** (`node tools/build-trees.mjs`, `tools/blender/build_trees.py`): umbrella thorn, blue gum and weeping willow, two shapes each.

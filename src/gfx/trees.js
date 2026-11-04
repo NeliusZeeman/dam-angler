@@ -1,7 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { makeRng, seedFromString } from './noise.js';
 import { addWindToMaterial } from './wind.js';
-import { GPU } from './gpu.js';
+import { plantLods, liftNormals } from './lodPlants.js';
 import { barkTexture, willowStrandTexture, acaciaLeafTexture, gumLeafTexture } from './pixelTextures.js';
 import { scanTexture, treeModel, TREE_KINDS } from '../sceneryAssets.js';
 
@@ -283,96 +283,9 @@ function leafMaterial(map, windAmount, instanced = false) {
 }
 
 // ─── The Blender trees (tools/blender/build_trees.py) ───────────────────────
-// Every tree of a kind and shape is an instance of the same model, drawn at
-// one of three levels of detail by its distance from you: full branching
-// near (lod0), main limbs and bigger leaf sprays further off (lod1), and far
-// away three crossed cards showing pictures of the tree (lod2). Who is at
-// which level is worked out a few times a second.
+// Planted at three levels of detail by distance (lodPlants.js).
 const MODEL_SWAY = { acacia: 0.35, gum: 0.6, willow: 1.6 };
 const BARK_SWAY = 0.12;
-const treeDummy = new THREE.Object3D();
-const treeMatrix = new THREE.Matrix4();
-
-function modelForest(scene, planted, { barkFor, lod, leafMats, farMats }) {
-  // planted: kind -> variant index -> [{ x, y, z, h, rotY, tiltX }]
-  const sets = [];
-  for (const [kind, byVariant] of Object.entries(planted)) {
-    const model = treeModel(kind);
-    byVariant.forEach((list, v) => {
-      if (!list?.length) return;
-      const variant = model[v];
-      const matrices = list.map((t) => {
-        treeDummy.position.set(t.x, t.y, t.z);
-        treeDummy.rotation.set(t.tiltX || 0, t.rotY, 0);
-        treeDummy.scale.setScalar(t.h);
-        treeDummy.updateMatrix();
-        return treeDummy.matrix.clone();
-      });
-      const levels = variant.lods.map((parts, level) => Object.entries(parts).map(([part, { geometry }]) => {
-        const material = part === 'bark' ? barkFor(kind) : part === 'leaves' ? leafMats[kind].mat : farMats[kind][v];
-        const mesh = new THREE.InstancedMesh(geometry, material, list.length);
-        mesh.count = 0;
-        mesh.castShadow = level < 2;
-        // A dense crown would shade its own lower sprays black: leaves don't
-        // take shadows (they still cast them).
-        mesh.receiveShadow = part !== 'leaves';
-        mesh.frustumCulled = false;
-        if (part === 'leaves') mesh.customDepthMaterial = leafMats[kind].depth;
-        if (GPU.on) {
-          mesh.userData.root = new THREE.InstancedBufferAttribute(new Float32Array(list.length * 4), 4);
-          geometry.setAttribute('aRoot', mesh.userData.root);
-        }
-        scene.add(mesh);
-        return mesh;
-      }));
-      sets.push({ list, matrices, levels });
-    });
-  }
-
-  let last = null;
-  let wait = 0;
-  function update(camera, delta = 0.25) {
-    wait -= delta;
-    const p = camera.position;
-    if (wait > 0 && last && last.distanceToSquared(p) < 4) return;
-    wait = 0.3;
-    (last ||= new THREE.Vector3()).copy(p);
-    const near2 = lod.near * lod.near, mid2 = lod.mid * lod.mid;
-    for (const set of sets) {
-      for (const meshes of set.levels) for (const m of meshes) m.count = 0;
-      set.list.forEach((t, i) => {
-        const d2 = (t.x - p.x) ** 2 + (t.z - p.z) ** 2;
-        const level = d2 < near2 ? 0 : d2 < mid2 ? 1 : 2;
-        for (const m of set.levels[level]) {
-          const k = m.count++;
-          m.setMatrixAt(k, set.matrices[i]);
-          if (m.userData.root) m.userData.root.array.set([t.x, t.y, t.z, t.h], k * 4);
-        }
-      });
-      for (const meshes of set.levels) {
-        for (const m of meshes) {
-          m.instanceMatrix.needsUpdate = true;
-          if (m.userData.root) m.userData.root.needsUpdate = true;
-        }
-      }
-    }
-  }
-  return { update, count: () => sets.reduce((n, s) => n + s.list.length, 0) };
-}
-
-// Far cards are lit as if facing mostly up, so they don't go dark when the
-// sun is high and the cards stand edge-on to it.
-function liftNormals(geometry) {
-  const n = geometry.attributes.normal;
-  const v = new THREE.Vector3();
-  for (let i = 0; i < n.count; i++) {
-    v.fromBufferAttribute(n, i).multiplyScalar(0.45);
-    v.y += 1;
-    v.normalize();
-    n.setXYZ(i, v.x, v.y, v.z);
-  }
-  n.needsUpdate = true;
-}
 
 export function createTrees(scene, { dam, terrain, location, leafDensity = 1, avoid = null, lod = { near: 35, mid: 120 } }) {
   LEAF = leafDensity;
@@ -533,7 +446,14 @@ export function createTrees(scene, { dam, terrain, location, leafDensity = 1, av
         }), { instanced: true, sway: true, cutout: true, amount: MODEL_SWAY[kind] * 0.3 });
       });
     }
-    forest = modelForest(scene, planted, { barkFor, lod, leafMats: modelLeaves, farMats });
+    forest = plantLods(scene, planted, {
+      lod,
+      look: (kind, v, part, level) => (part === 'bark' ? { material: barkFor(kind), castShadow: level < 2, receiveShadow: true }
+        // A dense crown would shade its own lower sprays black: leaves don't
+        // take shadows (they still cast them).
+        : part === 'leaves' ? { material: modelLeaves[kind].mat, depth: modelLeaves[kind].depth, castShadow: true, receiveShadow: false }
+        : { material: farMats[kind][v], castShadow: false, receiveShadow: true }),
+    });
   }
 
   function setSeason(season) {
@@ -554,7 +474,7 @@ export function createTrees(scene, { dam, terrain, location, leafDensity = 1, av
   }
   setSeason('summer');
 
-  return { setSeason, update: (camera, delta) => forest?.update(camera, delta) };
+  return { setSeason, lod, update: (camera, delta) => forest?.update(camera, delta) };
 }
 
 const WHITE = new THREE.Color(1, 1, 1);

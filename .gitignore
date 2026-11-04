@@ -10,3 +10,4 @@ art-source/
 
 # Blender smoke/fire cache
 waveletNoiseTile.bin
+__pycache__/

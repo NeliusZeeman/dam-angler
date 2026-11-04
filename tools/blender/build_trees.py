@@ -650,7 +650,9 @@ def build_kind(kind):
     print('wrote', path)
 
 
-for kind in GROW:
-    if ONLY and kind not in ONLY:
-        continue
-    build_kind(kind)
+# (build_reeds.py imports the helpers above without building trees.)
+if __name__ == '__main__':
+    for kind in GROW:
+        if ONLY and kind not in ONLY:
+            continue
+        build_kind(kind)

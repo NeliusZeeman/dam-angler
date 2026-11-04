@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { TREE_KINDS } from '../src/sceneryAssets.js';
+import { TREE_KINDS, REED_KINDS } from '../src/sceneryAssets.js';
 
 // Every Blender tree (tools/build-trees.mjs) has each shape at all three
 // levels of detail, with the wind's sway values and its real size.
@@ -28,4 +28,22 @@ for (const kind of TREE_KINDS) {
     assert.ok(tris('lod0_leaves') > tris('lod1_leaves') && tris('lod0_bark') > tris('lod1_bark'), `${kind}${v} lod1 is lighter`);
   }
 }
-console.log('tree tests passed');
+// The Blender reeds (tools/build-reeds.mjs): both kinds, two clumps each,
+// at three levels.
+{
+  const b = readFileSync('assets/scenery/models/reeds.glb');
+  const json = JSON.parse(b.toString('utf8', 20, 20 + b.readUInt32LE(12)));
+  const nodes = new Map(json.nodes.map((n) => [n.name, n]));
+  for (const kind of REED_KINDS) {
+    for (const v of [0, 1]) {
+      for (const part of ['lod0_plant', 'lod1_plant', 'lod2_far']) {
+        const node = nodes.get(`${kind}${v}_${part}`);
+        assert.ok(node, `${kind}${v}_${part} present`);
+        assert.ok('_SWAY' in json.meshes[node.mesh].primitives[0].attributes, `${kind}${v}_${part} sways`);
+        const [lo, hi] = { typha: [1.2, 2.6], phragmites: [1.8, 3.6] }[kind];
+        assert.ok(node.extras?.height >= lo && node.extras.height <= hi, `${kind}${v} is ${node.extras?.height} m tall`);
+      }
+    }
+  }
+}
+console.log('tree and reed tests passed');

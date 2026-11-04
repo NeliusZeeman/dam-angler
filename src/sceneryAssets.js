@@ -110,33 +110,37 @@ async function loadModel(key) {
   models.set(key, variantsOf(gltf, WHOLE.has(key)));
 }
 
-// The Blender trees (tools/build-trees.mjs), each 1 unit tall:
-// kind -> [{ height, width, lods: [{ bark, leaves }, { bark, leaves }, { far }] }]
-// where each part is { geometry, map }; the geometry's aSway is how freely
-// each point moves in the wind.
+// The Blender plants with three levels of detail, each 1 unit tall: trees
+// (tools/build-trees.mjs) and reeds (tools/build-reeds.mjs).
+// kind -> [{ height, width, lods: [{ part: { geometry, map } } x 3] }]
+// (tree parts: bark, leaves, far; reed parts: plant, far). The geometry's
+// aSway is how freely each point moves in the wind.
 export const TREE_KINDS = ['acacia', 'gum', 'willow'];
-const trees = new Map();
-async function loadTree(kind) {
-  if (trees.has(kind)) return;
-  const gltf = await loadGltf(await modelLoader(), `assets/scenery/models/tree-${kind}.glb`, assetTag());
-  const variants = [];
+export const REED_KINDS = ['typha', 'phragmites'];
+const lodModels = new Map();
+const LOD_FILES = [...TREE_KINDS.map((k) => `tree-${k}`), 'reeds'];
+async function loadLodFile(file) {
+  const gltf = await loadGltf(await modelLoader(), `assets/scenery/models/${file}.glb`, assetTag());
+  const found = new Map();
   gltf.scene.traverse((o) => {
-    const m = o.isMesh && /^[a-z]+(\d+)_lod(\d)_([a-z]+)$/.exec(o.name);
+    const m = o.isMesh && /^([a-z]+)(\d+)_lod(\d)_([a-z]+)$/.exec(o.name);
     if (!m) return;
-    const v = (variants[+m[1]] ||= { height: o.userData.height, width: o.userData.width, lods: [{}, {}, {}] });
+    const variants = found.get(m[1]) || found.set(m[1], []).get(m[1]);
+    const v = (variants[+m[2]] ||= { height: o.userData.height, width: o.userData.width, lods: [{}, {}, {}] });
     const g = o.geometry;
     if (g.attributes._sway) {
       g.setAttribute('aSway', g.attributes._sway);
       g.deleteAttribute('_sway');
     }
-    v.lods[+m[2]][m[3]] = { geometry: g, map: o.material.map };
+    v.lods[+m[3]][m[4]] = { geometry: g, map: o.material.map };
   });
-  if (variants.length) trees.set(kind, variants);
+  for (const [kind, variants] of found) lodModels.set(kind, variants);
 }
 
-export function treeModel(kind) {
-  return trees.get(kind) || null;
+export function lodModel(kind) {
+  return lodModels.get(kind) || null;
 }
+export const treeModel = lodModel;
 
 const WHOLE = new Set(['chair', 'picnicTable', 'braaiDrum', 'crate', 'bucket', 'lantern']);
 
@@ -173,8 +177,8 @@ export async function loadScenery(location, timeoutMs = 10000) {
   const jobs = [
     ...textureKeysFor(location).map((k) => loadTextureSet(k)),
     ...SCENERY_MODELS.map((k) => loadModel(k)),
-    // ?trees=built: the game's own built trees instead, for comparing.
-    ...(globalThis.location?.search.includes('trees=built') ? [] : TREE_KINDS.map((k) => loadTree(k))),
+    // ?trees=built: the game's own built trees and reeds instead, for comparing.
+    ...(globalThis.location?.search.includes('trees=built') ? [] : LOD_FILES.map((f) => loadLodFile(f))),
   ].map((p) => p.catch((err) => console.warn('Scenery file not loaded:', err?.message || err)));
   await Promise.race([Promise.allSettled(jobs), new Promise((r) => setTimeout(r, timeoutMs))]);
 }

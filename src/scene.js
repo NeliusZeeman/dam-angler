@@ -78,7 +78,8 @@ export function createScene({ location, dam, quality = 'high', handheld = false 
     leafDensity: Math.min(handheld ? 1 : 2, { low: 0.6, medium: 0.85, high: 1, ultra: 1.35, ultraplus: 1.35 }[quality] ?? 1),
     lod: handheld ? { near: treeLod.near * 0.7, mid: treeLod.mid * 0.7 } : treeLod,
   });
-  createShoreline(scene, { dam, location });
+  // Reeds are smaller than trees: their detail drops off at half the distance.
+  const shoreline = createShoreline(scene, { dam, location, lod: { near: trees.lod.near * 0.5, mid: trees.lod.mid * 0.5 } });
   const wildlife = createWildlife(scene, { dam, location });
   const mist = createMist(scene, dam);
   const atmos = createAtmosphereState();
@@ -93,6 +94,7 @@ export function createScene({ location, dam, quality = 'high', handheld = false 
   function update({ delta, elapsed, envState, timeOverride = null }) {
     grass.update(camera);
     trees.update(camera, delta);
+    shoreline.update(camera, delta);
     const tod = timeOverride || { timeOfDay: envState.timeOfDay, progress: envState.timeOfDayProgress };
     sampleAtmosphere(atmos, tod.timeOfDay, tod.progress);
     atmos.fogNear *= fogScale;

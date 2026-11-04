@@ -37,7 +37,7 @@ const PASSES = [
   { ...base, slots: /^(baseColorTexture|emissiveTexture)$/, isUASTC: false, qualityLevel: 255, compressionLevel: 4, isPerceptual: true, isSetKTX2SRGBTransferFunc: true },
   { ...base, slots: /./, isUASTC: false, qualityLevel: 255, compressionLevel: 4, isPerceptual: false, isSetKTX2SRGBTransferFunc: false },
 ];
-// Trees are nearly all see-through leaf pictures: ETC1S frays thin willow
+// Trees and reeds are mostly see-through leaf pictures: ETC1S frays thin willow
 // strands and leaflets, so their pictures are UASTC (only a few, small).
 const TREE_PASSES = [
   { ...base, slots: /./, isUASTC: true, enableRDO: true, rdoQualityLevel: 2, isPerceptual: true, isSetKTX2SRGBTransferFunc: true },
@@ -65,7 +65,7 @@ for (const dir of DIRS) {
     if (!process.env.FORCE && existsSync(done) && statSync(done).mtimeMs >= statSync(src).mtimeMs) continue;
     const doc = await io.read(src);
     if (!doc.getRoot().listTextures().length) continue;
-    for (const pass of f.startsWith('tree-') ? TREE_PASSES : PASSES) await doc.transform(ktx2(pass));
+    for (const pass of f.startsWith('tree-') || f === 'reeds.glb' ? TREE_PASSES : PASSES) await doc.transform(ktx2(pass));
     const out = src.replace(/\.glb$/, '.ktx2.glb');
     await io.write(out, doc);
     before += statSync(src).size;
