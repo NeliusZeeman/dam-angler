@@ -3,6 +3,16 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Blender camp gear and jetties (built locally, not live yet)
+
+- **Camp gear made in Blender** (`node tools/build-camp.mjs`, `tools/blender/build_camp.py`), replacing the sphere tents and box vehicles:
+  - dome tents (two sizes) with fly-sheet, porch, door, crossing poles and guy ropes, in the camp's colours;
+  - a 3 m pop-up gazebo with scissor frame, peak vent and scalloped valance;
+  - a generic double-cab bakkie with canopy, and a classic white caravan with stripe, A-frame and jockey wheel;
+  - a cooler box. Each at three levels of detail by distance.
+- **Jetties:** worn, bevelled Blender boards (three shapes), posts with chamfered tops, diagonal braces under the deck and mooring cleats at the end, set out along every stand.
+- `?camp=built` shows the old built camp and jetty boards for comparing. Rocks were already photo-scanned and are unchanged.
+
 ## v2 — Blender reeds (built locally, not live yet)
 
 - **Reeds grown in Blender** (`node tools/build-reeds.mjs`, `tools/blender/build_reeds.py`), replacing the single blades and cylinder bulrushes:

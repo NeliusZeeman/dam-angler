@@ -1,7 +1,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { makeRng, seedFromString } from './noise.js';
 import { woodTexture, glowTexture } from './pixelTextures.js';
-import { scanTexture } from '../sceneryAssets.js';
+import { scanTexture, piece } from '../sceneryAssets.js';
 import { DECK_Y } from '../dam.js';
 
 
@@ -57,12 +57,23 @@ function jettyFrame(originX, originZ) {
   };
 }
 
-function buildJetty(builder, frame, rng, { fromOff, toOff, width, deckY, postBottom }) {
+// `parts`: where to set out the Blender planks, posts, braces and cleats
+// (tools/blender/build_camp.py) as { key: [{ matrix, colour }] }; without
+// it the boards and posts are built boxes and cylinders.
+const scaleM = (x, y, z) => new THREE.Matrix4().makeScale(x, y, z);
+function buildJetty(builder, frame, rng, { fromOff, toOff, width, deckY, postBottom, parts = null }) {
   const plank = new THREE.BoxGeometry(width, 0.045, 0.2);
   const tone = new THREE.Color();
   for (let off = toOff; off > fromOff; off -= 0.23) {
     tone.setHSL(0.08 + rng() * 0.02, 0.25 + rng() * 0.15, 0.62 + rng() * 0.22);
-    builder.add(plank.clone(), frame.matrix(off, (rng() - 0.5) * 0.04, deckY + (rng() - 0.5) * 0.01, (rng() - 0.5) * 0.02, (rng() - 0.5) * 0.02), tone, rng());
+    const m = frame.matrix(off, (rng() - 0.5) * 0.04, deckY + (rng() - 0.5) * 0.01, (rng() - 0.5) * 0.02, (rng() - 0.5) * 0.02);
+    if (parts) {
+      // The board model is 1 m long and sits on its underside.
+      m.multiply(new THREE.Matrix4().makeTranslation(0, -0.0225, 0)).multiply(scaleM(width, 1, 1));
+      parts[`plank${Math.floor(rng() * 3)}`].push({ matrix: m, colour: tone.clone() });
+    } else {
+      builder.add(plank.clone(), m, tone, rng());
+    }
   }
   const len = toOff - fromOff;
   const stringer = new THREE.BoxGeometry(0.1, 0.12, len);
@@ -72,14 +83,38 @@ function buildJetty(builder, frame, rng, { fromOff, toOff, width, deckY, postBot
   const posts = [];
   for (let off = fromOff + 0.2; off <= toOff; off += Math.max(1.4, len / 4)) posts.push(off);
   posts.push(toOff - 0.1);
+  const bottoms = [];
   for (const off of posts) {
     for (const lat of [-width / 2 - 0.02, width / 2 + 0.02]) {
       // Posts run down to the actual bank / lake bed under each one.
       const bottom = typeof postBottom === 'function' ? postBottom(frame.point(off, lat, 0)) - 0.3 : postBottom;
       const h = deckY + 0.14 - bottom;
-      const post = new THREE.CylinderGeometry(0.07, 0.08, h, 8);
-      builder.add(post, frame.matrix(off, lat, bottom + h / 2), tone.setRGB(0.4, 0.33, 0.26), rng());
+      bottoms.push({ off, lat, bottom });
+      if (parts) {
+        parts.post.push({ matrix: frame.matrix(off, lat, bottom).multiply(scaleM(1, h, 1)), colour: tone.setRGB(0.75, 0.68, 0.6).clone() });
+      } else {
+        const post = new THREE.CylinderGeometry(0.07, 0.08, h, 8);
+        builder.add(post, frame.matrix(off, lat, bottom + h / 2), tone.setRGB(0.4, 0.33, 0.26), rng());
+      }
     }
+  }
+  if (!parts) return;
+  // Diagonal braces between neighbouring posts on each side, under the deck.
+  const up = new THREE.Vector3(0, 1, 0);
+  const q = new THREE.Quaternion();
+  for (let i = 0; i + 2 < bottoms.length; i++) {
+    const a = bottoms[i], b = bottoms[i + 2];
+    if (a.lat !== b.lat) continue;
+    const top = frame.point(a.off, a.lat, deckY - 0.15);
+    const low = frame.point(b.off, b.lat, Math.max(b.bottom + 0.35, deckY - 1.4));
+    const dir = low.clone().sub(top);
+    const len = dir.length();
+    q.setFromUnitVectors(up, dir.normalize());
+    parts.brace.push({ matrix: new THREE.Matrix4().compose(top, q, new THREE.Vector3(1, len, 1)), colour: new THREE.Color(0.7, 0.62, 0.54) });
+  }
+  // A mooring cleat on each side at the end.
+  for (const lat of [-width / 2 + 0.12, width / 2 - 0.12]) {
+    parts.cleat.push({ matrix: frame.matrix(toOff - 0.3, lat, deckY + 0.0225, Math.PI / 2), colour: new THREE.Color(1, 1, 1) });
   }
 }
 
@@ -96,11 +131,14 @@ export function createProps(scene, { dam, terrain, location }) {
     : new THREE.MeshStandardMaterial({ map: woodMap, vertexColors: true, roughness: 0.88 });
   const jetty = new PieceBuilder();
   const bedAt = (p) => terrain.heightAt(p.x, p.z);
+  // The Blender boards and posts when loaded (sceneryAssets.js piece).
+  const PART_KEYS = ['plank0', 'plank1', 'plank2', 'post', 'brace', 'cleat'];
+  const parts = PART_KEYS.every((k) => piece(k)) ? Object.fromEntries(PART_KEYS.map((k) => [k, []])) : null;
 
   // Every angling stand along this stretch of bank, from the dam spec.
   const frames = dam.stands.map((st) => {
     const frame = jettyFrame(st.x, dam.shoreZ(st.x));
-    buildJetty(jetty, frame, rng, { fromOff: -3, toOff: st.length, width: st.width, deckY: st.deckY, postBottom: bedAt });
+    buildJetty(jetty, frame, rng, { fromOff: -3, toOff: st.length, width: st.width, deckY: st.deckY, postBottom: bedAt, parts });
     return frame;
   });
   // No stand (a river bank, a mountain stream): the kit sits on the ground
@@ -114,6 +152,27 @@ export function createProps(scene, { dam, terrain, location }) {
     jettyMesh.castShadow = true;
     jettyMesh.receiveShadow = true;
     scene.add(jettyMesh);
+    if (parts) {
+      // Scanned wood on the Blender boards (their UVs run along the grain).
+      const boardMat = planks
+        ? new THREE.MeshStandardMaterial({ map: planks.map, normalMap: planks.normalMap, roughnessMap: planks.roughnessMap, roughness: 1, color: new THREE.Color(1.5, 1.5, 1.5) })
+        : new THREE.MeshStandardMaterial({ map: woodMap, roughness: 0.88 });
+      for (const key of PART_KEYS) {
+        const list = parts[key];
+        if (!list.length) continue;
+        for (const part of piece(key).parts) {
+          const mesh = new THREE.InstancedMesh(part.geometry, key === 'cleat' ? part.material : boardMat, list.length);
+          list.forEach((p, i) => {
+            mesh.setMatrixAt(i, p.matrix);
+            mesh.setColorAt(i, p.colour);
+          });
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          mesh.computeBoundingSphere();
+          scene.add(mesh);
+        }
+      }
+    }
   }
   // Height to set kit on: the deck, or the ground under that spot.
   const baseY = (off, lat) => (onBank ? terrain.heightAt(main.point(off, lat, 0).x, main.point(off, lat, 0).z) : DECK_Y);

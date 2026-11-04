@@ -2,7 +2,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { makeRng } from './noise.js';
 import { mergeGeometries } from './terrain.js';
 import { glowTexture } from './pixelTextures.js';
-import { scanModel, variantObject } from '../sceneryAssets.js';
+import { scanModel, variantObject, pieceLods } from '../sceneryAssets.js';
 import { peopleReady } from '../people.js';
 import { assetTag } from '../versionCheck.js';
 import { createCampLife } from './campLife.js';
@@ -161,6 +161,37 @@ export function createCamp(scene, { dam, terrain, spec, seed = 1, location = {},
     gear.add(obj);
     return true;
   }
+  // Tents, the gazebo, the bakkie, caravan and cooler made in Blender
+  // (tools/blender/build_camp.py) when loaded, each at three levels of
+  // detail by distance; `tint` recolours a material by name (the tent's
+  // fly-sheet, the bakkie's paint).
+  const tinted = new Map();
+  function addPiece(name, x, z, turn, tint = null) {
+    const lods = pieceLods(name);
+    if (!lods) return false;
+    const lod = new THREE.LOD();
+    lods.forEach((variant, level) => {
+      const obj = variantObject(variant);
+      if (tint) {
+        obj.traverse((o) => {
+          const colour = o.isMesh ? tint[o.material.name] : undefined;
+          if (colour === undefined) return;
+          const key = `${o.material.uuid}:${colour}`;
+          if (!tinted.has(key)) {
+            const m = o.material.clone();
+            m.color.set(colour);
+            tinted.set(key, m);
+          }
+          o.material = tinted.get(key);
+        });
+      }
+      lod.addLevel(obj, [0, 30, 80][level]);
+    });
+    lod.position.set(x, ground(x, z), z);
+    lod.rotation.y = turn;
+    gear.add(lod);
+    return true;
+  }
   const seat = (b, place, colour, x, z, turn) => {
     if (!addScan('chair', x, z, turn + SCAN_CHAIR_TURN)) chair(b, place, colour);
   };
@@ -186,10 +217,13 @@ export function createCamp(scene, { dam, terrain, spec, seed = 1, location = {},
   for (let i = 0; i < spec.tents; i++) {
     const x = cx + (i - (spec.tents - 1) / 2) * 4.2 + (rng() - 0.5) * 1.2;
     const z = cz - 3 - rng() * 2.5;
-    tent(b, at(ground, x, z, facing + (rng() - 0.5) * 0.6), TENT_COLOURS[(i + Math.floor(rng() * 3)) % TENT_COLOURS.length], rng);
-    put(x, z, 2.2);
+    const turn = facing + (rng() - 0.5) * 0.6;
+    const colour = TENT_COLOURS[(i + Math.floor(rng() * 3)) % TENT_COLOURS.length];
+    const big = i % 3 === 2;
+    if (!addPiece(big ? 'tentBig' : 'tent', x, z, turn, { fly: colour })) tent(b, at(ground, x, z, turn), colour, rng);
+    put(x, z, big ? 2.8 : 2.2);
   }
-  gazebo(b, at(ground, cx - 1, cz + 1.5, 0.1));
+  if (!addPiece('gazebo', cx - 1, cz + 1.5, 0.1)) gazebo(b, at(ground, cx - 1, cz + 1.5, 0.1));
   put(cx - 1, cz + 1.5, 2.6);
   const drum = addScan('braaiDrum', cx + 3, cz + 2.5, rng() * Math.PI);
   if (!drum) braai(b, at(ground, cx + 3, cz + 2.5));
@@ -215,16 +249,19 @@ export function createCamp(scene, { dam, terrain, spec, seed = 1, location = {},
     if (seated < Math.ceil(people * 0.6)) { somebody(b, place, x, z, turn, { sitting: true }); seated++; }
   }
   // Cooler box and the vehicles behind the tents.
-  b.add(new THREE.BoxGeometry(0.7, 0.45, 0.45), 0xf4f4f0, at(ground, cx + 0.8, cz + 3.5)(M(0, 0.23, 0)));
-  b.add(new THREE.BoxGeometry(0.72, 0.08, 0.47), 0x2b6cb0, at(ground, cx + 0.8, cz + 3.5)(M(0, 0.48, 0)));
+  if (!addPiece('cooler', cx + 0.8, cz + 3.5, 0)) {
+    b.add(new THREE.BoxGeometry(0.7, 0.45, 0.45), 0xf4f4f0, at(ground, cx + 0.8, cz + 3.5)(M(0, 0.23, 0)));
+    b.add(new THREE.BoxGeometry(0.72, 0.08, 0.47), 0x2b6cb0, at(ground, cx + 0.8, cz + 3.5)(M(0, 0.48, 0)));
+  }
   if (spec.bakkie) {
     const x = cx - spec.tents * 2.4 - 3, z = cz - 4;
-    bakkie(b, at(ground, x, z, 0.4), [0xf2f2f2, 0x9aa0a6, 0x7a2a2a, 0x2a3a5a][Math.floor(rng() * 4)]);
+    const paint = [0xf2f2f2, 0x9aa0a6, 0x7a2a2a, 0x2a3a5a][Math.floor(rng() * 4)];
+    if (!addPiece('bakkie', x, z, 0.4, { paint })) bakkie(b, at(ground, x, z, 0.4), paint);
     put(x, z, 3.2);
   }
   if (spec.caravan) {
     const x = cx + spec.tents * 2.4 + 4, z = cz - 4;
-    caravan(b, at(ground, x, z, -0.3));
+    if (!addPiece('caravan', x, z, -0.3)) caravan(b, at(ground, x, z, -0.3));
     put(x, z, 3.5);
   }
   // Anglers down at the water: rod pods, and someone standing with a rod.

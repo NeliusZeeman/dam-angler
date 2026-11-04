@@ -74,7 +74,7 @@ function variantsOf(gltf, whole) {
     if (!parts.length) continue;
     const centre = box.getCenter(new THREE.Vector3());
     for (const p of parts) p.geometry.translate(-centre.x, -box.min.y, -centre.z);
-    out.push({ parts, size: box.getSize(new THREE.Vector3()) });
+    out.push({ parts, size: box.getSize(new THREE.Vector3()), name: node.name });
   }
   return out;
 }
@@ -142,6 +142,26 @@ export function lodModel(kind) {
 }
 export const treeModel = lodModel;
 
+// Camp gear and jetty parts made in Blender (tools/build-camp.mjs): each top
+// node of camp.glb / jetty.glb is one piece -- "tent_lod0".."tent_lod2",
+// "plank0", "post" -- stood on the origin like the scanned models.
+const pieces = new Map();
+export const PIECE_FILES = ['camp', 'jetty'];
+async function loadPieceFile(file) {
+  const gltf = await loadGltf(await modelLoader(), `assets/scenery/models/${file}.glb`, assetTag());
+  for (const v of variantsOf(gltf, false)) pieces.set(v.name, v);
+}
+
+export function piece(name) {
+  return pieces.get(name) || null;
+}
+
+// A camp piece with its three levels of detail (null if not loaded).
+export function pieceLods(name) {
+  const lods = [0, 1, 2].map((l) => pieces.get(`${name}_lod${l}`));
+  return lods.every(Boolean) ? lods : null;
+}
+
 const WHOLE = new Set(['chair', 'picnicTable', 'braaiDrum', 'crate', 'bucket', 'lantern']);
 
 export const SCENERY_MODELS = [
@@ -179,6 +199,8 @@ export async function loadScenery(location, timeoutMs = 10000) {
     ...SCENERY_MODELS.map((k) => loadModel(k)),
     // ?trees=built: the game's own built trees and reeds instead, for comparing.
     ...(globalThis.location?.search.includes('trees=built') ? [] : LOD_FILES.map((f) => loadLodFile(f))),
+    // ?camp=built: the game's own built tents, vehicles and jetty planks instead.
+    ...(globalThis.location?.search.includes('camp=built') ? [] : PIECE_FILES.map((f) => loadPieceFile(f))),
   ].map((p) => p.catch((err) => console.warn('Scenery file not loaded:', err?.message || err)));
   await Promise.race([Promise.allSettled(jobs), new Promise((r) => setTimeout(r, timeoutMs))]);
 }
