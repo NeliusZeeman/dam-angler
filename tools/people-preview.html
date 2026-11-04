@@ -37,13 +37,19 @@ const span = who.length * 0.9;
 camera.position.set(0, Number(q.get('cy') || 1.3), Number(q.get('cz') || span + 2.2));
 camera.lookAt(0, Number(q.get('ly') || 1.0), 0);
 
+// ?ktx2=1: the squashed copies (tools/ktx/build-glb-ktx2.mjs).
+const squashed = q.get('ktx2') === '1';
 const loader = new GLTFLoader();
+if (squashed) {
+  const { KTX2Loader } = await import('/vendor/addons/loaders/KTX2Loader.js');
+  loader.setKTX2Loader(new KTX2Loader().setTranscoderPath('/vendor/addons/libs/basis/').detectSupport(renderer));
+}
 const motions = await loader.loadAsync('/assets/people/motions.glb?v=' + Date.now());
 const clip = motions.animations.find((c) => c.name === clipName);
 const info = { clips: motions.animations.map((c) => c.name), people: [] };
 let i = 0;
 for (const name of who) {
-  const g = await loader.loadAsync(`/assets/people/${name}.glb?v=${Date.now()}`);
+  const g = await loader.loadAsync(`/assets/people/${name}${squashed ? '.ktx2' : ''}.glb?v=${Date.now()}`);
   const person = SkeletonUtils.clone(g.scene);
   person.position.x = (i - (who.length - 1) / 2) * 0.9;
   scene.add(person);

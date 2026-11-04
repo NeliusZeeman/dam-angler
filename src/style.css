@@ -643,9 +643,26 @@ body.touch .shop-card button { min-height: 36px; }
 .boat-btn { pointer-events: auto; padding: 10px 18px; min-height: 44px; border-radius: 22px; border: 1px solid rgba(255, 255, 255, 0.4); background: rgba(20, 60, 90, 0.82); color: #fff; font: 600 14px/1.2 system-ui, sans-serif; cursor: pointer; }
 .boat-btn:hover { background: rgba(30, 90, 130, 0.9); }
 .boat-btn.hidden { display: none; }
+.boat-btn kbd { font: inherit; opacity: 0.6; }
+body.touch .boat-btn kbd { display: none; }
 /* Phones: above the drag buttons and the stick. */
 body.touch .boat-bar { bottom: calc(232px + env(safe-area-inset-bottom)); }
-@media (max-height: 500px) { body.touch .boat-bar { bottom: calc(120px + env(safe-area-inset-bottom)); } }
+/* Landscape phones: one slim row on the bottom edge, between the stick and
+   the Cast button, under the power and tension bars -- clear of the aim
+   readout and the middle of the view. Out of the way while fighting. */
+@media (max-height: 500px) {
+  body.touch .boat-bar {
+    bottom: calc(4px + env(safe-area-inset-bottom)); flex-wrap: nowrap; gap: 6px;
+    max-width: calc(100vw - 2 * (175px + max(env(safe-area-inset-left), env(safe-area-inset-right))));
+  }
+  body.touch .boat-btn { min-height: 34px; padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+  body.touch.fighting .boat-bar { display: none; }
+  /* Messages sit under the action buttons, left of the "What's biting" box. */
+  body.touch .hud-toast {
+    top: calc(92px + env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); transform: none;
+    max-width: calc(100vw - min(300px, 38vw) - 100px); font-size: 13px; padding: 6px 12px;
+  }
+}
 
 /* The boat's own rods. */
 .rack-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; box-sizing: border-box; padding: 14px 16px 16px; border-radius: 12px; background: rgba(14, 30, 42, 0.95); border: 1px solid rgba(255, 255, 255, 0.25); color: #e8eef0; font: 14px/1.35 system-ui, sans-serif; }

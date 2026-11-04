@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 import { assetTag } from './versionCheck.js';
+import { ktx2Loader, loadGltf, withKtx2 } from './gfx/ktx2.js';
 
 // Photo-scanned scenery from Poly Haven (CC0), prepared in Blender by
 // tools/build-scenery.mjs: tiling textures for the ground, bark and jetty
@@ -12,25 +13,45 @@ const models = new Map(); // key -> [variant, ...]
 let gltfLoader = null;
 const texLoader = new THREE.TextureLoader();
 
-function loadTex(url, srgb) {
+function finishTex(t, srgb) {
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function loadJpg(url, srgb) {
   return new Promise((resolve, reject) => {
-    texLoader.load(url, (t) => {
-      t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-      t.anisotropy = 8;
-      resolve(t);
-    }, undefined, reject);
+    texLoader.load(url, (t) => resolve(finishTex(t, srgb)), undefined, reject);
   });
+}
+
+async function loadTex(base, srgb) {
+  const tag = assetTag();
+  const ktx2 = ktx2Loader();
+  if (ktx2) {
+    try {
+      return finishTex(await ktx2.loadAsync(`${base}.ktx2${tag}`), srgb);
+    } catch (err) {
+      console.warn('KTX2 texture failed, using JPG:', base, err?.message || err);
+    }
+  }
+  return loadJpg(`${base}.jpg${tag}`, srgb);
 }
 
 async function loadTextureSet(key) {
   if (textures.has(key)) return;
   const base = `assets/scenery/textures/${key}`;
-  const tag = assetTag();
   const [map, normalMap, roughnessMap] = await Promise.all([
-    loadTex(`${base}_diff.jpg${tag}`, true), loadTex(`${base}_nor.jpg${tag}`, false), loadTex(`${base}_rough.jpg${tag}`, false),
+    loadTex(`${base}_diff`, true), loadTex(`${base}_nor`, false), loadTex(`${base}_rough`, false),
   ]);
   textures.set(key, { map, normalMap, roughnessMap });
+}
+
+// Dev hook: which kind of texture a set ended up as.
+export function textureFormat(key) {
+  const t = textures.get(key)?.map;
+  return t ? (t.isCompressedTexture ? 'ktx2' : 'jpg') : null;
 }
 
 // Each top-level object in a model file is one variant (a file of bushes
@@ -79,9 +100,9 @@ async function loadModel(key) {
   if (models.has(key)) return;
   if (!gltfLoader) {
     const { GLTFLoader } = await import('../vendor/addons/loaders/GLTFLoader.js');
-    gltfLoader = new GLTFLoader();
+    gltfLoader = withKtx2(new GLTFLoader());
   }
-  const gltf = await gltfLoader.loadAsync(`assets/scenery/models/${key}.glb${assetTag()}`);
+  const gltf = await loadGltf(gltfLoader, `assets/scenery/models/${key}.glb`, assetTag());
   models.set(key, variantsOf(gltf, WHOLE.has(key)));
 }
 

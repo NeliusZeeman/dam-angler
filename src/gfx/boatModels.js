@@ -1,5 +1,6 @@
 import * as THREE from '../../vendor/three.module.js';
 import { assetTag } from '../versionCheck.js';
+import { loadGltf, withKtx2 } from './ktx2.js';
 
 // The Blender-made boats (tools/blender/build_boats.py): one file per kind,
 // assets/scenery/models/boat-<kind>.glb, with ambient occlusion baked into
@@ -51,11 +52,11 @@ export async function loadBoatModels(kinds = []) {
   if (!want.length) return;
   if (!loader) {
     const { GLTFLoader } = await import('../../vendor/addons/loaders/GLTFLoader.js');
-    loader = new GLTFLoader();
+    loader = withKtx2(new GLTFLoader());
   }
   await Promise.all(want.map(async (kind) => {
     try {
-      const gltf = await loader.loadAsync(`assets/scenery/models/boat-${kind}.glb${assetTag()}`);
+      const gltf = await loadGltf(loader, `assets/scenery/models/boat-${kind}.glb`, assetTag());
       gltf.scene.traverse((o) => {
         if (!o.isMesh) return;
         o.castShadow = true;

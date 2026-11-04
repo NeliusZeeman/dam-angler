@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 import { assetTag } from './versionCheck.js';
+import { loadGltf, withKtx2 } from './gfx/ktx2.js';
 
 // The campsite people: real-looking men, women and kids (Microsoft
 // Rocketbox, MIT licence, converted in Blender by
@@ -23,10 +24,13 @@ let cloneSkinned = null;
 let clips = null; // name -> AnimationClip
 let walkSpeed = {};
 const bases = new Map(); // name -> gltf scene
+// How dark each face picture is (tools/ktx/build-glb-ktx2.mjs), for
+// squashed pictures that can't be read back: "name/material" -> 0-255.
+let skinTones = {};
 
 async function loadOne(name, maxTexture) {
   if (bases.has(name)) return;
-  const gltf = await loader.loadAsync(`assets/people/${name}.glb${assetTag()}`);
+  const gltf = await loadGltf(loader, `assets/people/${name}.glb`, assetTag());
   const shrunk = new Set();
   gltf.scene.traverse((o) => {
     if (!o.isMesh) return;
@@ -37,12 +41,13 @@ async function loadOne(name, maxTexture) {
     o.frustumCulled = false;
     const m = o.material;
     if (m && m.alphaTest > 0) m.side = THREE.DoubleSide;
-    if (maxTexture && m) {
+    // Squashed pictures already fit a phone's graphics memory at full size.
+    if (maxTexture && m && !m.map?.isCompressedTexture) {
       for (const [key, max] of [['map', maxTexture], ['normalMap', maxTexture / 2]]) {
         if (m[key] && !shrunk.has(m[key])) { shrink(m[key], max); shrunk.add(m[key]); }
       }
     }
-    if (m?.map && /-head$/.test(m.name)) skinGlow(m);
+    if (m?.map && /-head$/.test(m.name)) skinGlow(m, skinTones[`${name}/${m.name}`]);
   });
   bases.set(name, gltf.scene);
 }
@@ -69,17 +74,20 @@ function shrink(tex, max) {
 // so heads give back a little of their own colour, more for darker skin,
 // dimmed at night (setPeopleLight).
 const heads = new Map(); // material -> glow strength
-function skinGlow(m) {
+function skinGlow(m, tone) {
   let glow = 0.2;
   try {
-    const c = document.createElement('canvas');
-    c.width = c.height = 32;
-    const g = c.getContext('2d');
-    g.drawImage(m.map.image, 0, 0, 32, 32);
-    const d = g.getImageData(0, 0, 32, 32).data;
-    let sum = 0;
-    for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
-    const avg = sum / (d.length / 4) / 3;
+    let avg = tone;
+    if (avg === undefined) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 32;
+      const g = c.getContext('2d');
+      g.drawImage(m.map.image, 0, 0, 32, 32);
+      const d = g.getImageData(0, 0, 32, 32).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += d[i] + d[i + 1] + d[i + 2];
+      avg = sum / (d.length / 4) / 3;
+    }
     glow = Math.min(0.4, Math.max(0.12, (90 - avg) / 150));
   } catch { /* no canvas: the default */ }
   m.emissiveMap = m.map;
@@ -100,15 +108,17 @@ export async function loadPeople(names = PEOPLE, timeoutMs = 15000, { maxTexture
         import('../vendor/addons/loaders/GLTFLoader.js'),
         import('../vendor/addons/utils/SkeletonUtils.js'),
       ]);
-      loader = new GLTFLoader();
+      loader = withKtx2(new GLTFLoader());
       cloneSkinned = SkeletonUtils.clone;
     }
     const work = (async () => {
       if (!clips) {
-        const [m, info] = await Promise.all([
+        const [m, info, tones] = await Promise.all([
           loader.loadAsync(`assets/people/motions.glb${assetTag()}`),
           fetch(`assets/people/motions.json${assetTag()}`).then((r) => r.json()).catch(() => ({})),
+          fetch(`assets/people/skin.json${assetTag()}`).then((r) => r.json()).catch(() => ({})),
         ]);
+        skinTones = tones;
         clips = Object.fromEntries(m.animations.map((c) => [c.name, c]));
         walkSpeed = info.walkSpeed || {};
       }

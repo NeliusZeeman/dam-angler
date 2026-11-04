@@ -24,7 +24,8 @@ import { publishedForPlayers } from './tuning.js';
 export function contentSecurityPolicy(nonce) {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'`,
+    // wasm-unsafe-eval: the Basis transcoder that unpacks KTX2 textures is WebAssembly.
+    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
     "style-src 'self' 'unsafe-inline'", // the game positions things with inline styles
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",

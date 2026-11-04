@@ -1,0 +1,14 @@
+{
+  "name": "dam-angler-ktx-tools",
+  "private": true,
+  "type": "module",
+  "description": "Encoder for the game's compressed (KTX2 / Basis) textures: node tools/build-ktx2.mjs",
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "ktx2-encoder": "0.6.0",
+    "sharp": "^0.34.0",
+    "three": "0.186.0"
+  }
+}

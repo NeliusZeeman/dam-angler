@@ -3,6 +3,17 @@
 A 3D browser fishing game set on six real South African dams. Newest first.
 Each entry names the commit it shipped in (see `git log`).
 
+## v2 — Squashed textures and phone button layout (built locally, not live yet)
+
+- **Squashed textures (KTX2 / Basis Universal)** for the ground, bark, jetty planks, campers, boats and camp gear:
+  - the graphics chip keeps them compressed, so texture memory at High drops from about 505 MB to 129 MB with no visible difference;
+  - phones now get every camper at full sharpness instead of fewer, shrunk ones;
+  - devices that can't read them get the old JPG/GLB files; `?textures=jpg` forces those for comparing.
+  - Rebuild with `node tools/ktx/build-ktx2.mjs` and `node tools/ktx/build-glb-ktx2.mjs` (once: `cd tools/ktx && npm install`); `test/ktx2.test.js` fails when a copy is out of date.
+  - Server: the security policy allows WebAssembly (`'wasm-unsafe-eval'`) for the texture unpacker; needs the API restarted on deploy.
+  - First download is larger (about 1.5 MB more per dam, people 13 -> 19 MB); kept on the device after that.
+- **Landscape phones:** "Get in the boat", "Walk the deck", "Step ashore" and "Boat rods" sit in one slim row on the bottom edge between the stick and Cast (hidden while fighting), no longer over the aim distance. Messages sit under the top buttons, clear of "What's biting".
+
 ## v2 — Install as an app (built locally, not live yet)
 
 - **Install as app** button on the title screen.

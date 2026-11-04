@@ -5,7 +5,8 @@ import { createPostPipeline } from './gfx/post.js';
 import { windUniforms } from './gfx/wind.js';
 import { GPU, loadGpu, webgpuAvailable } from './gfx/gpu.js';
 import { loadFishModels } from './fishModels.js';
-import { loadScenery } from './sceneryAssets.js';
+import { loadScenery, textureFormat } from './sceneryAssets.js';
+import { compressedLoader } from './gfx/ktx2.js';
 import { keepOffline } from './install.js';
 import { loadPeople, PEOPLE, setPeopleLight } from './people.js';
 import { createEnvironment, TIME_OF_DAY_PHASES } from './environment.js';
@@ -57,6 +58,8 @@ const save = loadSave();
 // replaces this one (keeping any gear either side bought).
 // Game tuning from the admin area (published values; an admin can preview
 // the draft with ?tuning=draft). Applied before anything else runs.
+// ?textures=jpg: the plain (unsquashed) textures and models, for comparing.
+const forceJpg = new URLSearchParams(location.search).get('textures') === 'jpg';
 const tuning = await loadGameTuning({ wantPreview: new URLSearchParams(location.search).get('tuning') === 'draft' });
 if (tuning.preview) {
   const banner = document.createElement('div');
@@ -239,9 +242,12 @@ async function startGame(locationId, startTimeOfDay, pegId = null) {
   // and the photo-scanned scenery (sceneryAssets.js).
   if (quality !== 'low') {
     const loc = getLocationById(locationId);
+    // Squashed textures where the graphics chip reads them (gfx/ktx2.js).
+    const squashed = forceJpg ? null : await compressedLoader(gpuRenderer);
     // The campsite people, where the dam has camps (Medium brings fewer).
-    // Phones bring fewer of them, with smaller pictures (graphics memory).
-    const fewer = quality === 'medium' || handheld;
+    // Phones without squashed pictures bring fewer of them, drawn smaller
+    // (graphics memory).
+    const fewer = quality === 'medium' || (handheld && !squashed);
     const people = spotsFor(locationId)
       ? loadPeople(fewer ? ['man-shorts', 'man-vest', 'woman-green', 'man-check', 'boy'] : PEOPLE, 15000, { maxTexture: handheld ? 1024 : 0 })
       : null;
@@ -350,8 +356,14 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
   const rackBtn = boatButton(() => toggleRack());
   const deckBtn = boatButton(() => toggleDeck());
   const boatBtn = boatButton(() => toggleBoat());
+  // "Get in the boat (G)": the key goes in a <kbd> so phones can hide it.
   const showBoatButton = (b, label) => {
-    if (b.textContent !== label) b.textContent = label;
+    if (b.dataset.label !== label) {
+      b.dataset.label = label;
+      const m = label.match(/^(.*?)\s*\((\w)\)$/);
+      b.textContent = m ? m[1] : label;
+      if (m) b.insertAdjacentHTML('beforeend', ` <kbd>${m[2]}</kbd>`);
+    }
     b.classList.toggle('hidden', !label);
   };
   function toggleBoat() {
@@ -1725,6 +1737,7 @@ function startGameNow(locationId, startTimeOfDay, pegId, quality, gpuRenderer, g
     camp: world.camp,
     boats,
     standAt: (x, z, yaw, pitch) => playerController.setPosition(x, z, yaw, pitch),
+    textureFormat,
     // Dev hook: run the game loop by hand (steps of dt seconds), then render.
     advance: (steps = 1, dt = 1 / 60) => {
       for (let i = 0; i < steps; i++) {
