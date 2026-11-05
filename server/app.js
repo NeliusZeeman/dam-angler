@@ -15,6 +15,7 @@ import {
 import { HttpError } from './validate.js';
 import { createPlayer, loadSave, writeSave, recordCatch, importGuest, buyItem, spendCredits } from './saves.js';
 import { allDamStats, damStats } from './stats.js';
+import { levelsForGame } from './damLevels.js';
 import { createAdminRouter } from './admin.js';
 import { publishedForPlayers } from './tuning.js';
 
@@ -233,6 +234,10 @@ export function createApp({
     const id = String(req.params.locationId).slice(0, 64);
     res.json(await cached(`dam:${id}`, () => damStats(db, id)));
   });
+
+  // Real dam levels (server/damLevels.js, from the DWS weekly State of Dams):
+  // the web game and the PC game both read them, so the water matches.
+  app.get('/api/dams/levels', async (req, res) => { publicLimit(req); res.json(await cached('levels', () => levelsForGame(db))); });
 
   // The published game tuning (see server/tuning.js), loaded by the game on start.
   app.get('/api/tuning', async (req, res) => { publicLimit(req); res.json(await publishedForPlayers(db)); });
